@@ -1,19 +1,10 @@
 version: 1.0
 runtime: corretto17
-
 build:
   commands:
     build:
-      - mvn clean package -DskipTests -B
-
+      - mvn clean package -DskipTests
 run:
   command: java -jar target/ai-kef-0.0.1-SNAPSHOT.jar
   network:
     port: 8080
-  env:
-    - name: SPRING_PROFILES_ACTIVE
-      value: "production"
-    - name: JAVA_TOOL_OPTIONS
-      value: "-Xms512m -Xmx1024m"
-    - name: TZ
-      value: "Asia/Shanghai"
