@@ -56,20 +56,12 @@ knowledge:
     user: ${KNOWLEDGE_PGVECTOR_USER:postgres}
     password: ${PGVECTOR_PASSWORD}
 
-# 文件存储 - 生产环境使用 S3
+# 文件存储 - 暂时使用本地存储
 storage:
-  type: ${STORAGE_TYPE:s3}
+  type: local
   local:
     base-path: ./uploads
-    base-url: ${LOCAL_STORAGE_BASE_URL:http://localhost:8080/api/v1/files}
-  s3:
-    access-key: ${AWS_ACCESS_KEY}
-    secret-key: ${AWS_SECRET_KEY}
-    region: ${AWS_REGION:ap-northeast-1}
-    bucket: ${AWS_S3_BUCKET}
-    endpoint: ${AWS_S3_ENDPOINT:}
-    public-url: ${AWS_S3_PUBLIC_URL:}
-    presigned-url-expiration: 3600
+    base-url: ${LOCAL_STORAGE_BASE_URL:/api/v1/files}
 
 # 翻译服务 - 生产环境启用
 translation:
