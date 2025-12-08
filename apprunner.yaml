@@ -16,7 +16,7 @@ run:
     port: 8080
     env: APP_PORT
   env:
-    # ===== 基础配置 =====
+    # ===== 基础配置（非敏感）=====
     - name: SPRING_PROFILES_ACTIVE
       value: "production"
     - name: JAVA_TOOL_OPTIONS
@@ -24,42 +24,20 @@ run:
     - name: TZ
       value: "Asia/Shanghai"
     
-    # ===== 数据库配置（请修改为你的实际值）=====
-    - name: SPRING_DATASOURCE_URL
-      value: "jdbc:mysql://你的数据库地址:3306/aikef"
-    - name: SPRING_DATASOURCE_USERNAME
-      value: "admin"
-    - name: SPRING_DATASOURCE_PASSWORD
-      value: "修改为你的密码"
-    
-    # ===== Redis 配置 =====
-    - name: SPRING_DATA_REDIS_HOST
-      value: "你的Redis地址"
-    - name: SPRING_DATA_REDIS_PASSWORD
-      value: ""
-    
-    # ===== PGVector 向量数据库配置 =====
-    - name: KNOWLEDGE_PGVECTOR_HOST
-      value: "你的PostgreSQL地址"
-    - name: KNOWLEDGE_PGVECTOR_PORT
-      value: "5432"
-    - name: KNOWLEDGE_PGVECTOR_DATABASE
-      value: "vectordb"
-    - name: KNOWLEDGE_PGVECTOR_USER
-      value: "postgres"
-    - name: PGVECTOR_PASSWORD
-      value: "修改为你的PG密码"
-    
-    # ===== AWS 翻译服务配置 =====
-    - name: AWS_TRANSLATE_ACCESS_KEY
-      value: "修改为你的AccessKey"
-    - name: AWS_TRANSLATE_SECRET_KEY
-      value: "修改为你的SecretKey"
-    - name: AWS_REGION
-      value: "ap-northeast-1"
-    
-    # ===== OpenAI 配置 =====
-    - name: OPENAI_API_KEY
-      value: "修改为你的OpenAI密钥"
-    - name: OPENAI_BASE_URL
-      value: "https://api.openai.com/v1"
+    # ===== 敏感配置请在 AWS 控制台配置 =====
+    # 以下变量已在 AWS Secrets Manager 中配置，无需在此文件中设置：
+    # - SPRING_DATASOURCE_URL
+    # - SPRING_DATASOURCE_USERNAME
+    # - SPRING_DATASOURCE_PASSWORD
+    # - SPRING_DATA_REDIS_HOST
+    # - SPRING_DATA_REDIS_PASSWORD
+    # - KNOWLEDGE_PGVECTOR_HOST
+    # - KNOWLEDGE_PGVECTOR_PORT
+    # - KNOWLEDGE_PGVECTOR_DATABASE
+    # - KNOWLEDGE_PGVECTOR_USER
+    # - PGVECTOR_PASSWORD
+    # - AWS_TRANSLATE_ACCESS_KEY
+    # - AWS_TRANSLATE_SECRET_KEY
+    # - AWS_REGION
+    # - OPENAI_API_KEY
+    # - OPENAI_BASE_URL
