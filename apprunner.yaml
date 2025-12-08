@@ -3,7 +3,7 @@ runtime: corretto17
 build:
   commands:
     pre-build:
-      - echo "Starting build process"
+      - echo "Build started at $(date)"
     build:
       - mvn clean package -DskipTests
     post-build:
