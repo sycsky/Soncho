@@ -5,12 +5,11 @@ build:
     pre-build:
       - echo "Starting build process"
     build:
-      - mvn clean package -DskipTests -X
+      - mvn clean package -DskipTests
     post-build:
       - ls -la target/
       - echo "Build completed"
 run:
-  runtime-version: 17.0.7.7.1
   command: java -jar target/ai-kef-0.0.1-SNAPSHOT.jar
   network:
     port: 8080
