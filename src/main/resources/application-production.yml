@@ -1,53 +1,9 @@
-server:
-  port: ${PORT:8080}
-
 spring:
   datasource:
-    url: ${DATABASE_URL:${SPRING_DATASOURCE_URL:}}
-    username: ${SPRING_DATASOURCE_USERNAME:root}
-    password: ${SPRING_DATASOURCE_PASSWORD:}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/nexus_support_ai?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8mb4}
+    username: ${DB_USERNAME:nexus}
+    password: ${DB_PASSWORD:nexus}
     driver-class-name: com.mysql.cj.jdbc.Driver
-  data:
-    redis:
-      host: ${REDIS_HOST:${SPRING_DATA_REDIS_HOST:localhost}}
-      port: ${REDIS_PORT:${SPRING_DATA_REDIS_PORT:6379}}
-      password: ${REDIS_PASSWORD:${SPRING_DATA_REDIS_PASSWORD:}}
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: false
-
-logging:
-  level:
-    root: INFO
-    com.example.aikef: INFO
-
-# 知识库配置
-knowledge:
-  pgvector:
-    host: ${PGHOST:localhost}
-    port: ${PGPORT:5432}
-    database: ${PGDATABASE:vectordb}
-    user: ${PGUSER:postgres}
-    password: ${PGPASSWORD:${PGVECTOR_PASSWORD:}}
-
-# AWS 翻译服务
-translation:
-  enabled: ${TRANSLATION_ENABLED:false}
-  aws:
-    access-key: ${AWS_TRANSLATE_ACCESS_KEY:}
-    secret-key: ${AWS_TRANSLATE_SECRET_KEY:}
-    region: ${AWS_REGION:us-east-1}
-
-# AI 配置
-ai:
-  openai:
-    api-key: ${OPENAI_API_KEY:}
-    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
-
-# 文件存储
-storage:
-  type: ${STORAGE_TYPE:local}
-  local:
-    base-path: /app/uploads
-    base-url: ${RAILWAY_PUBLIC_DOMAIN:http://localhost:8080}/api/v1/files
+      ddl-auto: validate

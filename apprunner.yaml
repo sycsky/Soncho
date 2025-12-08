@@ -1,0 +1,65 @@
+version: 1.0
+runtime: corretto17  # Java 17 运行时
+
+build:
+  commands:
+    pre-build:
+      - echo "Installing dependencies..."
+    build:
+      - mvn clean package -DskipTests -B
+    post-build:
+      - echo "Build completed!"
+
+run:
+  command: java -jar target/ai-kef-0.0.1-SNAPSHOT.jar
+  network:
+    port: 8080
+    env: APP_PORT
+  env:
+    # ===== 基础配置 =====
+    - name: SPRING_PROFILES_ACTIVE
+      value: "production"
+    - name: JAVA_TOOL_OPTIONS
+      value: "-Xms512m -Xmx1024m"
+    - name: TZ
+      value: "Asia/Shanghai"
+    
+    # ===== 数据库配置（请修改为你的实际值）=====
+    - name: SPRING_DATASOURCE_URL
+      value: "jdbc:mysql://你的数据库地址:3306/aikef"
+    - name: SPRING_DATASOURCE_USERNAME
+      value: "admin"
+    - name: SPRING_DATASOURCE_PASSWORD
+      value: "修改为你的密码"
+    
+    # ===== Redis 配置 =====
+    - name: SPRING_DATA_REDIS_HOST
+      value: "你的Redis地址"
+    - name: SPRING_DATA_REDIS_PASSWORD
+      value: ""
+    
+    # ===== PGVector 向量数据库配置 =====
+    - name: KNOWLEDGE_PGVECTOR_HOST
+      value: "你的PostgreSQL地址"
+    - name: KNOWLEDGE_PGVECTOR_PORT
+      value: "5432"
+    - name: KNOWLEDGE_PGVECTOR_DATABASE
+      value: "vectordb"
+    - name: KNOWLEDGE_PGVECTOR_USER
+      value: "postgres"
+    - name: PGVECTOR_PASSWORD
+      value: "修改为你的PG密码"
+    
+    # ===== AWS 翻译服务配置 =====
+    - name: AWS_TRANSLATE_ACCESS_KEY
+      value: "修改为你的AccessKey"
+    - name: AWS_TRANSLATE_SECRET_KEY
+      value: "修改为你的SecretKey"
+    - name: AWS_REGION
+      value: "ap-northeast-1"
+    
+    # ===== OpenAI 配置 =====
+    - name: OPENAI_API_KEY
+      value: "修改为你的OpenAI密钥"
+    - name: OPENAI_BASE_URL
+      value: "https://api.openai.com/v1"

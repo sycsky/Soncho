@@ -1,0 +1,160 @@
+# GitHub Actions - 部署到 AWS App Runner
+# 环境变量从 GitHub Secrets 读取
+name: Deploy to AWS App Runner
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ap-northeast-1
+  ECR_REPOSITORY: ai-kef
+  APP_RUNNER_SERVICE: ai-kef
+
+jobs:
+  deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 检出代码
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. 设置 Java
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # 3. Maven 构建
+      - name: Build with Maven
+        run: mvn clean package -DskipTests -B
+
+      # 4. 配置 AWS 凭证
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 5. 登录 ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 6. 构建并推送 Docker 镜像
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+
+      # 7. 更新或创建 App Runner 服务
+      - name: Deploy to App Runner
+        env:
+          # 从 GitHub Secrets 读取环境变量
+          SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+          SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
+          SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+          SPRING_DATA_REDIS_HOST: ${{ secrets.SPRING_DATA_REDIS_HOST }}
+          PGVECTOR_PASSWORD: ${{ secrets.PGVECTOR_PASSWORD }}
+          AWS_TRANSLATE_ACCESS_KEY: ${{ secrets.AWS_TRANSLATE_ACCESS_KEY }}
+          AWS_TRANSLATE_SECRET_KEY: ${{ secrets.AWS_TRANSLATE_SECRET_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          
+          # 检查服务是否存在
+          SERVICE_ARN=$(aws apprunner list-services \
+            --query "ServiceSummaryList[?ServiceName=='$APP_RUNNER_SERVICE'].ServiceArn" \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" == "None" ]; then
+            echo "🚀 Creating new App Runner service..."
+            
+            # 创建新服务
+            aws apprunner create-service \
+              --service-name $APP_RUNNER_SERVICE \
+              --source-configuration '{
+                "ImageRepository": {
+                  "ImageIdentifier": "'"$IMAGE_URI"'",
+                  "ImageRepositoryType": "ECR",
+                  "ImageConfiguration": {
+                    "Port": "8080",
+                    "RuntimeEnvironmentVariables": {
+                      "SPRING_PROFILES_ACTIVE": "production",
+                      "JAVA_TOOL_OPTIONS": "-Xms512m -Xmx1024m",
+                      "TZ": "Asia/Shanghai",
+                      "SPRING_DATASOURCE_URL": "'"$SPRING_DATASOURCE_URL"'",
+                      "SPRING_DATASOURCE_USERNAME": "'"$SPRING_DATASOURCE_USERNAME"'",
+                      "SPRING_DATASOURCE_PASSWORD": "'"$SPRING_DATASOURCE_PASSWORD"'",
+                      "SPRING_DATA_REDIS_HOST": "'"$SPRING_DATA_REDIS_HOST"'",
+                      "PGVECTOR_PASSWORD": "'"$PGVECTOR_PASSWORD"'",
+                      "AWS_TRANSLATE_ACCESS_KEY": "'"$AWS_TRANSLATE_ACCESS_KEY"'",
+                      "AWS_TRANSLATE_SECRET_KEY": "'"$AWS_TRANSLATE_SECRET_KEY"'",
+                      "OPENAI_API_KEY": "'"$OPENAI_API_KEY"'"
+                    }
+                  }
+                },
+                "AutoDeploymentsEnabled": true,
+                "AuthenticationConfiguration": {
+                  "AccessRoleArn": "'"${{ secrets.APP_RUNNER_ECR_ROLE_ARN }}"'"
+                }
+              }' \
+              --instance-configuration '{
+                "Cpu": "1024",
+                "Memory": "2048"
+              }' \
+              --health-check-configuration '{
+                "Protocol": "HTTP",
+                "Path": "/actuator/health",
+                "Interval": 10,
+                "Timeout": 5,
+                "HealthyThreshold": 1,
+                "UnhealthyThreshold": 5
+              }'
+            
+            echo "✅ Service created! Check AWS Console for the service URL."
+          else
+            echo "🔄 Updating existing App Runner service..."
+            
+            # 更新现有服务
+            aws apprunner update-service \
+              --service-arn $SERVICE_ARN \
+              --source-configuration '{
+                "ImageRepository": {
+                  "ImageIdentifier": "'"$IMAGE_URI"'",
+                  "ImageRepositoryType": "ECR",
+                  "ImageConfiguration": {
+                    "Port": "8080",
+                    "RuntimeEnvironmentVariables": {
+                      "SPRING_PROFILES_ACTIVE": "production",
+                      "JAVA_TOOL_OPTIONS": "-Xms512m -Xmx1024m",
+                      "TZ": "Asia/Shanghai",
+                      "SPRING_DATASOURCE_URL": "'"$SPRING_DATASOURCE_URL"'",
+                      "SPRING_DATASOURCE_USERNAME": "'"$SPRING_DATASOURCE_USERNAME"'",
+                      "SPRING_DATASOURCE_PASSWORD": "'"$SPRING_DATASOURCE_PASSWORD"'",
+                      "SPRING_DATA_REDIS_HOST": "'"$SPRING_DATA_REDIS_HOST"'",
+                      "PGVECTOR_PASSWORD": "'"$PGVECTOR_PASSWORD"'",
+                      "AWS_TRANSLATE_ACCESS_KEY": "'"$AWS_TRANSLATE_ACCESS_KEY"'",
+                      "AWS_TRANSLATE_SECRET_KEY": "'"$AWS_TRANSLATE_SECRET_KEY"'",
+                      "OPENAI_API_KEY": "'"$OPENAI_API_KEY"'"
+                    }
+                  }
+                },
+                "AutoDeploymentsEnabled": true
+              }'
+            
+            echo "✅ Service updated! Deployment in progress..."
+          fi
