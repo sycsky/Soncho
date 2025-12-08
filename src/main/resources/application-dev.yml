@@ -1,6 +1,39 @@
+# ================================
+# 开发环境配置
+# ================================
+# 默认开发配置，可安全提交到 Git
+# 敏感信息请在 application-local.yml 中覆盖
+
 spring:
   datasource:
     url: jdbc:mysql://localhost:3306/ai_agent?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
     username: root
-    password: a6226487
+    password: ${DB_PASSWORD:your_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+# AI 配置
+ai:
+  openai:
+    api-key: ${OPENAI_API_KEY:your_api_key}
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+
+# 知识库配置
+knowledge:
+  pgvector:
+    host: 127.0.0.1
+    port: 5432
+    database: vectordb
+    user: postgres
+    password: ${PGVECTOR_PASSWORD:your_password}
+
+# AWS 翻译服务 - 开发环境默认禁用
+translation:
+  enabled: false
+  aws:
+    access-key: ${AWS_TRANSLATE_ACCESS_KEY:}
+    secret-key: ${AWS_TRANSLATE_SECRET_KEY:}
+    region: us-east-1
+
+# 文件存储 - 开发环境使用本地存储
+storage:
+  type: local

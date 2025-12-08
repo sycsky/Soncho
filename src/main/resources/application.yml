@@ -5,7 +5,7 @@ spring:
   application:
     name: nexus-support-ai
   profiles:
-    active: dev
+    active: dev,local  # 开发时加载 dev 和 local 配置
   servlet:
     multipart:
       enabled: true
