@@ -2,17 +2,9 @@ version: 1.0
 runtime: corretto17
 build:
   commands:
-    pre-build:
-      - echo "Build started at $(date)"
     build:
       - mvn clean package -DskipTests
-    post-build:
-      - ls -la target/
-      - echo "Build completed"
 run:
   command: java -jar target/ai-kef-0.0.1-SNAPSHOT.jar
   network:
     port: 8080
-  env:
-    - name: JAVA_OPTS
-      value: "-Xms256m -Xmx512m"
