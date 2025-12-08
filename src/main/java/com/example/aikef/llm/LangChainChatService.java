@@ -1,0 +1,690 @@
+package com.example.aikef.llm;
+
+import com.example.aikef.model.LlmModel;
+import com.example.aikef.model.enums.LlmProvider;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ResponseFormat;
+import dev.langchain4j.model.chat.request.ResponseFormatType;
+import dev.langchain4j.model.chat.request.json.*;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.ollama.OllamaChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.zhipu.ZhipuAiChatModel;
+import dev.langchain4j.model.output.Response;
+import jakarta.persistence.EntityNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * LangChain4j 聊天服务
+ * 根据模型配置动态创建和管理 ChatLanguageModel 实例
+ */
+@Service
+public class LangChainChatService {
+
+    private static final Logger log = LoggerFactory.getLogger(LangChainChatService.class);
+
+    private final LlmModelService llmModelService;
+
+    /**
+     * 模型实例缓存
+     * key: modelId, value: ChatLanguageModel
+     */
+    private final Map<UUID, ChatLanguageModel> modelCache = new ConcurrentHashMap<>();
+
+    /**
+     * 模型版本缓存（用于检测配置变更）
+     */
+    private final Map<UUID, Long> modelVersionCache = new ConcurrentHashMap<>();
+
+    public LangChainChatService(LlmModelService llmModelService) {
+        this.llmModelService = llmModelService;
+    }
+
+    /**
+     * 发送聊天请求
+     *
+     * @param modelId 模型ID（如果为 null，使用默认模型）
+     * @param systemPrompt 系统提示词
+     * @param userMessage 用户消息
+     * @param chatHistory 聊天历史
+     * @param temperature 温度（可选，使用模型默认值）
+     * @param maxTokens 最大 Token 数（可选，使用模型默认值）
+     * @return AI 回复
+     */
+    public LlmChatResponse chat(UUID modelId, 
+                             String systemPrompt, 
+                             String userMessage,
+                             List<ChatHistoryMessage> chatHistory,
+                             Double temperature,
+                             Integer maxTokens) {
+        
+        // 获取模型配置
+        LlmModel modelConfig;
+        if (modelId != null) {
+            modelConfig = llmModelService.getModel(modelId);
+        } else {
+            modelConfig = llmModelService.getDefaultModel()
+                    .orElseThrow(() -> new EntityNotFoundException("未配置默认模型"));
+        }
+
+        if (!modelConfig.getEnabled()) {
+            throw new IllegalStateException("模型已禁用: " + modelConfig.getName());
+        }
+
+        // 获取或创建模型实例
+        ChatLanguageModel chatModel = getOrCreateModel(modelConfig, temperature, maxTokens);
+
+        // 构建消息列表
+        List<ChatMessage> messages = buildMessages(systemPrompt, userMessage, chatHistory);
+
+        // 发送请求
+        long startTime = System.currentTimeMillis();
+        try {
+            Response<AiMessage> response = chatModel.generate(messages);
+            long duration = System.currentTimeMillis() - startTime;
+
+            String reply = response.content().text();
+            
+            // 估算 Token 使用量
+            int inputTokens = estimateTokens(messages);
+            int outputTokens = estimateTokens(reply);
+
+            log.info("LLM 调用完成: model={}, duration={}ms, inputTokens={}, outputTokens={}",
+                    modelConfig.getName(), duration, inputTokens, outputTokens);
+
+            return new LlmChatResponse(
+                    true,
+                    reply,
+                    null,
+                    modelConfig.getId(),
+                    modelConfig.getName(),
+                    duration,
+                    inputTokens,
+                    outputTokens
+            );
+
+        } catch (Exception e) {
+            log.error("LLM 调用失败: model={}", modelConfig.getName(), e);
+            return new LlmChatResponse(
+                    false,
+                    null,
+                    e.getMessage(),
+                    modelConfig.getId(),
+                    modelConfig.getName(),
+                    System.currentTimeMillis() - startTime,
+                    0,
+                    0
+            );
+        }
+    }
+
+    /**
+     * 使用模型编码发送聊天请求
+     */
+    public LlmChatResponse chatByCode(String modelCode,
+                                    String systemPrompt,
+                                    String userMessage,
+                                    List<ChatHistoryMessage> chatHistory,
+                                    Double temperature,
+                                    Integer maxTokens) {
+        LlmModel model = llmModelService.getModelByCode(modelCode);
+        return chat(model.getId(), systemPrompt, userMessage, chatHistory, temperature, maxTokens);
+    }
+
+    /**
+     * 发送聊天请求（直接传入消息列表）
+     * 适用于已经构建好消息列表的场景
+     *
+     * @param modelId 模型ID（如果为 null，使用默认模型）
+     * @param systemPrompt 系统提示词
+     * @param messages 消息列表（包含历史和当前消息）
+     * @param temperature 温度
+     * @param maxTokens 最大 Token 数
+     * @return AI 回复
+     */
+    public LlmChatResponse chatWithMessages(UUID modelId,
+                                          String systemPrompt,
+                                          List<ChatHistoryMessage> messages,
+                                          Double temperature,
+                                          Integer maxTokens) {
+        // 获取模型配置
+        LlmModel modelConfig;
+        if (modelId != null) {
+            modelConfig = llmModelService.getModel(modelId);
+        } else {
+            modelConfig = llmModelService.getDefaultModel()
+                    .orElseThrow(() -> new EntityNotFoundException("未配置默认模型"));
+        }
+
+        if (!modelConfig.getEnabled()) {
+            throw new IllegalStateException("模型已禁用: " + modelConfig.getName());
+        }
+
+        // 获取或创建模型实例
+        ChatLanguageModel chatModel = getOrCreateModel(modelConfig, temperature, maxTokens);
+
+        // 构建 LangChain4j 消息列表
+        List<ChatMessage> chatMessages = buildMessagesFromList(systemPrompt, messages);
+
+
+        // 发送请求
+        long startTime = System.currentTimeMillis();
+        try {
+            Response<AiMessage> response = chatModel.generate(chatMessages);
+            long duration = System.currentTimeMillis() - startTime;
+
+            String reply = response.content().text();
+            
+            int inputTokens = estimateTokens(chatMessages);
+            int outputTokens = estimateTokens(reply);
+
+            log.info("LLM 调用完成: model={}, duration={}ms, inputTokens={}, outputTokens={}",
+                    modelConfig.getName(), duration, inputTokens, outputTokens);
+
+            return new LlmChatResponse(
+                    true,
+                    reply,
+                    null,
+                    modelConfig.getId(),
+                    modelConfig.getName(),
+                    duration,
+                    inputTokens,
+                    outputTokens
+            );
+
+        } catch (Exception e) {
+            log.error("LLM 调用失败: model={}", modelConfig.getName(), e);
+            return new LlmChatResponse(
+                    false,
+                    null,
+                    e.getMessage(),
+                    modelConfig.getId(),
+                    modelConfig.getName(),
+                    System.currentTimeMillis() - startTime,
+                    0,
+                    0
+            );
+        }
+    }
+
+    /**
+     * 使用模型编码发送聊天请求（直接传入消息列表）
+     */
+    public LlmChatResponse chatWithMessagesByCode(String modelCode,
+                                                String systemPrompt,
+                                                List<ChatHistoryMessage> messages,
+                                                Double temperature,
+                                                Integer maxTokens) {
+        LlmModel model = llmModelService.getModelByCode(modelCode);
+        return chatWithMessages(model.getId(), systemPrompt, messages, temperature, maxTokens);
+    }
+
+    /**
+     * 简单聊天（使用默认模型）
+     */
+    public String simpleChat(String systemPrompt, String userMessage) {
+        LlmChatResponse response = chat(null, systemPrompt, userMessage, null, null, null);
+        if (!response.success()) {
+            throw new RuntimeException("LLM 调用失败: " + response.errorMessage());
+        }
+        return response.reply();
+    }
+
+    /**
+     * 结构化输出 - 使用 JSON Schema 强制 LLM 返回指定格式
+     *
+     * @param modelId 模型ID
+     * @param systemPrompt 系统提示词
+     * @param userMessage 用户消息
+     * @param jsonSchema JSON Schema 定义
+     * @param schemaName Schema 名称
+     * @param temperature 温度
+     * @return 结构化输出结果
+     */
+    public StructuredOutputResponse chatWithStructuredOutput(
+            UUID modelId,
+            String systemPrompt,
+            String userMessage,
+            JsonObjectSchema jsonSchema,
+            String schemaName,
+            Double temperature) {
+
+        LlmModel modelConfig;
+        if (modelId != null) {
+            modelConfig = llmModelService.getModel(modelId);
+        } else {
+            modelConfig = llmModelService.getDefaultModel()
+                    .orElseThrow(() -> new EntityNotFoundException("未配置默认模型"));
+        }
+
+        if (!modelConfig.getEnabled()) {
+            throw new IllegalStateException("模型已禁用: " + modelConfig.getName());
+        }
+
+        // 创建支持 ResponseFormat 的模型
+        OpenAiChatModel chatModel = createOpenAiModelWithResponseFormat(modelConfig, temperature);
+
+        // 构建消息
+        List<ChatMessage> messages = new ArrayList<>();
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            messages.add(SystemMessage.from(systemPrompt));
+        }
+        messages.add(UserMessage.from(userMessage));
+
+        // 构建 ResponseFormat
+        ResponseFormat responseFormat = ResponseFormat.builder()
+                .type(ResponseFormatType.JSON)
+                .jsonSchema(JsonSchema.builder()
+                        .name(schemaName != null ? schemaName : "extraction_result")
+                        .rootElement(jsonSchema)
+                        .build())
+                .build();
+
+        // 构建请求
+        ChatRequest request = ChatRequest.builder()
+                .messages(messages)
+                .responseFormat(responseFormat)
+                .build();
+
+        long startTime = System.currentTimeMillis();
+        try {
+            ChatResponse response = chatModel.chat(request);
+            long duration = System.currentTimeMillis() - startTime;
+
+            String jsonResult = response.aiMessage().text();
+
+            log.info("结构化输出完成: model={}, duration={}ms, schema={}",
+                    modelConfig.getName(), duration, schemaName);
+
+            return new StructuredOutputResponse(
+                    true,
+                    jsonResult,
+                    null,
+                    modelConfig.getId(),
+                    modelConfig.getName(),
+                    duration
+            );
+
+        } catch (Exception e) {
+            log.error("结构化输出失败: model={}, schema={}", modelConfig.getName(), schemaName, e);
+            return new StructuredOutputResponse(
+                    false,
+                    null,
+                    e.getMessage(),
+                    modelConfig.getId(),
+                    modelConfig.getName(),
+                    System.currentTimeMillis() - startTime
+            );
+        }
+    }
+
+    /**
+     * 使用字段定义构建结构化输出
+     */
+    public StructuredOutputResponse chatWithFieldDefinitions(
+            UUID modelId,
+            String systemPrompt,
+            String userMessage,
+            List<FieldSchemaDefinition> fields,
+            String schemaName,
+            Double temperature) {
+
+        // 构建 properties Map
+        Map<String, JsonSchemaElement> properties = new LinkedHashMap<>();
+        List<String> requiredFields = new ArrayList<>();
+
+        for (FieldSchemaDefinition field : fields) {
+            JsonSchemaElement element = buildJsonSchemaElement(field);
+            properties.put(field.name(), element);
+
+            if (field.required()) {
+                requiredFields.add(field.name());
+            }
+        }
+
+        // 构建 JsonObjectSchema
+        JsonObjectSchema jsonSchema = JsonObjectSchema.builder()
+                .properties(properties)
+                .required(requiredFields)
+                .additionalProperties(false)
+                .build();
+
+        return chatWithStructuredOutput(modelId, systemPrompt, userMessage,
+                jsonSchema, schemaName, temperature);
+    }
+
+    /**
+     * 构建 JSON Schema 元素
+     */
+    private JsonSchemaElement buildJsonSchemaElement(FieldSchemaDefinition field) {
+        return switch (field.type()) {
+            case STRING -> JsonStringSchema.builder()
+                    .description(field.description())
+                    .build();
+            case INTEGER -> JsonIntegerSchema.builder()
+                    .description(field.description())
+                    .build();
+            case NUMBER -> JsonNumberSchema.builder()
+                    .description(field.description())
+                    .build();
+            case BOOLEAN -> JsonBooleanSchema.builder()
+                    .description(field.description())
+                    .build();
+            case ENUM -> JsonEnumSchema.builder()
+                    .enumValues(field.enumValues())
+                    .description(field.description())
+                    .build();
+            case ARRAY -> JsonArraySchema.builder()
+                    .items(JsonStringSchema.builder().build())
+                    .description(field.description())
+                    .build();
+        };
+    }
+
+    /**
+     * 创建支持 ResponseFormat 的 OpenAI 模型
+     */
+    private OpenAiChatModel createOpenAiModelWithResponseFormat(LlmModel config, Double temperature) {
+        double temp = temperature != null ? temperature : config.getDefaultTemperature();
+
+        return OpenAiChatModel.builder()
+                .apiKey(config.getApiKey())
+                .baseUrl(config.getBaseUrl())
+                .modelName(config.getModelName())
+                .temperature(temp)
+                .timeout(Duration.ofSeconds(60))
+                .strictJsonSchema(true)
+                .logRequests(true)
+                .logResponses(true)
+                .build();
+    }
+
+    /**
+     * 清除模型缓存（配置变更后调用）
+     */
+    public void clearModelCache(UUID modelId) {
+        modelCache.remove(modelId);
+        modelVersionCache.remove(modelId);
+        log.info("清除模型缓存: modelId={}", modelId);
+    }
+
+    /**
+     * 清除所有模型缓存
+     */
+    public void clearAllModelCache() {
+        modelCache.clear();
+        modelVersionCache.clear();
+        log.info("清除所有模型缓存");
+    }
+
+    // ==================== 私有方法 ====================
+
+    /**
+     * 获取或创建模型实例
+     */
+    private ChatLanguageModel getOrCreateModel(LlmModel config, Double temperature, Integer maxTokens) {
+        UUID modelId = config.getId();
+        long currentVersion = config.getUpdatedAt() != null ? config.getUpdatedAt().toEpochMilli() : 0;
+
+        // 检查缓存是否有效
+        Long cachedVersion = modelVersionCache.get(modelId);
+        if (cachedVersion != null && cachedVersion == currentVersion && modelCache.containsKey(modelId)) {
+            return modelCache.get(modelId);
+        }
+
+        // 创建新的模型实例
+        ChatLanguageModel chatModel = createChatModel(config, temperature, maxTokens);
+        modelCache.put(modelId, chatModel);
+        modelVersionCache.put(modelId, currentVersion);
+
+        return chatModel;
+    }
+
+    /**
+     * 根据配置创建 ChatLanguageModel
+     */
+    private ChatLanguageModel createChatModel(LlmModel config, Double temperature, Integer maxTokens) {
+        String provider = config.getProvider();
+        
+        // 使用节点配置的参数，如果没有则使用模型默认值，最后使用系统默认值
+        double temp = temperature != null ? temperature 
+                : (config.getDefaultTemperature() != null ? config.getDefaultTemperature() : 0.7);
+        int tokens = maxTokens != null ? maxTokens 
+                : (config.getDefaultMaxTokens() != null ? config.getDefaultMaxTokens() : 2000);
+
+        return switch (LlmProvider.valueOf(provider)) {
+            case OPENAI, CUSTOM, DASHSCOPE, MOONSHOT, DEEPSEEK -> createOpenAiCompatibleModel(config, temp, tokens);
+            case AZURE_OPENAI -> createAzureOpenAiModel(config, temp, tokens);
+            case OLLAMA -> createOllamaModel(config, temp, tokens);
+            case ZHIPU -> createZhipuModel(config, temp, tokens);
+        };
+    }
+
+    /**
+     * 创建 OpenAI 兼容模型（包括 OpenAI、DeepSeek、Moonshot 等）
+     */
+    private ChatLanguageModel createOpenAiCompatibleModel(LlmModel config, double temperature, int maxTokens) {
+
+
+        if(config.getModelName().contains("gpt-5")){
+            return OpenAiChatModel.builder()
+                    .apiKey(config.getApiKey())
+                    .baseUrl(config.getBaseUrl())
+                    .modelName(config.getModelName())
+                    .temperature(temperature)
+                    .maxCompletionTokens(maxTokens)
+                    .timeout(Duration.ofSeconds(60))
+                    .logRequests(true)
+                    .logResponses(true)
+                    .build();
+        }else{
+            return OpenAiChatModel.builder()
+                    .apiKey(config.getApiKey())
+                    .baseUrl(config.getBaseUrl())
+                    .modelName(config.getModelName())
+                    .temperature(temperature)
+                    .maxTokens(maxTokens)
+                    .timeout(Duration.ofSeconds(60))
+                    .logRequests(true)
+                    .logResponses(true)
+                    .build();
+        }
+
+
+
+    }
+
+    /**
+     * 创建 Azure OpenAI 模型
+     */
+    private ChatLanguageModel createAzureOpenAiModel(LlmModel config, double temperature, int maxTokens) {
+        // 注意：Azure OpenAI 需要不同的配置方式
+        // 这里使用 OpenAI 兼容模式
+        return OpenAiChatModel.builder()
+                .apiKey(config.getApiKey())
+                .baseUrl(config.getBaseUrl())
+                .modelName(config.getAzureDeploymentName() != null ? 
+                          config.getAzureDeploymentName() : config.getModelName())
+                .temperature(temperature)
+                .maxTokens(maxTokens)
+                .timeout(Duration.ofSeconds(60))
+                .build();
+    }
+
+    /**
+     * 创建 Ollama 模型
+     */
+    private ChatLanguageModel createOllamaModel(LlmModel config, double temperature, int maxTokens) {
+        String baseUrl = config.getBaseUrl() != null ? 
+                config.getBaseUrl() : "http://localhost:11434";
+        
+        return OllamaChatModel.builder()
+                .baseUrl(baseUrl)
+                .modelName(config.getModelName())
+                .temperature(temperature)
+                .timeout(Duration.ofSeconds(120))
+                .build();
+    }
+
+    /**
+     * 创建智谱 AI 模型
+     */
+    private ChatLanguageModel createZhipuModel(LlmModel config, double temperature, int maxTokens) {
+        return ZhipuAiChatModel.builder()
+                .apiKey(config.getApiKey())
+                .model(config.getModelName())
+                .temperature(temperature)
+                .maxToken(maxTokens)
+                .build();
+    }
+
+    /**
+     * 构建消息列表
+     */
+    private List<ChatMessage> buildMessages(String systemPrompt, 
+                                            String userMessage,
+                                            List<ChatHistoryMessage> chatHistory) {
+        List<ChatMessage> messages = new ArrayList<>();
+
+        // 系统消息
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            messages.add(SystemMessage.from(systemPrompt));
+        }
+
+        // 历史消息
+        if (chatHistory != null) {
+            for (ChatHistoryMessage history : chatHistory) {
+                if ("user".equals(history.role())) {
+                    messages.add(UserMessage.from(history.content()));
+                } else if ("assistant".equals(history.role())) {
+                    messages.add(AiMessage.from(history.content()));
+                }
+            }
+        }
+
+        // 当前用户消息
+        messages.add(UserMessage.from(userMessage));
+
+        return messages;
+    }
+
+    /**
+     * 从消息列表构建 LangChain4j 消息
+     */
+    private List<ChatMessage> buildMessagesFromList(String systemPrompt, 
+                                                     List<ChatHistoryMessage> messageList) {
+        List<ChatMessage> messages = new ArrayList<>();
+
+
+
+        // 消息列表
+        if (messageList != null) {
+            for (ChatHistoryMessage msg : messageList) {
+                if ("user".equals(msg.role())) {
+                    messages.add(UserMessage.from(msg.content()));
+                } else if ("assistant".equals(msg.role())) {
+                    messages.add(AiMessage.from(msg.content()));
+                } else if ("system".equals(msg.role())) {
+                    messages.add(SystemMessage.from(msg.content()));
+                }
+            }
+        }
+
+        return messages;
+    }
+
+    /**
+     * 估算 Token 数量（简单估算）
+     */
+    private int estimateTokens(List<ChatMessage> messages) {
+        int total = 0;
+        for (ChatMessage message : messages) {
+            total += estimateTokens(message.toString());
+        }
+        return total;
+    }
+
+    private int estimateTokens(String text) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        // 简单估算：英文约 4 字符 1 token，中文约 1.5 字符 1 token
+        int chineseCount = 0;
+        int otherCount = 0;
+        for (char c : text.toCharArray()) {
+            if (Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN) {
+                chineseCount++;
+            } else {
+                otherCount++;
+            }
+        }
+        return (int) (chineseCount / 1.5 + otherCount / 4);
+    }
+
+    // ==================== 数据类 ====================
+
+    /**
+     * 聊天响应
+     */
+    public record LlmChatResponse(
+            boolean success,
+            String reply,
+            String errorMessage,
+            UUID modelId,
+            String modelName,
+            long durationMs,
+            int inputTokens,
+            int outputTokens
+    ) {
+        public String content() {
+            return reply;
+        }
+    }
+
+    /**
+     * 结构化输出响应
+     */
+    public record StructuredOutputResponse(
+            boolean success,
+            String jsonResult,
+            String errorMessage,
+            UUID modelId,
+            String modelName,
+            long durationMs
+    ) {}
+
+    /**
+     * 字段 Schema 定义
+     */
+    public record FieldSchemaDefinition(
+            String name,
+            FieldType type,
+            String description,
+            boolean required,
+            List<String> enumValues
+    ) {
+        public enum FieldType {
+            STRING, INTEGER, NUMBER, BOOLEAN, ENUM, ARRAY
+        }
+    }
+
+    /**
+     * 聊天历史消息
+     */
+    public record ChatHistoryMessage(
+            String role,  // "user" or "assistant"
+            String content
+    ) {}
+}
+
