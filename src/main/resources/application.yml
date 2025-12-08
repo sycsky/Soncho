@@ -13,7 +13,7 @@ spring:
   application:
     name: nexus-support-ai
   profiles:
-    active: dev,local  # 默认开发环境，生产环境通过环境变量覆盖
+    active: local  # 默认开发环境，生产环境通过环境变量覆盖
   servlet:
     multipart:
       enabled: true

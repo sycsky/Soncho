@@ -1,43 +1,19 @@
 version: 1.0
-runtime: corretto17  # Java 17 运行时
+runtime: corretto17
 
 build:
   commands:
-    pre-build:
-      - echo "Installing dependencies..."
     build:
       - mvn clean package -DskipTests -B
-    post-build:
-      - echo "Build completed!"
 
 run:
   command: java -jar target/ai-kef-0.0.1-SNAPSHOT.jar
   network:
     port: 8080
-    env: APP_PORT
   env:
-    # ===== 基础配置（非敏感）=====
     - name: SPRING_PROFILES_ACTIVE
       value: "production"
     - name: JAVA_TOOL_OPTIONS
       value: "-Xms512m -Xmx1024m"
     - name: TZ
       value: "Asia/Shanghai"
-    
-    # ===== 敏感配置请在 AWS 控制台配置 =====
-    # 以下变量已在 AWS Secrets Manager 中配置，无需在此文件中设置：
-    # - SPRING_DATASOURCE_URL
-    # - SPRING_DATASOURCE_USERNAME
-    # - SPRING_DATASOURCE_PASSWORD
-    # - SPRING_DATA_REDIS_HOST
-    # - SPRING_DATA_REDIS_PASSWORD
-    # - KNOWLEDGE_PGVECTOR_HOST
-    # - KNOWLEDGE_PGVECTOR_PORT
-    # - KNOWLEDGE_PGVECTOR_DATABASE
-    # - KNOWLEDGE_PGVECTOR_USER
-    # - PGVECTOR_PASSWORD
-    # - AWS_TRANSLATE_ACCESS_KEY
-    # - AWS_TRANSLATE_SECRET_KEY
-    # - AWS_REGION
-    # - OPENAI_API_KEY
-    # - OPENAI_BASE_URL
