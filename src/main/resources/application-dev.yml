@@ -1,15 +1,38 @@
 # ================================
 # 开发环境配置
 # ================================
-# 默认开发配置，可安全提交到 Git
-# 敏感信息请在 application-local.yml 中覆盖
 
 spring:
+  # 数据库配置
   datasource:
     url: jdbc:mysql://localhost:3306/ai_agent?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
     username: root
-    password: ${DB_PASSWORD:your_password}
+    password: ${DB_PASSWORD:password}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  # Redis 配置
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: ""
+  # JPA 配置
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+        type:
+          preferred_uuid_jdbc_type: CHAR
+    open-in-view: false
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.example.aikef: DEBUG
+    com.yomahub.liteflow: DEBUG
 
 # AI 配置
 ai:
@@ -17,23 +40,26 @@ ai:
     api-key: ${OPENAI_API_KEY:your_api_key}
     base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
 
-# 知识库配置
+# 知识库 - PGVector 配置
 knowledge:
   pgvector:
     host: 127.0.0.1
     port: 5432
     database: vectordb
     user: postgres
-    password: ${PGVECTOR_PASSWORD:your_password}
+    password: ${PGVECTOR_PASSWORD:password}
 
-# AWS 翻译服务 - 开发环境默认禁用
+# 文件存储 - 开发环境使用本地存储
+storage:
+  type: local
+  local:
+    base-path: ./uploads
+    base-url: http://localhost:8080/api/v1/files
+
+# 翻译服务 - 开发环境默认禁用
 translation:
   enabled: false
   aws:
     access-key: ${AWS_TRANSLATE_ACCESS_KEY:}
     secret-key: ${AWS_TRANSLATE_SECRET_KEY:}
     region: us-east-1
-
-# 文件存储 - 开发环境使用本地存储
-storage:
-  type: local
