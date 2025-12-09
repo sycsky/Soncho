@@ -26,15 +26,20 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        // 使用 SockJS（配置心跳间隔为25秒）
+        // 使用 SockJS（针对 App Runner 优化配置）
         registry.addHandler(chatWebSocketHandler, "/ws/chat")
                 .setAllowedOriginPatterns("*")
                 .addInterceptors(tokenHandshakeInterceptor)
                 .withSockJS()
-                .setHeartbeatTime(25000)  // 25秒心跳间隔
-                .setDisconnectDelay(5000); // 5秒断开延迟
+                .setHeartbeatTime(25000)           // 25秒心跳间隔
+                .setDisconnectDelay(5000)          // 5秒断开延迟
+                .setHttpMessageCacheSize(1000)     // 消息缓存大小
+                .setStreamBytesLimit(512 * 1024)   // 流字节限制 512KB
+                .setSessionCookieNeeded(false)     // 不需要session cookie
+                .setWebSocketEnabled(true)         // 确保启用WebSocket
+                .setClientLibraryUrl("https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js");
         
-        // 原生 WebSocket 支持
+        // 原生 WebSocket 支持（推荐在 App Runner 上使用）
         registry.addHandler(chatWebSocketHandler, "/ws/chat")
                 .setAllowedOriginPatterns("*")
                 .addInterceptors(tokenHandshakeInterceptor);

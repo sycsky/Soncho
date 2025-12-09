@@ -136,7 +136,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             
             // 处理心跳 ping 事件
             if ("ping".equals(eventType)) {
-                log.trace("🏓 收到心跳 ping: sessionId={}", session.getId());
+                log.info("🏓 收到心跳 ping: sessionId={}", session.getId());
                 ServerEvent pongEvent = new ServerEvent("pong", Map.of("timestamp", System.currentTimeMillis()));
                 session.sendMessage(new TextMessage(objectMapper.writeValueAsString(pongEvent)));
                 return;
