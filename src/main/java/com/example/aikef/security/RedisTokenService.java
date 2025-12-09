@@ -18,7 +18,7 @@ import java.util.UUID;
 @Component
 public class RedisTokenService implements TokenService {
 
-    private static final Duration DEFAULT_TTL = Duration.ofHours(24);
+    private static final Duration DEFAULT_TTL = Duration.ofDays(30);
     private static final String KEY_PREFIX = "agent_token:";
 
     private final StringRedisTemplate redisTemplate;
