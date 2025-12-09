@@ -24,23 +24,13 @@ public class WebSocketConfig implements WebSocketConfigurer {
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         // 使用 SockJS
         registry.addHandler(chatWebSocketHandler, "/ws/chat")
-                .setAllowedOrigins(
-                    "http://localhost:3000",
-                    "http://localhost:3001", 
-                    "http://127.0.0.1:3000",
-                    "http://127.0.0.1:3001"
-                )
+                .setAllowedOriginPatterns("*")
                 .addInterceptors(tokenHandshakeInterceptor)
                 .withSockJS();
         
         // 原生 WebSocket 支持
         registry.addHandler(chatWebSocketHandler, "/ws/chat")
-                .setAllowedOrigins(
-                    "http://localhost:3000",
-                    "http://localhost:3001",
-                    "http://127.0.0.1:3000",
-                    "http://127.0.0.1:3001"
-                )
+                .setAllowedOriginPatterns("*")
                 .addInterceptors(tokenHandshakeInterceptor);
     }
 }
