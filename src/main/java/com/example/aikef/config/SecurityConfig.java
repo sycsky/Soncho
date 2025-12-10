@@ -28,7 +28,9 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // 允许所有来源
+        // 允许所有源地址（开发环境）
+        // 注意：如果设置了 allowCredentials(true)，不能使用 setAllowedOrigins("*")
+        // 必须使用 setAllowedOriginPatterns 配合通配符
         configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));

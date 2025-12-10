@@ -37,9 +37,9 @@ public interface AiToolRepository extends JpaRepository<AiTool, UUID> {
     Optional<AiTool> findByNameWithSchema(String name);
 
     /**
-     * 查找有参数定义的启用工具（带 Schema）
+     * 查找所有启用的工具（带 Schema，包括没有 schema 的工具）
      */
-    @Query("SELECT t FROM AiTool t LEFT JOIN FETCH t.schema WHERE t.enabled = true AND t.schema IS NOT NULL ORDER BY t.sortOrder ASC")
+    @Query("SELECT t FROM AiTool t LEFT JOIN FETCH t.schema WHERE t.enabled = true ORDER BY t.sortOrder ASC")
     List<AiTool> findEnabledToolsWithSchema();
 
     @Query("SELECT t FROM AiTool t WHERE t.enabled = true AND " +

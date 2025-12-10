@@ -53,8 +53,9 @@ import java.util.Map;
  * 
  * 历史消息处理：
  * - 从数据库按 sessionId 查询会话历史消息
+ * - 忽略 SYSTEM 类型的消息
  * - SenderType.USER 转换为用户消息（user role）
- * - SenderType.AGENT/AI/SYSTEM 转换为客服消息（assistant role）
+ * - SenderType.AGENT/AI 转换为客服消息（assistant role）
  * - 按时间正序排列，最新的消息在最后
  */
 @LiteflowComponent("llm")
@@ -88,7 +89,7 @@ public class LlmNode extends BaseWorkflowNode {
         log.info("llm 开始调用:{}",ctx.getLastOutput());
         try {
             // 检查是否是从暂停状态恢复
-            ToolCallState toolState = ctx.getToolCallState();
+//            ToolCallState toolState = ctx.getToolCallState();
 //            toolState.setStatus(ToolCallState.Status.EXECUTING_TOOL);
 //            if (toolState != null && toolState.getStatus() == ToolCallState.Status.WAITING_USER_INPUT) {
 //                // 继续处理工具调用
@@ -742,39 +743,59 @@ public class LlmNode extends BaseWorkflowNode {
     
     /**
      * 从数据库加载会话历史消息
+     * 忽略 SYSTEM 类型的消息
      * 
      * @param sessionId 会话ID
-     * @param readCount 读取条数
+     * @param readCount 读取条数（排除 SYSTEM 消息后的数量）
      * @return 历史消息列表（按时间正序）
      */
     private List<ChatMessage> loadHistoryFromDatabase(UUID sessionId, int readCount) {
         List<ChatMessage> historyMessages = new ArrayList<>();
         
         try {
-            // 查询最近的N条消息（按时间倒序查询）
+            // 为了确保过滤掉 SYSTEM 消息和空消息后仍有足够数量的消息，查询更多消息
+            // 查询数量设为 readCount * 2，以确保过滤后仍有足够的消息
+            int queryCount = Math.max(readCount * 2, 50); // 至少查询50条，确保有足够的数据
+            // 查询最近的N条消息（按时间倒序查询，最新的在前）
             List<Message> dbMessages = messageRepository.findBySession_IdAndInternalFalseOrderByCreatedAtDesc(
-                    sessionId, PageRequest.of(0, readCount));
+                    sessionId, PageRequest.of(0, queryCount));
             
             if (dbMessages.isEmpty()) {
                 return historyMessages;
             }
             
-            // 反转列表，使其按时间正序排列
-            Collections.reverse(dbMessages);
-            
-            // 转换为 ChatMessage
+            // 先过滤掉 SYSTEM 类型的消息和空消息，保留最新的消息
+            List<Message> filteredMessages = new ArrayList<>();
             for (Message msg : dbMessages) {
+                // 忽略 SYSTEM 类型的消息
+                if (msg.getSenderType() == SenderType.SYSTEM) {
+                    continue;
+                }
+                
                 String text = msg.getText();
                 if (text == null || text.isEmpty()) {
                     continue;
                 }
                 
+                filteredMessages.add(msg);
+                
+                // 达到请求的数量后停止
+                if (filteredMessages.size() >= readCount) {
+                    break;
+                }
+            }
+            
+            // 反转列表，使其按时间正序排列（最老的在前，最新的在后）
+            Collections.reverse(filteredMessages);
+            
+            // 转换为 ChatMessage
+            for (Message msg : filteredMessages) {
                 // SenderType.USER 为用户消息，其他为客服/AI消息
                 if (msg.getSenderType() == SenderType.USER) {
-                    historyMessages.add(UserMessage.from(text));
+                    historyMessages.add(UserMessage.from(msg.getText()));
                 } else {
-                    // AGENT, AI, SYSTEM 都作为 assistant 消息
-                    historyMessages.add(AiMessage.from(text));
+                    // AGENT, AI 作为 assistant 消息
+                    historyMessages.add(AiMessage.from(msg.getText()));
                 }
             }
             
