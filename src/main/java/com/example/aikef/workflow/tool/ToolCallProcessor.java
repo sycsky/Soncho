@@ -139,9 +139,10 @@ public class ToolCallProcessor {
      *
      * @param toolCallState 工具调用状态
      * @param userMessage 用户原始消息
+     * @param sessionId 会话ID（用于获取会话元数据）
      * @return 处理结果
      */
-    public ToolCallProcessResult processToolCall(ToolCallState toolCallState, String userMessage) {
+    public ToolCallProcessResult processToolCall(ToolCallState toolCallState, String userMessage, UUID sessionId) {
         ToolCallState.ToolCallRequest request = toolCallState.getCurrentToolCall();
         if (request == null) {
             return ToolCallProcessResult.error("没有待处理的工具调用");
@@ -194,7 +195,7 @@ public class ToolCallProcessor {
 
         if (missingParams.isEmpty()) {
             // 所有参数都有了，执行工具
-            return executeToolWithParams(tool, allParams, request.getId());
+            return executeToolWithParams(tool, allParams, request.getId(), sessionId);
         } else {
             // 有缺失参数，需要收集
             String nextQuestion = buildFollowupQuestion(paramDefs, missingParams);
@@ -212,7 +213,8 @@ public class ToolCallProcessor {
     public ToolCallProcessResult continueParamCollection(
             ToolCallState toolCallState,
             String userResponse,
-            UUID llmModelId) {
+            UUID llmModelId,
+            UUID sessionId) {
 
         ToolCallState.ToolCallRequest request = toolCallState.getCurrentToolCall();
         if (request == null) {
@@ -268,7 +270,7 @@ public class ToolCallProcessor {
 
             if (stillMissing.isEmpty()) {
                 // 参数收集完成，执行工具
-                return executeToolWithParams(tool, allParams, request.getId());
+                return executeToolWithParams(tool, allParams, request.getId(), sessionId);
             } else {
                 // 还有缺失参数
                 String nextQuestion = buildFollowupQuestion(paramDefs, stillMissing);
@@ -338,14 +340,14 @@ public class ToolCallProcessor {
     /**
      * 使用参数执行工具
      */
-    private ToolCallProcessResult executeToolWithParams(AiTool tool, Map<String, Object> params, String toolCallId) {
+    private ToolCallProcessResult executeToolWithParams(AiTool tool, Map<String, Object> params, String toolCallId, UUID sessionId) {
         try {
             log.info("执行工具: tool={}, params={}", tool.getName(), params);
 
             AiToolService.ToolExecutionResult result = toolService.executeTool(
                     tool.getId(),
                     params,
-                    null,
+                    sessionId,
                     null
             );
 

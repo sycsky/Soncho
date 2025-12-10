@@ -41,6 +41,7 @@ public class AiToolService {
     private final ExtractionSchemaRepository schemaRepository;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
+    private final com.example.aikef.service.ChatSessionService chatSessionService;
 
     // ==================== 工具 CRUD ====================
 
@@ -265,7 +266,7 @@ public class AiToolService {
             ToolExecutionResult result;
 
             if (tool.getToolType() == AiTool.ToolType.API) {
-                result = executeApiTool(tool, params);
+                result = executeApiTool(tool, params, sessionId);
             } else if (tool.getToolType() == AiTool.ToolType.MCP) {
                 result = executeMcpTool(tool, params);
             } else {
@@ -317,7 +318,7 @@ public class AiToolService {
     /**
      * 执行 API 工具
      */
-    private ToolExecutionResult executeApiTool(AiTool tool, Map<String, Object> params) {
+    private ToolExecutionResult executeApiTool(AiTool tool, Map<String, Object> params, UUID sessionId) {
         try {
             // 构建请求头
             HttpHeaders headers = new HttpHeaders();
@@ -326,19 +327,23 @@ public class AiToolService {
             if (tool.getApiHeaders() != null && !tool.getApiHeaders().isEmpty()) {
                 Map<String, String> customHeaders = objectMapper.readValue(tool.getApiHeaders(),
                         new TypeReference<Map<String, String>>() {});
-                customHeaders.forEach(headers::set);
+                // 替换请求头中的变量（包括 metadata）
+                customHeaders.forEach((key, value) -> {
+                    String replacedValue = replaceVariables(value, params, sessionId);
+                    headers.set(key, replacedValue);
+                });
             }
 
             // 处理认证
             applyAuthentication(headers, tool, params);
 
-            // 构建请求 URL（替换变量）
-            String url = replaceVariables(tool.getApiUrl(), params);
+            // 构建请求 URL（替换变量，包括会话元数据）
+            String url = replaceVariables(tool.getApiUrl(), params, sessionId);
 
             // 构建请求体
             String body = null;
             if (tool.getApiBodyTemplate() != null && !tool.getApiBodyTemplate().isEmpty()) {
-                body = replaceVariables(tool.getApiBodyTemplate(), params);
+                body = replaceVariables(tool.getApiBodyTemplate(), params, sessionId);
             } else if (params != null && !params.isEmpty()) {
                 body = objectMapper.writeValueAsString(params);
             }
@@ -434,25 +439,82 @@ public class AiToolService {
 
     /**
      * 替换变量
+     * 支持两种格式：
+     * - {{paramName}} - 从 params 中获取参数值
+     * - {{meta.key}} - 从会话 metadata 中获取元数据值
      */
-    private String replaceVariables(String template, Map<String, Object> params) {
-        if (template == null || params == null) {
+    private String replaceVariables(String template, Map<String, Object> params, UUID sessionId) {
+        if (template == null) {
             return template;
         }
 
         String result = template;
-        Pattern pattern = Pattern.compile("\\{\\{(\\w+)}}");
+        
+        // 匹配 {{xxx}} 或 {{meta.xxx}} 格式
+        // 支持字母、数字、下划线和点号
+        Pattern pattern = Pattern.compile("\\{\\{([\\w.]+)}}");
         Matcher matcher = pattern.matcher(template);
-
+        
         while (matcher.find()) {
             String varName = matcher.group(1);
-            Object value = params.get(varName);
-            if (value != null) {
-                result = result.replace("{{" + varName + "}}", value.toString());
+            String fullMatch = matcher.group(0); // 完整的 {{xxx}} 或 {{meta.xxx}}
+            
+            // 检查是否是 meta.xxx 格式
+            if (varName.startsWith("meta.")) {
+                // 从会话 metadata 中获取
+                String metaKey = varName.substring(5); // 去掉 "meta." 前缀
+                String metaValue = getSessionMetadataValue(sessionId, metaKey);
+                if (metaValue != null) {
+                    result = result.replace(fullMatch, metaValue);
+                }
+            } else {
+                // 从 params 中获取
+                if (params != null) {
+                    Object value = params.get(varName);
+                    if (value != null) {
+                        result = result.replace(fullMatch, value.toString());
+                    }
+                }
             }
         }
 
         return result;
+    }
+    
+    /**
+     * 从会话 metadata 中获取指定 key 的值
+     */
+    private String getSessionMetadataValue(UUID sessionId, String key) {
+        if (sessionId == null || key == null || key.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            com.example.aikef.model.ChatSession session = chatSessionService.getSession(sessionId);
+            String metadataJson = session.getMetadata();
+            
+            if (metadataJson == null || metadataJson.isEmpty()) {
+                return null;
+            }
+            
+            // 解析 JSON
+            JsonNode metadata = objectMapper.readTree(metadataJson);
+            JsonNode valueNode = metadata.get(key);
+            
+            if (valueNode != null && !valueNode.isNull()) {
+                if (valueNode.isTextual()) {
+                    return valueNode.asText();
+                } else {
+                    // 非文本类型，转换为 JSON 字符串
+                    return valueNode.toString();
+                }
+            }
+            
+        } catch (Exception e) {
+            log.warn("获取会话元数据失败: sessionId={}, key={}, error={}", sessionId, key, e.getMessage());
+        }
+        
+        return null;
     }
 
     /**

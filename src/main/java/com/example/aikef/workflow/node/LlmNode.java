@@ -214,7 +214,7 @@ public class LlmNode extends BaseWorkflowNode {
             long startTime) {
 
         List<ToolExecutionRequest> toolRequests = aiMessage.toolExecutionRequests();
-        log.info("检测到 {} 个工具调用请求", toolRequests.size());
+        log.info("检测到 {} 个工具调用请求，将串行处理", toolRequests.size());
 
         // 初始化工具调用状态
         ToolCallState toolState = ctx.getOrCreateToolCallState();
@@ -256,7 +256,7 @@ public class LlmNode extends BaseWorkflowNode {
             toolState.setToolId(firstRequest.getToolId());
             // 处理工具调用（检查参数是否完整）
             ToolCallProcessor.ToolCallProcessResult result = 
-                    toolCallProcessor.processToolCall(toolState, ctx.getQuery());
+                    toolCallProcessor.processToolCall(toolState, ctx.getQuery(), ctx.getSessionId());
 
             handleToolCallResult(ctx, result, messages, toolSpecs, modelIdStr, startTime);
         }
@@ -282,8 +282,19 @@ public class LlmNode extends BaseWorkflowNode {
                 toolState.setStatus(result.isSuccess() ? 
                         ToolCallState.Status.TOOL_COMPLETED : ToolCallState.Status.TOOL_FAILED);
 
-                // 构建工具执行结果消息并继续对话
-                sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime);
+                // 从待处理列表中移除当前工具调用
+                toolState.getPendingToolCalls().removeIf(req -> 
+                    req.getId().equals(toolState.getCurrentToolCall().getId()));
+
+                // 检查是否还有待处理的工具调用
+                if (!toolState.getPendingToolCalls().isEmpty()) {
+                    // 还有待处理的工具调用，继续处理下一个
+                    log.info("还有 {} 个待处理的工具调用，继续处理下一个", toolState.getPendingToolCalls().size());
+                    processNextToolCall(ctx, messages, toolSpecs, modelIdStr, startTime);
+                } else {
+                    // 所有工具调用都完成了，将结果发送回 LLM
+                    sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime);
+                }
             }
 
             case NEED_MORE_PARAMS -> {
@@ -392,7 +403,7 @@ public class LlmNode extends BaseWorkflowNode {
 
         // 继续参数收集
         ToolCallProcessor.ToolCallProcessResult result = 
-                toolCallProcessor.continueParamCollection(toolState, ctx.getQuery(), modelId);
+                toolCallProcessor.continueParamCollection(toolState, ctx.getQuery(), modelId, ctx.getSessionId());
 
         // 重建消息列表（这里简化处理）
         List<ChatMessage> messages = new ArrayList<>();
@@ -426,6 +437,38 @@ public class LlmNode extends BaseWorkflowNode {
         }
         
         return null;
+    }
+
+    /**
+     * 处理下一个工具调用（串行处理多个工具调用）
+     */
+    private void processNextToolCall(
+            WorkflowContext ctx,
+            List<ChatMessage> messages,
+            List<ToolSpecification> toolSpecs,
+            String modelIdStr,
+            long startTime) {
+        
+        ToolCallState toolState = ctx.getToolCallState();
+        
+        if (toolState.getPendingToolCalls().isEmpty()) {
+            log.warn("没有待处理的工具调用");
+            return;
+        }
+        
+        // 获取下一个待处理的工具调用
+        ToolCallState.ToolCallRequest nextRequest = toolState.getPendingToolCalls().get(0);
+        toolState.setCurrentToolCall(nextRequest);
+        toolState.setStatus(ToolCallState.Status.EXTRACTING_PARAMS);
+        toolState.setToolId(nextRequest.getToolId());
+        
+        log.info("处理下一个工具调用: toolName={}, toolId={}", nextRequest.getToolName(), nextRequest.getToolId());
+        
+        // 处理工具调用（检查参数是否完整）
+        ToolCallProcessor.ToolCallProcessResult result = 
+                toolCallProcessor.processToolCall(toolState, ctx.getQuery(), ctx.getSessionId());
+        
+        handleToolCallResult(ctx, result, messages, toolSpecs, modelIdStr, startTime);
     }
 
     /**
@@ -483,7 +526,7 @@ public class LlmNode extends BaseWorkflowNode {
 
 
 
-            // 重置工具状态
+            // 所有工具调用都已完成，重置工具状态
             toolState.reset();
 
             setOutput(finalReply);
