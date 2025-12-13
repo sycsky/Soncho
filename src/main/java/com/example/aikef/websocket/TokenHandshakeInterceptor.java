@@ -32,13 +32,11 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
-        log.info("🤝 WebSocket 握手请求: URI={}, 请求类型={}, Headers={}", 
-                request.getURI(), request.getClass().getSimpleName(), request.getHeaders());
+        log.info("WebSocket 握手请求: URI={}, 请求类型={}", request.getURI(), request.getClass().getSimpleName());
         
         if (request instanceof ServletServerHttpRequest servletRequest) {
             String token = servletRequest.getServletRequest().getParameter("token");
-            String queryString = servletRequest.getServletRequest().getQueryString();
-            log.info("📋 请求参数: queryString={}, token={}", queryString, token != null ? "存在(长度:" + token.length() + ")" : "不存在");
+            log.debug("从请求参数中提取 token: {}", token != null ? "存在" : "不存在");
             
             if (token != null && !token.isBlank()) {
                 // 判断是客户 Token 还是坐席 Token

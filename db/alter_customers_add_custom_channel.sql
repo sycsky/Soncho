@@ -8,3 +8,4 @@ MODIFY COLUMN primary_channel ENUM('WEB', 'WECHAT', 'WHATSAPP', 'LINE', 'TELEGRA
 -- 方法2：如果要改为 VARCHAR 类型（更灵活）
 -- ALTER TABLE customers MODIFY COLUMN primary_channel VARCHAR(50) NOT NULL;
 
+

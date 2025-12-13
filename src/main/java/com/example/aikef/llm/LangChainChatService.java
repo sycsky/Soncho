@@ -367,7 +367,7 @@ public class LangChainChatService {
     /**
      * 构建 JSON Schema 元素
      */
-    private JsonSchemaElement buildJsonSchemaElement(FieldSchemaDefinition field) {
+    public static JsonSchemaElement buildJsonSchemaElement(FieldSchemaDefinition field) {
         return switch (field.type()) {
             case STRING -> JsonStringSchema.builder()
                     .description(field.description())
@@ -395,7 +395,7 @@ public class LangChainChatService {
     /**
      * 创建支持 ResponseFormat 的 OpenAI 模型
      */
-    private OpenAiChatModel createOpenAiModelWithResponseFormat(LlmModel config, Double temperature) {
+    public OpenAiChatModel createOpenAiModelWithResponseFormat(LlmModel config, Double temperature) {
         double temp = temperature != null ? temperature : config.getDefaultTemperature();
 
         return OpenAiChatModel.builder()
@@ -483,7 +483,7 @@ public class LangChainChatService {
                     .baseUrl(config.getBaseUrl())
                     .modelName(config.getModelName())
                     .temperature(temperature)
-                    .maxCompletionTokens(maxTokens)
+//                    .maxCompletionTokens(maxTokens)
                     .timeout(Duration.ofSeconds(60))
                     .logRequests(true)
                     .logResponses(true)
@@ -494,7 +494,7 @@ public class LangChainChatService {
                     .baseUrl(config.getBaseUrl())
                     .modelName(config.getModelName())
                     .temperature(temperature)
-                    .maxTokens(maxTokens)
+//                    .maxTokens(maxTokens)
                     .timeout(Duration.ofSeconds(60))
                     .logRequests(true)
                     .logResponses(true)
@@ -552,7 +552,7 @@ public class LangChainChatService {
     /**
      * 构建消息列表
      */
-    private List<ChatMessage> buildMessages(String systemPrompt, 
+    private List<ChatMessage> buildMessages(String systemPrompt,
                                             String userMessage,
                                             List<ChatHistoryMessage> chatHistory) {
         List<ChatMessage> messages = new ArrayList<>();
@@ -587,6 +587,7 @@ public class LangChainChatService {
         List<ChatMessage> messages = new ArrayList<>();
 
 
+        messages.add(SystemMessage.from(systemPrompt));
 
         // 消息列表
         if (messageList != null) {

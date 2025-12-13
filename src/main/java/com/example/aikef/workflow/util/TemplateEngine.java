@@ -19,6 +19,7 @@ import java.util.regex.Pattern;
  * - node: 节点输出
  * - customer: 客户信息
  * - entity: 提取的实体
+ * - agent: Agent 会话变量 (sysPrompt)
  * 
  * 示例:
  * - {{sys.query}} - 用户输入查询
@@ -28,6 +29,7 @@ import java.util.regex.Pattern;
  * - {{node.llm_1}} - 节点 llm_1 的输出
  * - {{customer.name}} - 客户姓名
  * - {{entity.productName}} - 提取的实体 productName
+ * - {{agent.sysPrompt}} - Agent 会话的系统提示词
  */
 public class TemplateEngine {
 
@@ -95,6 +97,7 @@ public class TemplateEngine {
             case "node" -> resolveNodeOutput(key, ctx);
             case "customer" -> resolveCustomerInfo(key, ctx);
             case "entity" -> resolveEntity(key, ctx);
+            case "agent" -> resolveAgentVariable(key, ctx);
             default -> {
                 log.warn("未知的命名空间: {}", namespace);
                 yield "";
@@ -162,6 +165,24 @@ public class TemplateEngine {
     private static String resolveEntity(String key, WorkflowContext ctx) {
         Object value = ctx.getEntities().get(key);
         return value != null ? value.toString() : "";
+    }
+
+    /**
+     * 解析 Agent 变量
+     */
+    private static String resolveAgentVariable(String key, WorkflowContext ctx) {
+        com.example.aikef.model.AgentSession agentSession = ctx.getAgentSession();
+        if (agentSession == null) {
+            return "";
+        }
+        
+        return switch (key.toLowerCase()) {
+            case "sysprompt", "sys_prompt" -> nullToEmpty(agentSession.getSysPrompt());
+            default -> {
+                log.warn("未知的 Agent 变量: {}", key);
+                yield "";
+            }
+        };
     }
 
     /**

@@ -7,12 +7,25 @@ import com.example.aikef.extraction.repository.ExtractionSchemaRepository;
 import com.example.aikef.extraction.repository.ExtractionSessionRepository;
 import com.example.aikef.llm.LangChainChatService;
 import com.example.aikef.llm.LlmModelService;
+import com.example.aikef.model.LlmModel;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ResponseFormat;
+import dev.langchain4j.model.chat.request.ResponseFormatType;
+import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
+import dev.langchain4j.model.chat.request.json.JsonSchema;
+import dev.langchain4j.model.chat.request.json.JsonSchemaElement;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static com.example.aikef.llm.LangChainChatService.buildJsonSchemaElement;
 
 /**
  * 结构化提取服务
@@ -625,10 +640,221 @@ public class StructuredExtractionService {
         }
     }
 
+
+    /**
+     * 简单的 JSON 提取（用于工具参数提取）
+     * 
+     * @param modelId 模型ID（如果为 null，使用默认模型）
+     * @param prompt 系统提示词
+     * @param messages 聊天消息列表（如果为空，则使用 prompt 作为用户消息）
+     * @param name Schema 名称（用于 JSON Schema）
+     * @param targetParamDefs 目标参数定义列表
+     * @return 提取的 JSON 字符串
+     */
+    public String extractAsJson(UUID modelId, String prompt, List<ChatMessage> messages, 
+                                String name, List<FieldDefinition> targetParamDefs) {
+        try {
+            // 如果没有提供 modelId，使用默认模型
+            if (modelId == null) {
+                var defaultModel = llmModelService.getDefaultModel();
+                if (defaultModel.isEmpty()) {
+                    throw new IllegalStateException("未配置默认模型");
+                }
+                modelId = defaultModel.get().getId();
+            }
+
+            Map<String, JsonSchemaElement> properties = new LinkedHashMap<>();
+            List<String> requiredFields = new ArrayList<>();
+
+            // 将 FieldDefinition 转换为 FieldSchemaDefinition
+            List<LangChainChatService.FieldSchemaDefinition> fieldSchemas = targetParamDefs.stream()
+                    .map(f -> new LangChainChatService.FieldSchemaDefinition(
+                            f.getName(),
+                            mapFieldType(f.getType()),
+                            f.getDescription() != null ? f.getDescription() : 
+                                    (f.getDisplayName() != null ? f.getDisplayName() : f.getName()),
+                            f.isRequired(),
+                            f.getEnumValues()
+                    ))
+                    .toList();
+
+            for (LangChainChatService.FieldSchemaDefinition field : fieldSchemas) {
+                JsonSchemaElement element = buildJsonSchemaElement(field);
+                properties.put(field.name(), element);
+
+                if (field.required()) {
+                    requiredFields.add(field.name());
+                }
+            }
+
+            // 构建 JsonObjectSchema
+            dev.langchain4j.model.chat.request.json.JsonObjectSchema jsonSchema = JsonObjectSchema.builder()
+                    .properties(properties)
+                    .required(requiredFields)
+                    .additionalProperties(false)
+                    .build();
+
+            // 构建 ResponseFormat
+            ResponseFormat responseFormat = ResponseFormat.builder()
+                    .type(ResponseFormatType.JSON)
+                    .jsonSchema(JsonSchema.builder()
+                            .name(name != null ? name : "extraction_result")
+                            .rootElement(jsonSchema)
+                            .build())
+                    .build();
+
+            LlmModel modelConfig = llmModelService.getModel(modelId);
+
+            OpenAiChatModel chatModel = chatService.createOpenAiModelWithResponseFormat(modelConfig, null);
+            // 构建消息列表
+            // 构建请求
+            ChatRequest request = ChatRequest.builder()
+                    .messages(messages)
+                    .responseFormat(responseFormat)
+                    .build();
+
+            // 调用 LLM
+            ChatResponse response = chatModel.chat(request);
+
+            return response.aiMessage().text();
+
+        } catch (Exception e) {
+            log.error("JSON 提取失败", e);
+            // 降级到普通提取
+            try {
+                return extractAsJsonFallback(modelId, prompt, messages, targetParamDefs);
+            } catch (Exception fallbackError) {
+                log.error("降级提取也失败", fallbackError);
+                return "{}";
+            }
+        }
+    }
+
+    /**
+     * 构建提取系统提示词
+     */
+    private String buildExtractionSystemPrompt(List<FieldDefinition> targetParamDefs) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是一个信息提取助手。请从用户输入中提取结构化信息，以 JSON 格式返回。\n\n");
+        sb.append("## 字段说明：\n");
+
+        for (FieldDefinition field : targetParamDefs) {
+            sb.append(String.format("- %s: %s%s\n",
+                    field.getName(),
+                    field.getDescription() != null ? field.getDescription() : 
+                            (field.getDisplayName() != null ? field.getDisplayName() : field.getName()),
+                    field.isRequired() ? " [必填]" : " [可选]"));
+
+            if (field.getEnumValues() != null && !field.getEnumValues().isEmpty()) {
+                sb.append(String.format("  可选值: %s\n", String.join(", ", field.getEnumValues())));
+            }
+        }
+
+        sb.append("\n## 要求：\n");
+        sb.append("1. 只提取能从用户输入中明确识别的信息\n");
+        sb.append("2. 无法识别的字段设为 null\n");
+        sb.append("3. 不要猜测或编造数据\n");
+        sb.append("4. 返回标准的 JSON 格式\n");
+
+        return sb.toString();
+    }
+
+    /**
+     * 降级提取（使用普通聊天方式）
+     */
+    private String extractAsJsonFallback(UUID modelId, String prompt, 
+                                         List<ChatMessage> messages, 
+                                         List<FieldDefinition> targetParamDefs) {
+        try {
+            // 构建提取提示词
+            StringBuilder extractPrompt = new StringBuilder();
+            extractPrompt.append("请从以下内容中提取信息，以 JSON 格式返回。\n\n");
+            
+            extractPrompt.append("## 要提取的字段：\n");
+            for (FieldDefinition field : targetParamDefs) {
+                extractPrompt.append(String.format("- %s (%s): %s%s\n",
+                        field.getName(),
+                        field.getType().name(),
+                        field.getDescription() != null ? field.getDescription() : 
+                                (field.getDisplayName() != null ? field.getDisplayName() : field.getName()),
+                        field.isRequired() ? " [必填]" : " [可选]"));
+            }
+
+            extractPrompt.append("\n## 内容：\n");
+            if (messages != null && !messages.isEmpty()) {
+                for (ChatMessage msg : messages) {
+                    if (msg instanceof UserMessage) {
+                        extractPrompt.append("用户: ").append(((UserMessage) msg).text()).append("\n");
+                    } else if (msg instanceof AiMessage) {
+                        extractPrompt.append("助手: ").append(((AiMessage) msg).text()).append("\n");
+                    }
+                }
+            } else if (prompt != null && !prompt.isEmpty()) {
+                extractPrompt.append(prompt).append("\n");
+            }
+
+            extractPrompt.append("\n只返回 JSON 对象，不要有其他文字。");
+
+            // 调用普通聊天接口
+            var response = chatService.chat(modelId, null, extractPrompt.toString(), null, 0.1, 2000);
+            if (response.success()) {
+                String result = response.reply();
+                // 尝试提取 JSON 部分
+                return extractJsonFromText(result);
+            }
+            return "{}";
+        } catch (Exception e) {
+            log.error("降级提取失败", e);
+            return "{}";
+        }
+    }
+
+    /**
+     * 从文本中提取 JSON
+     */
+    private String extractJsonFromText(String text) {
+        if (text == null || text.isEmpty()) {
+            return "{}";
+        }
+
+        try {
+            // 尝试提取 JSON 部分
+            String json = text;
+            if (text.contains("```json")) {
+                int start = text.indexOf("```json") + 7;
+                int end = text.indexOf("```", start);
+                if (end > start) {
+                    json = text.substring(start, end).trim();
+                }
+            } else if (text.contains("```")) {
+                int start = text.indexOf("```") + 3;
+                int end = text.indexOf("```", start);
+                if (end > start) {
+                    json = text.substring(start, end).trim();
+                }
+            }
+
+            // 找到 JSON 对象
+            int braceStart = json.indexOf('{');
+            int braceEnd = json.lastIndexOf('}');
+            if (braceStart >= 0 && braceEnd > braceStart) {
+                json = json.substring(braceStart, braceEnd + 1);
+            }
+
+            // 验证 JSON 格式
+            objectMapper.readTree(json);
+            return json;
+        } catch (Exception e) {
+            log.warn("提取 JSON 失败: {}", text, e);
+            return "{}";
+        }
+    }
+
     /**
      * 简单的 JSON 提取（用于工具参数提取）
      */
     public String extractAsJson(UUID modelId, String prompt) {
+
         try {
             if (modelId == null) {
                 var defaultModel = llmModelService.getDefaultModel();

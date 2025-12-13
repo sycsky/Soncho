@@ -104,6 +104,20 @@ public class WorkflowContext {
     private ToolCallState toolCallState;
 
     /**
+     * AgentSession（特殊工作流会话）
+     * 当 Agent 节点启动特殊工作流时，会注入此对象
+     */
+    private com.example.aikef.model.AgentSession agentSession;
+
+    /**
+     * 工具参数 Map
+     * key: 工具名称（tool name）
+     * value: 工具参数 Map（参数名 -> 参数值）
+     * 由参数提取节点设置，供工具节点使用
+     */
+    private Map<String, Map<String, Object>> toolsParams = new HashMap<>();
+
+    /**
      * 工作流是否暂停（等待用户输入）
      */
     private boolean paused = false;
@@ -395,6 +409,36 @@ public class WorkflowContext {
 
     public void setFiles(List<String> files) {
         this.files = files;
+    }
+
+    public com.example.aikef.model.AgentSession getAgentSession() {
+        return agentSession;
+    }
+
+    public void setAgentSession(com.example.aikef.model.AgentSession agentSession) {
+        this.agentSession = agentSession;
+    }
+
+    public Map<String, Map<String, Object>> getToolsParams() {
+        return toolsParams;
+    }
+
+    public void setToolsParams(Map<String, Map<String, Object>> toolsParams) {
+        this.toolsParams = toolsParams;
+    }
+
+    /**
+     * 设置工具参数
+     */
+    public void setToolParams(String toolName, Map<String, Object> params) {
+        toolsParams.put(toolName, params);
+    }
+
+    /**
+     * 获取工具参数
+     */
+    public Map<String, Object> getToolParams(String toolName) {
+        return toolsParams.get(toolName);
     }
 
     // ========== 内部类 ==========

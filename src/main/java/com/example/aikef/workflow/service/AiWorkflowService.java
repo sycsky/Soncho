@@ -71,6 +71,9 @@ public class AiWorkflowService {
     @Resource
     private SessionCategoryRepository sessionCategoryRepository;
 
+    @Resource
+    private com.example.aikef.repository.AgentSessionRepository agentSessionRepository;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // ==================== CRUD 操作 ====================
@@ -560,15 +563,17 @@ public class AiWorkflowService {
 
     /**
      * 根据会话自动选择并执行工作流
-     * 优先根据会话分类查找绑定的工作流，如果没有则使用默认工作流
-     * 如果有未完成的暂停状态，则从子链恢复执行
+     * 优先级：
+     * 1. 工具询问（检查 WorkflowPausedState）
+     * 2. Agent 工作流（检查 AgentSession）
+     * 3. 分类绑定工作流
      */
     @Transactional
     public WorkflowExecutionResult executeForSession(UUID sessionId, String userMessage) {
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new EntityNotFoundException("会话不存在"));
 
-        // 检查是否有未完成的暂停状态（需要恢复执行）
+        // 优先级1: 检查是否有未完成的暂停状态（工具询问等）
         Optional<WorkflowPausedState> pausedStateOpt = pauseService.findPendingState(sessionId);
         if (pausedStateOpt.isPresent()) {
             WorkflowPausedState pausedState = pausedStateOpt.get();
@@ -577,7 +582,31 @@ public class AiWorkflowService {
             return resumeFromPausedState(pausedState, userMessage, session);
         }
 
-        // 根据会话分类查找匹配的工作流
+        // 优先级2: 检查是否有未结束的 AgentSession（特殊工作流）
+        Optional<com.example.aikef.model.AgentSession> agentSessionOpt = 
+                agentSessionRepository.findBySessionIdAndNotEnded(sessionId);
+        if (agentSessionOpt.isPresent()) {
+            com.example.aikef.model.AgentSession agentSession = agentSessionOpt.get();
+            AiWorkflow agentWorkflow = agentSession.getWorkflow();
+            
+            log.info("发现未结束的 AgentSession，执行 Agent 工作流: sessionId={}, workflowId={}, workflowName={}",
+                    sessionId, agentWorkflow.getId(), agentWorkflow.getName());
+            
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("sessionId", sessionId);
+            if (session.getCustomer() != null) {
+                variables.put("customerId", session.getCustomer().getId());
+                variables.put("customerName", session.getCustomer().getName());
+            }
+            if (session.getCategory() != null) {
+                variables.put("categoryId", session.getCategory().getId());
+                variables.put("categoryName", session.getCategory().getName());
+            }
+
+            return executeWorkflowInternalWithAgentSession(agentWorkflow, sessionId, userMessage, variables, agentSession);
+        }
+
+        // 优先级3: 根据会话分类查找匹配的工作流
         AiWorkflow workflow = findWorkflowForSession(session);
         if (workflow == null) {
             log.warn("未找到匹配的工作流: sessionId={}, categoryId={}", 
@@ -603,6 +632,48 @@ public class AiWorkflowService {
     }
 
     /**
+     * 执行 Agent 工作流（带 AgentSession）
+     * 供 AgentNode 调用，立即执行目标工作流
+     */
+    public WorkflowExecutionResult executeWorkflowInternalWithAgentSession(
+            AiWorkflow workflow, UUID sessionId, String userMessage,
+            Map<String, Object> variables, com.example.aikef.model.AgentSession agentSession) {
+        long startTime = System.currentTimeMillis();
+        WorkflowExecutionLog log = new WorkflowExecutionLog();
+        log.setWorkflow(workflow);
+        log.setUserInput(userMessage);
+        log.setStartedAt(Instant.now());
+
+        if (sessionId != null) {
+            chatSessionRepository.findById(sessionId).ifPresent(log::setSession);
+        }
+
+        try {
+            WorkflowExecutionResult result = executeWorkflowInternalWithoutLog(
+                    workflow, sessionId, userMessage, variables, agentSession);
+
+            log.setStatus(result.success() ? "SUCCESS" : "FAILED");
+            log.setFinalOutput(result.reply());
+            log.setNodeDetails(result.nodeDetailsJson());
+            log.setErrorMessage(result.errorMessage());
+            log.setFinishedAt(Instant.now());
+            log.setDurationMs(System.currentTimeMillis() - startTime);
+
+            executionLogRepository.save(log);
+            return result;
+
+        } catch (Exception e) {
+            log.setStatus("FAILED");
+            log.setErrorMessage(e.getMessage());
+            log.setFinishedAt(Instant.now());
+            log.setDurationMs(System.currentTimeMillis() - startTime);
+            executionLogRepository.save(log);
+
+            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false);
+        }
+    }
+
+    /**
      * 根据会话查找匹配的工作流
      * 优先级：
      * 1. 会话分类绑定的工作流
@@ -611,6 +682,8 @@ public class AiWorkflowService {
     private AiWorkflow findWorkflowForSession(ChatSession session) {
         // 1. 如果会话有分类，查找绑定的工作流
         if (session.getCategory() != null) {
+
+            log.info("categoryId={}", session.getCategory().getId());
             Optional<WorkflowCategoryBinding> bindingOpt = categoryBindingRepository
                     .findByCategoryIdWithWorkflow(session.getCategory().getId());
             
@@ -943,6 +1016,17 @@ public class AiWorkflowService {
                                                                        UUID sessionId,
                                                                        String userMessage,
                                                                        Map<String, Object> variables) {
+        return executeWorkflowInternalWithoutLog(workflow, sessionId, userMessage, variables, null);
+    }
+
+    /**
+     * 执行工作流（不保存日志，支持 AgentSession）
+     */
+    private WorkflowExecutionResult executeWorkflowInternalWithoutLog(AiWorkflow workflow, 
+                                                                       UUID sessionId,
+                                                                       String userMessage,
+                                                                       Map<String, Object> variables,
+                                                                       com.example.aikef.model.AgentSession agentSession) {
         // 为每个工作流生成唯一的 chain ID
         String chainId = "workflow_" + workflow.getId().toString().replace("-", "");
         
@@ -952,6 +1036,13 @@ public class AiWorkflowService {
             context.setWorkflowId(workflow.getId());
             context.setSessionId(sessionId);
             context.setQuery(userMessage);
+            
+            // 注入 AgentSession（如果存在）
+            if (agentSession != null) {
+                context.setAgentSession(agentSession);
+                log.info("注入 AgentSession 到上下文: sessionId={}, workflowId={}, sysPrompt={}",
+                        sessionId, workflow.getId(), agentSession.getSysPrompt());
+            }
             
             if (variables != null) {
                 context.setVariables(new HashMap<>(variables));

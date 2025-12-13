@@ -152,9 +152,10 @@ public class ReactFlowToLiteflowConverter {
             return generateConditionEl(nodeId, nodeMap, outEdges, nextEdges, visited, indentLevel);
         }
         
-        // 意图识别+路由节点特殊处理 (SWITCH)
-        // 支持 intent 和 intent_router 类型
-        if ("intent".equals(nodeType) || "intent_router".equals(nodeType)) {
+        // Switch 节点特殊处理 (SWITCH)
+        // 支持 intent、intent_router、tool、parameter_extraction 类型
+        if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
+            "tool".equals(nodeType) || "parameter_extraction".equals(nodeType)) {
             return generateSwitchEl(nodeId, nodeMap, outEdges, nextEdges, visited, indentLevel);
         }
         
@@ -228,6 +229,20 @@ public class ReactFlowToLiteflowConverter {
             String branchEl = generateEl(edge.targetId, nodeMap, outEdges, new HashSet<>(visited), indentLevel + 1);
             if (!branchEl.isEmpty()) {
                 String targetId = edge.targetId();
+                // 对于 switch 节点，根据节点类型决定使用哪个作为 tag：
+                // - intent 节点返回 "tag:" + targetNodeId，所以使用 targetId 作为 tag
+                // - tool 和 parameter_extraction 节点返回 "fail"/"success" 等，所以使用 sourceHandle 作为 tag
+                String branchTag;
+                if ("intent".equals(nodeType)) {
+                    // intent 节点返回 "tag:" + targetNodeId，所以使用 targetId
+                    branchTag = targetId;
+                } else {
+                    // tool 和 parameter_extraction 节点返回的值（如 "fail"、"success"）对应 sourceHandle
+                    branchTag = edge.sourceHandle();
+                    if (branchTag == null || branchTag.isEmpty()) {
+                        branchTag = targetId;
+                    }
+                }
                 
                 // 根据分支类型添加 tag
                 if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 
@@ -235,12 +250,21 @@ public class ReactFlowToLiteflowConverter {
                     !branchEl.trim().startsWith("THEN(")) {
                     // 多节点串行，包装成 THEN 并添加 tag
                     branchEl = "THEN(\n" + indent(indentLevel + 2) + branchEl.replace("\n", "\n" + indent(1)) + 
-                               "\n" + indent(indentLevel + 1) + ").tag(\"" + targetId + "\")";
+                               "\n" + indent(indentLevel + 1) + ").tag(\"" + branchTag + "\")";
                 } else if (branchEl.trim().startsWith("SWITCH(") || branchEl.trim().startsWith("IF(")) {
                     // 嵌套的 SWITCH 或 IF，在末尾添加 tag
-                    branchEl = branchEl + ".tag(\"" + targetId + "\")";
+                    branchEl = branchEl + ".tag(\"" + branchTag + "\")";
+                } else {
+                    // 单节点分支：需要替换或添加 tag
+                    // 如果已经有 tag，替换它；如果没有，添加它
+                    if (branchEl.contains(".tag(")) {
+                        // 替换现有的 tag
+                        branchEl = branchEl.replaceAll("\\.tag\\(\"[^\"]+\"\\)", ".tag(\"" + branchTag + "\")");
+                    } else {
+                        // 添加新的 tag
+                        branchEl = branchEl + ".tag(\"" + branchTag + "\")";
+                    }
                 }
-                // 单节点分支已经通过 formatNodeRef 有了 tag，不需要额外处理
                 
                 branchEls.add(indent(indentLevel + 1) + branchEl);
             }
@@ -577,7 +601,8 @@ public class ReactFlowToLiteflowConverter {
         }
         
         // 意图节点
-        if ("intent".equals(nodeType) || "intent_router".equals(nodeType)) {
+        if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
+            "tool".equals(nodeType) || "parameter_extraction".equals(nodeType)) {
             return generateSwitchElForSubChain(nodeId, nodeMap, outEdges, allLlmNodeIds, workflowId, nextEdges, visited, indentLevel);
         }
         
@@ -720,18 +745,35 @@ public class ReactFlowToLiteflowConverter {
             
             if (!branchEl.isEmpty()) {
                 String targetId = edge.targetId();
+                // 对于 switch 节点，根据节点类型决定使用哪个作为 tag
+                String branchTag;
+                if ("intent".equals(nodeType)) {
+                    branchTag = targetId;
+                } else {
+                    branchTag = edge.sourceHandle();
+                    if (branchTag == null || branchTag.isEmpty()) {
+                        branchTag = targetId;
+                    }
+                }
                 
                 // 子链不需要额外包装
                 if (branchEl.trim().startsWith("subchain_")) {
                     // 子链直接使用，添加 tag 用于路由
-                    branchEl = branchEl + ".tag(\"" + targetId + "\")";
+                    branchEl = branchEl + ".tag(\"" + branchTag + "\")";
                 } else if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 
                     !branchEl.trim().startsWith("IF(") && !branchEl.trim().startsWith("WHEN(") && 
                     !branchEl.trim().startsWith("THEN(")) {
                     branchEl = "THEN(\n" + indent(indentLevel + 2) + branchEl.replace("\n", "\n" + indent(1)) + 
-                               "\n" + indent(indentLevel + 1) + ").tag(\"" + targetId + "\")";
+                               "\n" + indent(indentLevel + 1) + ").tag(\"" + branchTag + "\")";
                 } else if (branchEl.trim().startsWith("SWITCH(") || branchEl.trim().startsWith("IF(")) {
-                    branchEl = branchEl + ".tag(\"" + targetId + "\")";
+                    branchEl = branchEl + ".tag(\"" + branchTag + "\")";
+                } else {
+                    // 单节点分支：需要替换或添加 tag
+                    if (branchEl.contains(".tag(")) {
+                        branchEl = branchEl.replaceAll("\\.tag\\(\"[^\"]+\"\\)", ".tag(\"" + branchTag + "\")");
+                    } else {
+                        branchEl = branchEl + ".tag(\"" + branchTag + "\")";
+                    }
                 }
                 
                 branchEls.add(indent(indentLevel + 1) + branchEl);
@@ -809,7 +851,8 @@ public class ReactFlowToLiteflowConverter {
         }
         
         // 意图节点特殊处理
-        if ("intent".equals(nodeType) || "intent_router".equals(nodeType)) {
+        if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
+            "tool".equals(nodeType) || "parameter_extraction".equals(nodeType)) {
             return generateSwitchElForMainChain(nodeId, nodeMap, outEdges, subChains, nextEdges, visited, indentLevel);
         }
         
@@ -919,14 +962,31 @@ public class ReactFlowToLiteflowConverter {
             String branchEl = generateMainChainElRecursive(edge.targetId(), nodeMap, outEdges, subChains, new HashSet<>(visited), indentLevel + 1);
             if (!branchEl.isEmpty()) {
                 String targetId = edge.targetId();
+                // 对于 switch 节点，根据节点类型决定使用哪个作为 tag
+                String branchTag;
+                if ("intent".equals(nodeType)) {
+                    branchTag = targetId;
+                } else {
+                    branchTag = edge.sourceHandle();
+                    if (branchTag == null || branchTag.isEmpty()) {
+                        branchTag = targetId;
+                    }
+                }
                 
                 if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 
                     !branchEl.trim().startsWith("IF(") && !branchEl.trim().startsWith("WHEN(") && 
                     !branchEl.trim().startsWith("THEN(") && !branchEl.trim().startsWith("subchain_")) {
                     branchEl = "THEN(\n" + indent(indentLevel + 2) + branchEl.replace("\n", "\n" + indent(1)) + 
-                               "\n" + indent(indentLevel + 1) + ").tag(\"" + targetId + "\")";
+                               "\n" + indent(indentLevel + 1) + ").tag(\"" + branchTag + "\")";
                 } else if (branchEl.trim().startsWith("SWITCH(") || branchEl.trim().startsWith("IF(")) {
-                    branchEl = branchEl + ".tag(\"" + targetId + "\")";
+                    branchEl = branchEl + ".tag(\"" + branchTag + "\")";
+                } else {
+                    // 单节点分支：需要替换或添加 tag
+                    if (branchEl.contains(".tag(")) {
+                        branchEl = branchEl.replaceAll("\\.tag\\(\"[^\"]+\"\\)", ".tag(\"" + branchTag + "\")");
+                    } else {
+                        branchEl = branchEl + ".tag(\"" + branchTag + "\")";
+                    }
                 }
                 
                 branchEls.add(indent(indentLevel + 1) + branchEl);

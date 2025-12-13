@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class CustomerTokenService {
 
-    private static final Duration DEFAULT_TTL = Duration.ofDays(30);
+    private static final Duration DEFAULT_TTL = Duration.ofHours(24);
     private static final String KEY_PREFIX = "cust_token:";
 
     private final CustomerRepository customerRepository;

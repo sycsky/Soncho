@@ -5,6 +5,7 @@ import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.repository.MessageRepository;
 import com.example.aikef.workflow.context.WorkflowContext;
+import com.example.aikef.workflow.util.TemplateEngine;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.yomahub.liteflow.annotation.LiteflowComponent;
 import com.yomahub.liteflow.core.NodeSwitchComponent;
@@ -14,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 意图识别+路由节点（Switch 类型）
@@ -27,6 +29,7 @@ import java.util.*;
  *       "modelId": "xxx",           // 可选：用于 LLM 识别的模型ID
  *       "recognitionType": "llm",   // 识别方式: llm / keyword
  *       "historyCount": 5,          // 可选：获取历史聊天记录条数，默认0（不使用历史记录）
+ *       "customPrompt": "请特别注意用户的情绪和语气。当前用户输入：{{sys.query}}",  // 可选：自定义提示，会追加到系统提示词中，支持模板变量（如 {{sys.query}}, {{sys.intent}} 等）
  *       "Intents": [
  *         {
  *           "id": "c1764337030732",  // sourceHandle，用于路由
@@ -101,18 +104,23 @@ public class IntentNode extends NodeSwitchComponent {
         }
         
         // 2. 获取历史聊天记录（如果配置了 historyCount）
-        List<String> historyMessages = new ArrayList<>();
+        List<LangChainChatService.ChatHistoryMessage> chatHistory = new ArrayList<>();
         int historyCount = getConfigInt(config, "historyCount", 0);
         boolean useHistoryOnly = historyCount >= 1; // 如果 historyCount >= 1，只使用历史记录
-        if (useHistoryOnly && ctx.getSessionId() != null) {
-            historyMessages = loadHistoryMessages(ctx.getSessionId(), historyCount);
-            log.debug("加载了 {} 条历史消息用于意图识别（仅使用历史记录）", historyMessages.size());
+        if (historyCount > 0 && ctx.getSessionId() != null) {
+            chatHistory = loadHistoryMessages(ctx.getSessionId(), historyCount);
+            log.debug("加载了 {} 条历史消息用于意图识别", chatHistory.size());
             
             // 如果配置了使用历史记录但没有获取到历史消息，使用默认路由
-            if (historyMessages.isEmpty()) {
+            if (useHistoryOnly && chatHistory.isEmpty()) {
                 log.warn("配置了 historyCount >= 1 但未获取到历史消息，使用默认路由");
                 return getDefaultRouteId(config);
             }
+        }
+        
+        // 如果 useHistoryOnly 为 false，将当前用户消息添加到历史记录中
+        if (!useHistoryOnly) {
+            chatHistory.add(new LangChainChatService.ChatHistoryMessage("user", userMessage));
         }
         
         // 3. 识别意图，返回匹配的意图 id（即 sourceHandle）
@@ -123,19 +131,19 @@ public class IntentNode extends NodeSwitchComponent {
         
         switch (recognitionType) {
             case "keyword" -> {
-                var result = recognizeByKeyword(userMessage, historyMessages, useHistoryOnly, intentsConfig);
+                var result = recognizeByKeyword(userMessage, chatHistory, useHistoryOnly, intentsConfig);
                 matchedIntentId = result.id;
                 matchedIntentLabel = result.label;
                 confidence = result.confidence;
             }
             case "llm" -> {
-                var result = recognizeByLlm(userMessage, historyMessages, useHistoryOnly, intentsConfig, config, ctx);
+                var result = recognizeByLlm(chatHistory, useHistoryOnly, intentsConfig, config, ctx);
                 matchedIntentId = result.id;
                 matchedIntentLabel = result.label;
                 confidence = result.confidence;
             }
             default -> {
-                var result = recognizeByLlm(userMessage, historyMessages, useHistoryOnly, intentsConfig, config, ctx);
+                var result = recognizeByLlm(chatHistory, useHistoryOnly, intentsConfig, config, ctx);
                 matchedIntentId = result.id;
                 matchedIntentLabel = result.label;
                 confidence = result.confidence;
@@ -187,7 +195,7 @@ public class IntentNode extends NodeSwitchComponent {
     /**
      * 使用 LLM 识别意图
      */
-    private IntentMatchResult recognizeByLlm(String userMessage, List<String> historyMessages, 
+    private IntentMatchResult recognizeByLlm(List<LangChainChatService.ChatHistoryMessage> chatHistory, 
                                              boolean useHistoryOnly, JsonNode intentsConfig, 
                                              JsonNode config, WorkflowContext ctx) {
         // 构建意图列表描述
@@ -210,44 +218,40 @@ public class IntentNode extends NodeSwitchComponent {
             return new IntentMatchResult(getDefaultRouteId(config), "unknown", 0.0);
         }
         
-        // 构建消息内容
-        StringBuilder fullMessage = new StringBuilder();
-        String systemPrompt;
-        
-        if (useHistoryOnly && !historyMessages.isEmpty()) {
-            // 只使用历史记录，不包含当前消息
-            fullMessage.append("历史对话记录：\n");
-            for (String historyMsg : historyMessages) {
-                fullMessage.append(historyMsg).append("\n");
-            }
-            systemPrompt = """
+        // 构建系统提示词
+        String basePrompt;
+        if (useHistoryOnly && !chatHistory.isEmpty()) {
+            basePrompt = """
                 你是一个意图分类器。根据历史对话记录，从以下意图中选择最匹配的一个。
                 只返回意图名称，不要其他任何内容。如果无法匹配任何意图，返回 "unknown"。
                 
                 可选意图:
                 """ + intentDesc.toString();
-        } else if (!historyMessages.isEmpty()) {
-            // 使用历史记录和当前消息
-            fullMessage.append("历史对话记录：\n");
-            for (String historyMsg : historyMessages) {
-                fullMessage.append(historyMsg).append("\n");
-            }
-            fullMessage.append("\n当前用户消息：").append(userMessage);
-            systemPrompt = """
+        } else if (!chatHistory.isEmpty()) {
+            basePrompt = """
                 你是一个意图分类器。根据用户输入（包括历史对话记录和当前消息），从以下意图中选择最匹配的一个。
                 只返回意图名称，不要其他任何内容。如果无法匹配任何意图，返回 "unknown"。
                 
                 可选意图:
                 """ + intentDesc.toString();
         } else {
-            // 只使用当前消息
-            fullMessage.append(userMessage);
-            systemPrompt = """
+            basePrompt = """
                 你是一个意图分类器。根据用户输入，从以下意图中选择最匹配的一个。
                 只返回意图名称，不要其他任何内容。如果无法匹配任何意图，返回 "unknown"。
                 
                 可选意图:
                 """ + intentDesc.toString();
+        }
+        
+        // 合并自定义提示（如果配置了）
+        String customPrompt = getConfigValue(config, "customPrompt", null);
+        String systemPrompt;
+        if (customPrompt != null && !customPrompt.trim().isEmpty()) {
+            // 支持模板变量替换（如 {{sys.query}}, {{sys.intent}} 等）
+            String renderedCustomPrompt = TemplateEngine.render(customPrompt.trim(), ctx);
+            systemPrompt = basePrompt + "\n\n" + renderedCustomPrompt;
+        } else {
+            systemPrompt = basePrompt;
         }
         
         try {
@@ -258,11 +262,11 @@ public class IntentNode extends NodeSwitchComponent {
             
             if (modelIdStr != null && !modelIdStr.isEmpty()) {
                 UUID modelId = UUID.fromString(modelIdStr);
-                response = langChainChatService.chat(modelId, systemPrompt, fullMessage.toString(), null, 0.1, 100);
+                response = langChainChatService.chatWithMessages(modelId, systemPrompt, chatHistory, 0.1, 100);
             } else if (modelCode != null && !modelCode.isEmpty()) {
-                response = langChainChatService.chatByCode(modelCode, systemPrompt, fullMessage.toString(), null, 0.1, 100);
+                response = langChainChatService.chatWithMessagesByCode(modelCode, systemPrompt, chatHistory, 0.1, 100);
             } else {
-                response = langChainChatService.chat(null, systemPrompt, fullMessage.toString(), null, 0.1, 100);
+                response = langChainChatService.chatWithMessages(null, systemPrompt, chatHistory, 0.1, 100);
             }
 
             if (response.success()) {
@@ -285,23 +289,40 @@ public class IntentNode extends NodeSwitchComponent {
             log.warn("LLM 意图识别失败，回退到关键词匹配", e);
         }
         
-        // 回退到关键词匹配
-        return recognizeByKeyword(userMessage, historyMessages, useHistoryOnly, intentsConfig);
+        // 回退到关键词匹配（需要从 chatHistory 中提取最新的用户消息）
+        String userMessage = "";
+        if (!chatHistory.isEmpty()) {
+            // 获取最后一条用户消息
+            for (int i = chatHistory.size() - 1; i >= 0; i--) {
+                LangChainChatService.ChatHistoryMessage msg = chatHistory.get(i);
+                if ("user".equals(msg.role())) {
+                    userMessage = msg.content();
+                    break;
+                }
+            }
+        }
+        return recognizeByKeyword(userMessage, chatHistory, useHistoryOnly, intentsConfig);
     }
 
     /**
      * 使用关键词匹配识别意图
      */
-    private IntentMatchResult recognizeByKeyword(String userMessage, List<String> historyMessages, 
+    private IntentMatchResult recognizeByKeyword(String userMessage, List<LangChainChatService.ChatHistoryMessage> chatHistory, 
                                                  boolean useHistoryOnly, JsonNode intentsConfig) {
         // 构建用于匹配的文本
         String searchText;
-        if (useHistoryOnly && !historyMessages.isEmpty()) {
+        if (useHistoryOnly && !chatHistory.isEmpty()) {
             // 只使用历史记录，不包含当前消息
-            searchText = String.join(" ", historyMessages).toLowerCase();
-        } else if (!historyMessages.isEmpty()) {
+            searchText = chatHistory.stream()
+                    .map(LangChainChatService.ChatHistoryMessage::content)
+                    .collect(Collectors.joining(" "))
+                    .toLowerCase();
+        } else if (!chatHistory.isEmpty()) {
             // 合并当前消息和历史消息进行匹配
-            searchText = (userMessage + " " + String.join(" ", historyMessages)).toLowerCase();
+            String historyText = chatHistory.stream()
+                    .map(LangChainChatService.ChatHistoryMessage::content)
+                    .collect(Collectors.joining(" "));
+            searchText = (userMessage + " " + historyText).toLowerCase();
         } else {
             // 只使用当前消息
             searchText = userMessage.toLowerCase();
@@ -316,7 +337,7 @@ public class IntentNode extends NodeSwitchComponent {
             if (!id.isEmpty() && !label.isEmpty()) {
                 String labelLower = label.toLowerCase();
                 
-                if (useHistoryOnly && !historyMessages.isEmpty()) {
+                if (useHistoryOnly && !chatHistory.isEmpty()) {
                     // 只使用历史记录匹配
                     if (searchText.contains(labelLower)) {
                         return new IntentMatchResult(id, label, 0.7);
@@ -361,7 +382,7 @@ public class IntentNode extends NodeSwitchComponent {
             if (keywords != null && keywords.isArray()) {
                 for (JsonNode kw : keywords) {
                     String keyword = kw.asText().toLowerCase();
-                    if (useHistoryOnly && !historyMessages.isEmpty()) {
+                    if (useHistoryOnly && !chatHistory.isEmpty()) {
                         // 只使用历史记录匹配
                         if (searchText.contains(keyword)) {
                             return new IntentMatchResult(id, label, 0.8);
@@ -388,10 +409,10 @@ public class IntentNode extends NodeSwitchComponent {
      * 
      * @param sessionId 会话ID
      * @param readCount 读取条数（排除 SYSTEM 消息后的数量）
-     * @return 历史消息文本列表（按时间正序，格式：角色: 内容）
+     * @return 历史消息列表（按时间正序，ChatHistoryMessage 格式）
      */
-    private List<String> loadHistoryMessages(UUID sessionId, int readCount) {
-        List<String> historyMessages = new ArrayList<>();
+    private List<LangChainChatService.ChatHistoryMessage> loadHistoryMessages(UUID sessionId, int readCount) {
+        List<LangChainChatService.ChatHistoryMessage> historyMessages = new ArrayList<>();
         
         try {
             // 为了确保过滤掉 SYSTEM 消息后仍有足够数量的消息，查询更多消息
@@ -429,17 +450,16 @@ public class IntentNode extends NodeSwitchComponent {
             // 反转列表，使其按时间正序排列（最老的在前，最新的在后）
             Collections.reverse(filteredMessages);
             
-            // 转换为文本格式
+            // 转换为 ChatHistoryMessage 格式
             for (Message msg : filteredMessages) {
-                // 根据发送者类型格式化消息
                 String role;
                 if (msg.getSenderType() == SenderType.USER) {
-                    role = "用户";
+                    role = "user";
                 } else {
-                    role = "客服";
+                    role = "assistant";
                 }
                 
-                historyMessages.add(role + ": " + msg.getText());
+                historyMessages.add(new LangChainChatService.ChatHistoryMessage(role, msg.getText()));
             }
             
             log.debug("加载历史消息: sessionId={}, 请求条数={}, 实际条数={}", 

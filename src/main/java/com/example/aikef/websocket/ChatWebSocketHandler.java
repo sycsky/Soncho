@@ -21,8 +21,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
-import org.springframework.web.socket.PingMessage;
-import org.springframework.web.socket.PongMessage;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
@@ -46,14 +44,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         this.eventService = eventService;
         this.offlineMessageService = offlineMessageService;
         this.sessionManager = sessionManager;
-    }
-
-    /**
-     * 处理 Pong 消息（客户端响应服务器的 Ping）
-     */
-    @Override
-    protected void handlePongMessage(WebSocketSession session, PongMessage message) {
-        log.trace("🏓 收到 Pong: sessionId={}", session.getId());
     }
 
     @Override
@@ -129,16 +119,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                         "type", "INVALID_FORMAT",
                         "message", "消息格式错误：必须包含 event 字段"));
                 session.sendMessage(new TextMessage(objectMapper.writeValueAsString(errorEvent)));
-                return;
-            }
-            
-            String eventType = jsonNode.get("event").asText();
-            
-            // 处理心跳 ping 事件
-            if ("ping".equals(eventType)) {
-                log.info("🏓 收到心跳 ping: sessionId={}", session.getId());
-                ServerEvent pongEvent = new ServerEvent("pong", Map.of("timestamp", System.currentTimeMillis()));
-                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(pongEvent)));
                 return;
             }
             
