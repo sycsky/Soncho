@@ -21,7 +21,7 @@ public class OfficialChannelConfig extends AuditableEntity {
      * 渠道类型（唯一标识）
      */
     @Enumerated(EnumType.STRING)
-    @Column(name = "channel_type", nullable = false, unique = true, length = 20)
+    @Column(name = "channel_type", nullable = false, unique = true, length = 20, columnDefinition = "VARCHAR(20)")
     private ChannelType channelType;
 
     /**
