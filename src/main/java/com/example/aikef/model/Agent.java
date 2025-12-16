@@ -31,7 +31,7 @@ public class Agent extends AuditableEntity {
     @Column(nullable = false)
     private AgentStatus status = AgentStatus.OFFLINE;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "role_id")
     private Role role;
 

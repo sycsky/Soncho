@@ -558,7 +558,7 @@ public class AiWorkflowService {
                                                     String userMessage,
                                                     Map<String, Object> variables) {
         AiWorkflow workflow = getWorkflow(workflowId);
-        return executeWorkflowInternal(workflow, sessionId, userMessage, variables);
+        return executeWorkflowInternal(workflow, sessionId, userMessage, variables, null);
     }
 
     /**
@@ -567,9 +567,13 @@ public class AiWorkflowService {
      * 1. 工具询问（检查 WorkflowPausedState）
      * 2. Agent 工作流（检查 AgentSession）
      * 3. 分类绑定工作流
+     * 
+     * @param sessionId 会话ID
+     * @param userMessage 用户消息
+     * @param messageId 触发工作流的消息ID（可为null）
      */
     @Transactional
-    public WorkflowExecutionResult executeForSession(UUID sessionId, String userMessage) {
+    public WorkflowExecutionResult executeForSession(UUID sessionId, String userMessage, UUID messageId) {
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new EntityNotFoundException("会话不存在"));
 
@@ -579,7 +583,7 @@ public class AiWorkflowService {
             WorkflowPausedState pausedState = pausedStateOpt.get();
             log.info("发现未完成的暂停状态，恢复执行: sessionId={}, subChainId={}, llmNodeId={}",
                     sessionId, pausedState.getSubChainId(), pausedState.getLlmNodeId());
-            return resumeFromPausedState(pausedState, userMessage, session);
+            return resumeFromPausedState(pausedState, userMessage, session, messageId);
         }
 
         // 优先级2: 检查是否有未结束的 AgentSession（特殊工作流）
@@ -603,7 +607,7 @@ public class AiWorkflowService {
                 variables.put("categoryName", session.getCategory().getName());
             }
 
-            return executeWorkflowInternalWithAgentSession(agentWorkflow, sessionId, userMessage, variables, agentSession);
+            return executeWorkflowInternalWithAgentSession(agentWorkflow, sessionId, userMessage, variables, agentSession, messageId);
         }
 
         // 优先级3: 根据会话分类查找匹配的工作流
@@ -628,7 +632,7 @@ public class AiWorkflowService {
             variables.put("categoryName", session.getCategory().getName());
         }
 
-        return executeWorkflowInternal(workflow, sessionId, userMessage, variables);
+        return executeWorkflowInternal(workflow, sessionId, userMessage, variables, messageId);
     }
 
     /**
@@ -637,7 +641,7 @@ public class AiWorkflowService {
      */
     public WorkflowExecutionResult executeWorkflowInternalWithAgentSession(
             AiWorkflow workflow, UUID sessionId, String userMessage,
-            Map<String, Object> variables, com.example.aikef.model.AgentSession agentSession) {
+            Map<String, Object> variables, com.example.aikef.model.AgentSession agentSession, UUID messageId) {
         long startTime = System.currentTimeMillis();
         WorkflowExecutionLog log = new WorkflowExecutionLog();
         log.setWorkflow(workflow);
@@ -650,7 +654,7 @@ public class AiWorkflowService {
 
         try {
             WorkflowExecutionResult result = executeWorkflowInternalWithoutLog(
-                    workflow, sessionId, userMessage, variables, agentSession);
+                    workflow, sessionId, userMessage, variables, agentSession, messageId);
 
             log.setStatus(result.success() ? "SUCCESS" : "FAILED");
             log.setFinalOutput(result.reply());
@@ -804,7 +808,8 @@ public class AiWorkflowService {
     @Transactional
     public WorkflowExecutionResult resumeFromPausedState(WorkflowPausedState pausedState, 
                                                           String userMessage,
-                                                          ChatSession session) {
+                                                          ChatSession session,
+                                                          UUID messageId) {
         long startTime = System.currentTimeMillis();
         
         try {
@@ -822,6 +827,9 @@ public class AiWorkflowService {
                     pausedState.getSessionId(),
                     userMessage
             );
+            
+            // 设置触发工作流的消息ID
+            context.setMessageId(messageId);
 
             // 解析并设置节点配置（重要：子链执行时 LLM 节点需要这个配置）
             Map<String, JsonNode> nodesConfig = parseNodesConfig(workflow.getNodesJson());
@@ -962,10 +970,10 @@ public class AiWorkflowService {
     /**
      * 测试执行工作流（不保存日志）
      */
-    public WorkflowExecutionResult testWorkflow(UUID workflowId, String userMessage,
+    public WorkflowExecutionResult testWorkflow(UUID workflowId, UUID sessionId, String userMessage,
                                                  Map<String, Object> variables) {
         AiWorkflow workflow = getWorkflow(workflowId);
-        return executeWorkflowInternalWithoutLog(workflow, null, userMessage, variables);
+        return executeWorkflowInternalWithoutLog(workflow, sessionId, userMessage, variables);
     }
 
     /**
@@ -973,7 +981,7 @@ public class AiWorkflowService {
      */
     private WorkflowExecutionResult executeWorkflowInternal(AiWorkflow workflow, UUID sessionId,
                                                             String userMessage,
-                                                            Map<String, Object> variables) {
+                                                            Map<String, Object> variables, UUID messageId) {
         long startTime = System.currentTimeMillis();
         WorkflowExecutionLog log = new WorkflowExecutionLog();
         log.setWorkflow(workflow);
@@ -986,7 +994,7 @@ public class AiWorkflowService {
 
         try {
             WorkflowExecutionResult result = executeWorkflowInternalWithoutLog(
-                    workflow, sessionId, userMessage, variables);
+                    workflow, sessionId, userMessage, variables, null, messageId);
 
             log.setStatus(result.success() ? "SUCCESS" : "FAILED");
             log.setFinalOutput(result.reply());
@@ -1016,7 +1024,7 @@ public class AiWorkflowService {
                                                                        UUID sessionId,
                                                                        String userMessage,
                                                                        Map<String, Object> variables) {
-        return executeWorkflowInternalWithoutLog(workflow, sessionId, userMessage, variables, null);
+        return executeWorkflowInternalWithoutLog(workflow, sessionId, userMessage, variables, null, null);
     }
 
     /**
@@ -1026,7 +1034,8 @@ public class AiWorkflowService {
                                                                        UUID sessionId,
                                                                        String userMessage,
                                                                        Map<String, Object> variables,
-                                                                       com.example.aikef.model.AgentSession agentSession) {
+                                                                       com.example.aikef.model.AgentSession agentSession,
+                                                                       UUID messageId) {
         // 为每个工作流生成唯一的 chain ID
         String chainId = "workflow_" + workflow.getId().toString().replace("-", "");
         
@@ -1036,6 +1045,7 @@ public class AiWorkflowService {
             context.setWorkflowId(workflow.getId());
             context.setSessionId(sessionId);
             context.setQuery(userMessage);
+            context.setMessageId(messageId);
             
             // 注入 AgentSession（如果存在）
             if (agentSession != null) {

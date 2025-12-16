@@ -65,7 +65,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/webhook/**").permitAll()
                         .requestMatchers("/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/public/**").permitAll()
+                        .requestMatchers("/api/v1/files/image/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
+//                        .requestMatchers("/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(unifiedAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

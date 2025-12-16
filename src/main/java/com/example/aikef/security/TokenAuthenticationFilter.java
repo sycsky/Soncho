@@ -16,9 +16,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class TokenAuthenticationFilter extends OncePerRequestFilter {
 
     private final TokenService tokenService;
+    private final RedisTokenService redisTokenService;
 
-    public TokenAuthenticationFilter(TokenService tokenService) {
+    public TokenAuthenticationFilter(TokenService tokenService, RedisTokenService redisTokenService) {
         this.tokenService = tokenService;
+        this.redisTokenService = redisTokenService;
     }
 
     @Override
@@ -36,6 +38,9 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
                         agentPrincipal.getAuthorities());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                
+                // 验证成功后刷新 token 过期时间
+                redisTokenService.refreshToken(token);
             });
         }
         filterChain.doFilter(request, response);

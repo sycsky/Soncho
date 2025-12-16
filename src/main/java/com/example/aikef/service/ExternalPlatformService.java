@@ -82,7 +82,7 @@ public class ExternalPlatformService {
                     new org.springframework.transaction.support.TransactionSynchronization() {
                         @Override
                         public void afterCommit() {
-                            triggerAiWorkflowIfNeeded(sessionId, messageContent);
+                            triggerAiWorkflowIfNeeded(sessionId, messageContent,message.getId());
                         }
                     }
             );
@@ -427,9 +427,10 @@ public class ExternalPlatformService {
     /**
      * 触发 AI 工作流（事务提交后调用）
      */
-    private void triggerAiWorkflowIfNeeded(UUID sessionId, String content) {
+    private void triggerAiWorkflowIfNeeded(UUID sessionId, String content,UUID messageId) {
         log.debug("事务提交后触发 AI 工作流: sessionId={}", sessionId);
-        webSocketEventService.triggerAiWorkflowIfNeeded(sessionId, content);
+        // 外部平台消息可能没有 messageId，传递 null
+        webSocketEventService.triggerAiWorkflowIfNeeded(sessionId, content, messageId);
     }
 
     /**

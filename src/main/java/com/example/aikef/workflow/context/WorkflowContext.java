@@ -22,6 +22,11 @@ public class WorkflowContext {
     private UUID sessionId;
 
     /**
+     * 触发工作流的消息ID
+     */
+    private UUID messageId;
+
+    /**
      * 客户ID
      */
     private UUID customerId;
@@ -229,6 +234,14 @@ public class WorkflowContext {
 
     public void setSessionId(UUID sessionId) {
         this.sessionId = sessionId;
+    }
+
+    public UUID getMessageId() {
+        return messageId;
+    }
+
+    public void setMessageId(UUID messageId) {
+        this.messageId = messageId;
     }
 
     public UUID getCustomerId() {

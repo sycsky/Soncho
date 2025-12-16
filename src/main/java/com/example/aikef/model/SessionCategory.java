@@ -20,7 +20,7 @@ public class SessionCategory extends AuditableEntity {
     /**
      * 创建人（通常是admin用户）
      */
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "created_by_agent_id", nullable = false)
     private Agent createdByAgent;
 

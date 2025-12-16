@@ -49,6 +49,10 @@ public class WebSocketEventService {
     @Autowired
     @Lazy
     private ExternalPlatformService externalPlatformService;
+    
+    @Autowired
+    @Lazy
+    private com.example.aikef.workflow.service.WorkflowExecutionScheduler workflowScheduler;
 
     @Autowired
     public WebSocketEventService(ObjectMapper objectMapper,
@@ -76,6 +80,8 @@ public class WebSocketEventService {
             case "updateSessionStatus" -> handleSessionStatus(payload);
             case "agentTyping" -> handleAgentTyping(payload, agentPrincipal);
             case "changeAgentStatus" -> handleChangeAgentStatus(payload, agentPrincipal);
+            case "ping"-> new ServerEvent("ping", Map.of(
+                    "message", "ping"));
             default -> new ServerEvent("notification", Map.of(
                     "type", "WARN",
                     "message", "未知事件: " + event));
@@ -115,7 +121,7 @@ public class WebSocketEventService {
         
         // 如果是客户发送的消息，检查是否需要触发 AI 工作流
         if (customerId != null && agentId == null) {
-            triggerAiWorkflowIfNeeded(sessionId, request.text());
+            triggerAiWorkflowIfNeeded(sessionId, request.text(), messageDto.id());
         }
         
         // 如果是客服发送的消息，检查是否需要转发到第三方平台
@@ -128,11 +134,14 @@ public class WebSocketEventService {
                 "message", messageDto));
     }
 
+
+
     /**
      * 触发 AI 工作流处理客户消息
      * 仅在会话状态为 AI_HANDLING 时执行
+     * 使用调度服务实现防抖和队列功能
      */
-    public void triggerAiWorkflowIfNeeded(UUID sessionId, String userMessage) {
+    public void triggerAiWorkflowIfNeeded(UUID sessionId, String userMessage, UUID messageId) {
         try {
             // 获取会话状态
             ChatSession session = conversationService.getChatSession(sessionId);
@@ -148,43 +157,15 @@ public class WebSocketEventService {
                 return;
             }
 
-            log.info("触发 AI 工作流: sessionId={}, userMessage={}", sessionId, 
+            log.debug("提交消息到工作流调度器: sessionId={}, messageId={}, message={}", sessionId, messageId,
                     userMessage.length() > 50 ? userMessage.substring(0, 50) + "..." : userMessage);
 
-            // 异步执行工作流，避免阻塞 WebSocket 处理
-            executeWorkflowAsync(sessionId, userMessage);
+            // 使用调度服务提交消息（带防抖和队列）
+            workflowScheduler.submitMessage(sessionId, userMessage, messageId);
 
         } catch (Exception e) {
             log.error("触发 AI 工作流失败: sessionId={}", sessionId, e);
         }
-    }
-
-    /**
-     * 异步执行 AI 工作流
-     */
-    private void executeWorkflowAsync(UUID sessionId, String userMessage) {
-        // 使用 CompletableFuture 异步执行，避免阻塞 WebSocket
-        java.util.concurrent.CompletableFuture.runAsync(() -> {
-            try {
-                AiWorkflowService.WorkflowExecutionResult result = 
-                        aiWorkflowService.executeForSession(sessionId, userMessage);
-
-                if (result.success() && result.reply() != null && !result.reply().isBlank()) {
-                    // 通过 MessageGateway 发送 AI 回复
-                    messageGateway.sendAiMessage(sessionId, result.reply());
-                    log.info("AI 工作流执行成功: sessionId={}, reply长度={}", 
-                            sessionId, result.reply().length());
-                } else if (!result.success()) {
-                    log.warn("AI 工作流执行失败: sessionId={}, error={}", 
-                            sessionId, result.errorMessage());
-                }
-
-         
-
-            } catch (Exception e) {
-                log.error("AI 工作流执行异常: sessionId={}", sessionId, e);
-            }
-        });
     }
 
     private ServerEvent handleSessionStatus(JsonNode payload) throws JsonProcessingException {

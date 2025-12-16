@@ -459,7 +459,7 @@ public class LangChainChatService {
         
         // 使用节点配置的参数，如果没有则使用模型默认值，最后使用系统默认值
         double temp = temperature != null ? temperature 
-                : (config.getDefaultTemperature() != null ? config.getDefaultTemperature() : 0.7);
+                : (config.getDefaultTemperature() != null ? config.getDefaultTemperature() : 1);
         int tokens = maxTokens != null ? maxTokens 
                 : (config.getDefaultMaxTokens() != null ? config.getDefaultMaxTokens() : 2000);
 

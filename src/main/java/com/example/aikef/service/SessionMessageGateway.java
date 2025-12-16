@@ -47,6 +47,7 @@ public class SessionMessageGateway {
     private final EntityMapper entityMapper;
     private final ObjectMapper objectMapper;
     private final ExternalPlatformService externalPlatformService;
+    private final OfficialChannelMessageService officialChannelMessageService;
     private final TranslationService translationService;
 
     /**
@@ -194,7 +195,12 @@ public class SessionMessageGateway {
 
         // 转发到第三方平台（AI 和客服消息需要转发，客户消息不需要）
         if (senderType == SenderType.AI || senderType == SenderType.AGENT || senderType == SenderType.SYSTEM) {
-            externalPlatformService.forwardMessageToExternalPlatform(sessionId, text, senderType);
+            // 先尝试官方渠道（通过SDK）
+            boolean sentToOfficial = officialChannelMessageService.sendMessageToOfficialChannel(sessionId, text, senderType);
+            if (!sentToOfficial) {
+                // 如果不是官方渠道，使用原有的外部平台方式
+                externalPlatformService.forwardMessageToExternalPlatform(sessionId, text, senderType);
+            }
         }
 
         log.info("消息已发送: sessionId={}, type={}, text={}", 

@@ -6,10 +6,10 @@ import com.example.aikef.llm.LlmModelService;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.repository.LlmModelRepository;
-import com.example.aikef.repository.MessageRepository;
 import com.example.aikef.tool.model.AiTool;
 import com.example.aikef.tool.repository.AiToolRepository;
 import com.example.aikef.workflow.context.WorkflowContext;
+import com.example.aikef.workflow.util.HistoryMessageLoader;
 import com.example.aikef.workflow.util.TemplateEngine;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,7 +19,6 @@ import com.yomahub.liteflow.core.NodeSwitchComponent;
 import jakarta.annotation.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.PageRequest;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -65,7 +64,7 @@ public class ParamExtractNode extends NodeSwitchComponent {
     private LlmModelRepository llmModelRepository;
 
     @Resource
-    private MessageRepository messageRepository;
+    private HistoryMessageLoader historyMessageLoader;
 
     @Resource
     private ObjectMapper objectMapper;
@@ -155,7 +154,7 @@ public class ParamExtractNode extends NodeSwitchComponent {
         List<LangChainChatService.ChatHistoryMessage> chatHistory = new ArrayList<>();
         int historyCount = getConfigInt(config, "readCount", 0);
         if (historyCount > 0 && ctx.getSessionId() != null) {
-            chatHistory = loadHistoryMessages(ctx.getSessionId(), historyCount);
+            chatHistory = loadHistoryMessages(ctx.getSessionId(), historyCount, ctx.getMessageId());
             log.debug("加载了 {} 条历史消息用于参数提取", chatHistory.size());
         }
 
@@ -437,48 +436,27 @@ public class ParamExtractNode extends NodeSwitchComponent {
 
     /**
      * 加载历史消息
+     * @param sessionId 会话ID
+     * @param readCount 读取数量
+     * @param messageId 触发工作流的消息ID（可为null，用于时间过滤）
      */
-    private List<LangChainChatService.ChatHistoryMessage> loadHistoryMessages(UUID sessionId, int readCount) {
+    private List<LangChainChatService.ChatHistoryMessage> loadHistoryMessages(UUID sessionId, int readCount, UUID messageId) {
         List<LangChainChatService.ChatHistoryMessage> historyMessages = new ArrayList<>();
-        try {
-            int queryCount = Math.max(readCount * 2, 50);
-            List<Message> dbMessages = messageRepository.findBySession_IdAndInternalFalseOrderByCreatedAtDesc(
-                    sessionId, PageRequest.of(0, queryCount));
-
-            if (dbMessages.isEmpty()) {
-                return historyMessages;
+        
+        // 使用公共的历史消息加载器
+        List<Message> dbMessages = historyMessageLoader.loadHistoryMessages(sessionId, readCount, messageId);
+        
+        // 转换为 ChatHistoryMessage 格式
+        for (Message msg : dbMessages) {
+            String role;
+            if (msg.getSenderType() == SenderType.USER) {
+                role = "user";
+            } else {
+                role = "assistant";
             }
-
-            List<Message> filteredAndLatestMessages = new ArrayList<>();
-            for (Message msg : dbMessages) {
-                if (msg.getSenderType() == SenderType.SYSTEM) {
-                    continue;
-                }
-                String text = msg.getText();
-                if (text == null || text.isEmpty()) {
-                    continue;
-                }
-                filteredAndLatestMessages.add(msg);
-                if (filteredAndLatestMessages.size() >= readCount) {
-                    break;
-                }
-            }
-            Collections.reverse(filteredAndLatestMessages); // 按时间正序
-
-            for (Message msg : filteredAndLatestMessages) {
-                String role;
-                if (msg.getSenderType() == SenderType.USER) {
-                    role = "user";
-                } else {
-                    role = "assistant";
-                }
-                historyMessages.add(new LangChainChatService.ChatHistoryMessage(role, msg.getText()));
-            }
-            log.debug("加载历史消息: sessionId={}, 请求条数={}, 实际条数={}",
-                    sessionId, readCount, historyMessages.size());
-        } catch (Exception e) {
-            log.warn("加载历史消息失败: sessionId={}, error={}", sessionId, e.getMessage());
+            historyMessages.add(new LangChainChatService.ChatHistoryMessage(role, msg.getText()));
         }
+        
         return historyMessages;
     }
 

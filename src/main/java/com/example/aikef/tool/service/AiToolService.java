@@ -19,8 +19,12 @@ import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -316,63 +320,139 @@ public class AiToolService {
     }
 
     /**
-     * 执行 API 工具
+     * 执行 API 工具（支持网络异常重试）
      */
     private ToolExecutionResult executeApiTool(AiTool tool, Map<String, Object> params, UUID sessionId) {
-        try {
-            // 构建请求头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-
-            if (tool.getApiHeaders() != null && !tool.getApiHeaders().isEmpty()) {
-                Map<String, String> customHeaders = objectMapper.readValue(tool.getApiHeaders(),
-                        new TypeReference<Map<String, String>>() {});
-                // 替换请求头中的变量（包括 metadata）
-                customHeaders.forEach((key, value) -> {
-                    String replacedValue = replaceVariables(value, params, sessionId);
-                    headers.set(key, replacedValue);
-                });
+        int maxRetries = tool.getRetryCount() != null ? tool.getRetryCount() : 0;
+        int retryCount = 0;
+        Exception lastException = null;
+        
+        while (retryCount <= maxRetries) {
+            try {
+                // 如果是重试，记录日志
+                if (retryCount > 0) {
+                    log.info("API 工具重试中: tool={}, 第 {}/{} 次重试", 
+                            tool.getName(), retryCount, maxRetries);
+                    // 重试前等待一段时间（指数退避）
+                    Thread.sleep(1000L * retryCount);
+                }
+                
+                return executeApiToolInternal(tool, params, sessionId);
+                
+            } catch (Exception e) {
+                lastException = e;
+                
+                // 判断是否是网络问题（可重试）
+                if (isNetworkException(e) && retryCount < maxRetries) {
+                    log.warn("API 工具执行网络异常，准备重试: tool={}, retry={}/{}, error={}", 
+                            tool.getName(), retryCount + 1, maxRetries, e.getMessage());
+                    retryCount++;
+                } else {
+                    // 非网络问题或已达到最大重试次数，直接返回失败
+                    log.error("API 工具执行失败: tool={}, retries={}", tool.getName(), retryCount, e);
+                    break;
+                }
             }
-
-            // 处理认证
-            applyAuthentication(headers, tool, params);
-
-            // 构建请求 URL（替换变量，包括会话元数据）
-            String url = replaceVariables(tool.getApiUrl(), params, sessionId);
-
-            // 构建请求体
-            String body = null;
-            if (tool.getApiBodyTemplate() != null && !tool.getApiBodyTemplate().isEmpty()) {
-                body = replaceVariables(tool.getApiBodyTemplate(), params, sessionId);
-            } else if (params != null && !params.isEmpty()) {
-                body = objectMapper.writeValueAsString(params);
-            }
-
-            HttpEntity<String> entity = new HttpEntity<>(body, headers);
-
-            // 发送请求
-            HttpMethod method = HttpMethod.valueOf(tool.getApiMethod().toUpperCase());
-            ResponseEntity<String> response = restTemplate.exchange(url, method, entity, String.class);
-
-            // 解析响应
-            String output = response.getBody();
-            if (tool.getApiResponsePath() != null && !tool.getApiResponsePath().isEmpty()) {
-                output = extractByJsonPath(response.getBody(), tool.getApiResponsePath());
-            }
-
-            return new ToolExecutionResult(
-                    response.getStatusCode().is2xxSuccessful(),
-                    output,
-                    null,
-                    response.getStatusCode().value(),
-                    null,
-                    null
-            );
-
-        } catch (Exception e) {
-            log.error("API 工具执行失败: tool={}", tool.getName(), e);
-            return new ToolExecutionResult(false, null, e.getMessage(), null, null, null);
         }
+        
+        return new ToolExecutionResult(false, null, 
+                lastException != null ? lastException.getMessage() : "执行失败", 
+                null, null, null);
+    }
+    
+    /**
+     * 实际执行 API 工具调用
+     */
+    private ToolExecutionResult executeApiToolInternal(AiTool tool, Map<String, Object> params, UUID sessionId) 
+            throws Exception {
+        // 构建请求头
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        if (tool.getApiHeaders() != null && !tool.getApiHeaders().isEmpty()) {
+            Map<String, String> customHeaders = objectMapper.readValue(tool.getApiHeaders(),
+                    new TypeReference<Map<String, String>>() {});
+            // 替换请求头中的变量（包括 metadata）
+            customHeaders.forEach((key, value) -> {
+                String replacedValue = replaceVariables(value, params, sessionId);
+                headers.set(key, replacedValue);
+            });
+        }
+
+        // 处理认证
+        applyAuthentication(headers, tool, params);
+
+        // 构建请求 URL（替换变量，包括会话元数据）
+        String url = replaceVariables(tool.getApiUrl(), params, sessionId);
+
+        // 构建请求体
+        String body = null;
+        if (tool.getApiBodyTemplate() != null && !tool.getApiBodyTemplate().isEmpty()) {
+            body = replaceVariables(tool.getApiBodyTemplate(), params, sessionId);
+        } else if (params != null && !params.isEmpty()) {
+            body = objectMapper.writeValueAsString(params);
+        }
+
+        HttpEntity<String> entity = new HttpEntity<>(body, headers);
+
+        // 发送请求
+        HttpMethod method = HttpMethod.valueOf(tool.getApiMethod().toUpperCase());
+        ResponseEntity<String> response = restTemplate.exchange(url, method, entity, String.class);
+
+        // 解析响应
+        String output = response.getBody();
+        if (tool.getApiResponsePath() != null && !tool.getApiResponsePath().isEmpty()) {
+            output = extractByJsonPath(response.getBody(), tool.getApiResponsePath());
+        }
+
+        return new ToolExecutionResult(
+                response.getStatusCode().is2xxSuccessful(),
+                output,
+                null,
+                response.getStatusCode().value(),
+                null,
+                null
+        );
+    }
+    
+    /**
+     * 判断是否是网络异常（可重试）
+     */
+    private boolean isNetworkException(Exception e) {
+        // ResourceAccessException 是 RestTemplate 封装的网络异常
+        if (e instanceof ResourceAccessException) {
+            return true;
+        }
+        
+        // 检查根本原因
+        Throwable cause = e.getCause();
+        while (cause != null) {
+            if (cause instanceof ConnectException ||
+                cause instanceof SocketTimeoutException ||
+                cause instanceof UnknownHostException ||
+                cause instanceof java.net.NoRouteToHostException ||
+                cause instanceof java.net.PortUnreachableException) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        
+        // 检查异常消息
+        String message = e.getMessage();
+        if (message != null) {
+            String lowerMessage = message.toLowerCase();
+            if (lowerMessage.contains("connection refused") ||
+                lowerMessage.contains("connection timed out") ||
+                lowerMessage.contains("read timed out") ||
+                lowerMessage.contains("connect timed out") ||
+                lowerMessage.contains("network is unreachable") ||
+                lowerMessage.contains("no route to host") ||
+                lowerMessage.contains("unknown host")) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**

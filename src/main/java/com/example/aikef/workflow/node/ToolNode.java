@@ -88,11 +88,11 @@ public class ToolNode extends NodeSwitchComponent {
         // key 是工具名称（tool.getName()）
         Map<String, Object> toolParams = ctx.getToolParams(tool.getName());
         
-        if (toolParams == null || toolParams.isEmpty()) {
-            log.info("工具参数未找到: toolName={}", tool.getName());
-            recordExecution(ctx, actualNodeId, tool.getName(), "tag:not_executed", startTime, true, null);
-            return "tag:not_executed";
-        }
+//        if (toolParams == null || toolParams.isEmpty()) {
+//            log.info("工具参数未找到: toolName={}", tool.getName());
+//            recordExecution(ctx, actualNodeId, tool.getName(), "tag:not_executed", startTime, true, null);
+//            return "tag:not_executed";
+//        }
 
         // 获取工具参数定义
         List<FieldDefinition> paramDefs = getToolParameters(tool);

@@ -80,4 +80,11 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
      */
     List<Message> findBySession_IdAndCreatedAtAfterAndSenderTypeNotOrderByCreatedAtAsc(
             UUID sessionId, java.time.Instant after, SenderType senderType);
+
+    /**
+     * 查询会话在指定时间之前或等于的消息（按时间倒序，用于历史记录）
+     * 用于根据触发工作流的消息时间点加载历史记录
+     */
+    List<Message> findBySession_IdAndInternalFalseAndCreatedAtLessThanEqualOrderByCreatedAtDesc(
+            UUID sessionId, java.time.Instant maxCreatedAt, Pageable pageable);
 }

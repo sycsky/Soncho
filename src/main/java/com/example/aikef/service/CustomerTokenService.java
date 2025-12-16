@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class CustomerTokenService {
 
-    private static final Duration DEFAULT_TTL = Duration.ofHours(24);
+    private static final Duration DEFAULT_TTL = Duration.ofDays(30);
     private static final String KEY_PREFIX = "cust_token:";
 
     private final CustomerRepository customerRepository;
@@ -55,6 +55,17 @@ public class CustomerTokenService {
         }
         String key = KEY_PREFIX + token;
         redisTemplate.delete(key);
+    }
+
+    /**
+     * 刷新 Token 过期时间
+     * 每次验证成功后调用，延长 token 有效期
+     */
+    public void refreshToken(String token) {
+        if (token != null && token.startsWith("cust_")) {
+            String key = KEY_PREFIX + token;
+            redisTemplate.expire(key, DEFAULT_TTL);
+        }
     }
 
     public void cleanup() {

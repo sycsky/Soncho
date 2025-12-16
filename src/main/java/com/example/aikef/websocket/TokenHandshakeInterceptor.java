@@ -2,6 +2,7 @@ package com.example.aikef.websocket;
 
 import com.example.aikef.security.AgentPrincipal;
 import com.example.aikef.security.CustomerPrincipal;
+import com.example.aikef.security.RedisTokenService;
 import com.example.aikef.security.TokenService;
 import com.example.aikef.service.CustomerTokenService;
 import org.slf4j.Logger;
@@ -21,11 +22,14 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(TokenHandshakeInterceptor.class);
     private final TokenService tokenService;
+    private final RedisTokenService redisTokenService;
     private final CustomerTokenService customerTokenService;
 
     public TokenHandshakeInterceptor(TokenService tokenService, 
+                                    RedisTokenService redisTokenService,
                                     CustomerTokenService customerTokenService) {
         this.tokenService = tokenService;
+        this.redisTokenService = redisTokenService;
         this.customerTokenService = customerTokenService;
     }
 
@@ -46,6 +50,8 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
                     if (principalOpt.isPresent()) {
                         CustomerPrincipal principal = principalOpt.get();
                         attributes.put("CUSTOMER_PRINCIPAL", principal);
+                        // 刷新 token 过期时间
+                        customerTokenService.refreshToken(token);
                         log.info("客户 WebSocket 认证成功: {}, 渠道: {}", principal.getName(), principal.getChannel());
                         return true;
                     } else {
@@ -58,6 +64,8 @@ public class TokenHandshakeInterceptor implements HandshakeInterceptor {
                     if (principalOpt.isPresent()) {
                         AgentPrincipal principal = principalOpt.get();
                         attributes.put("AGENT_PRINCIPAL", principal);
+                        // 刷新 token 过期时间
+                        redisTokenService.refreshToken(token);
                         log.info("坐席 WebSocket 认证成功: {}", principal.getUsername());
                         return true;
                     } else {

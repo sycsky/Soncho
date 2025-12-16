@@ -9,6 +9,8 @@ import com.example.aikef.security.AgentPrincipal;
 import com.example.aikef.workflow.context.WorkflowContext;
 import com.example.aikef.workflow.converter.ReactFlowToLiteflowConverter;
 import com.example.aikef.workflow.service.AiWorkflowService;
+import com.example.aikef.workflow.service.WorkflowExecutionScheduler;
+import com.example.aikef.workflow.service.WorkflowTestService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
@@ -17,6 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -29,12 +32,18 @@ public class AiWorkflowController {
 
     private final AiWorkflowService workflowService;
     private final ReactFlowToLiteflowConverter converter;
+    private final WorkflowTestService workflowTestService;
+    private final WorkflowExecutionScheduler workflowScheduler;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AiWorkflowController(AiWorkflowService workflowService,
-                                ReactFlowToLiteflowConverter converter) {
+                                ReactFlowToLiteflowConverter converter,
+                                WorkflowTestService workflowTestService,
+                                WorkflowExecutionScheduler workflowScheduler) {
         this.workflowService = workflowService;
         this.converter = converter;
+        this.workflowTestService = workflowTestService;
+        this.workflowScheduler = workflowScheduler;
     }
 
     /**
@@ -132,13 +141,28 @@ public class AiWorkflowController {
             @PathVariable UUID workflowId,
             @Valid @RequestBody ExecuteWorkflowRequest request) {
         
+        // 如果未提供sessionId，创建一个测试会话
+        UUID sessionId = request.sessionId();
+        if (sessionId == null) {
+            // 创建临时测试会话（不保存到测试服务，仅用于本次测试）
+            sessionId = createTempTestSession();
+        }
+        
         AiWorkflowService.WorkflowExecutionResult result = workflowService.testWorkflow(
                 workflowId,
+                sessionId,
                 request.userMessage(),
                 request.variables()
         );
 
         return toResultDto(result);
+    }
+    
+    /**
+     * 创建临时测试会话（仅用于单次测试，不保存到测试服务）
+     */
+    private UUID createTempTestSession() {
+        return workflowTestService.createTestChatSessionForApi();
     }
 
     /**
@@ -147,10 +171,12 @@ public class AiWorkflowController {
     @PostMapping("/execute-for-session")
     public WorkflowExecutionResultDto executeForSession(
             @RequestParam String sessionId,
-            @RequestParam String userMessage) {
+            @RequestParam String userMessage,
+            @RequestParam(required = false) String messageId) {
         
+        UUID msgId = messageId != null ? UUID.fromString(messageId) : null;
         AiWorkflowService.WorkflowExecutionResult result = 
-                workflowService.executeForSession(UUID.fromString(sessionId), userMessage);
+                workflowService.executeForSession(UUID.fromString(sessionId), userMessage, msgId);
 
         return toResultDto(result);
     }
@@ -227,6 +253,36 @@ public class AiWorkflowController {
         return workflowService.findWorkflowByCategoryId(categoryId)
                 .map(this::toDto)
                 .orElse(null);
+    }
+
+    // ==================== 工作流执行调度配置 ====================
+
+    /**
+     * 获取防抖时间配置（秒）
+     */
+    @GetMapping("/scheduler/debounce-seconds")
+    public Map<String, Object> getDebounceSeconds() {
+        return Map.of(
+                "debounceSeconds", workflowScheduler.getDebounceSeconds()
+        );
+    }
+
+    /**
+     * 设置防抖时间配置（秒）
+     */
+    @PutMapping("/scheduler/debounce-seconds")
+    public Map<String, Object> setDebounceSeconds(@RequestParam int seconds) {
+        if (seconds < 0) {
+            throw new IllegalArgumentException("防抖时间不能为负数");
+        }
+        if (seconds > 300) {
+            throw new IllegalArgumentException("防抖时间不能超过300秒（5分钟）");
+        }
+        workflowScheduler.setDebounceSeconds(seconds);
+        return Map.of(
+                "debounceSeconds", seconds,
+                "message", "防抖时间已更新为 " + seconds + " 秒"
+        );
     }
 
     private CategoryDto toCategoryDto(com.example.aikef.model.SessionCategory category) {

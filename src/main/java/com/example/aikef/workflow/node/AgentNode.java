@@ -122,9 +122,11 @@ public class AgentNode extends BaseWorkflowNode {
                     sessionId, targetWorkflowId, userInput);
             
             // 执行目标工作流（带 AgentSession）
+            // 从上下文获取触发消息ID（如果有）
+            UUID messageId = ctx.getMessageId();
             AiWorkflowService.WorkflowExecutionResult result = 
                     workflowService.executeWorkflowInternalWithAgentSession(
-                            targetWorkflow, sessionId, userInput, variables, agentSession);
+                            targetWorkflow, sessionId, userInput, variables, agentSession, messageId);
             
             // 将目标工作流的输出作为当前节点的输出
             String output = result.reply();

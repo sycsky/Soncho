@@ -7,8 +7,10 @@ import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.MethodParameter;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
@@ -20,6 +22,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.stream.Collectors;
 
 /**
@@ -41,7 +45,39 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
     @Override
     public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
         // Do not wrap if the return type is already Result
-        return !returnType.getParameterType().equals(Result.class);
+        if (returnType.getParameterType().equals(Result.class)) {
+            return false;
+        }
+        
+        // Do not wrap if return type is Resource (file download/stream)
+        if (Resource.class.isAssignableFrom(returnType.getParameterType())) {
+            return false;
+        }
+        
+        // Do not wrap if return type is ResponseEntity<Resource>
+        if (ResponseEntity.class.isAssignableFrom(returnType.getParameterType())) {
+            Type genericType = returnType.getGenericParameterType();
+            if (genericType instanceof ParameterizedType parameterizedType) {
+                Type[] typeArguments = parameterizedType.getActualTypeArguments();
+                if (typeArguments.length > 0) {
+                    Type typeArg = typeArguments[0];
+                    if (typeArg instanceof Class<?> clazz && Resource.class.isAssignableFrom(clazz)) {
+                        return false;
+                    }
+                    // Handle wildcards like ResponseEntity<? extends Resource>
+                    if (typeArg instanceof java.lang.reflect.WildcardType wildcardType) {
+                        Type[] upperBounds = wildcardType.getUpperBounds();
+                        for (Type bound : upperBounds) {
+                            if (bound instanceof Class<?> boundClass && Resource.class.isAssignableFrom(boundClass)) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return true;
     }
 
     @Override
@@ -56,6 +92,11 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
 
         // Do not wrap again if it's already a Result
         if (body instanceof Result) {
+            return body;
+        }
+
+        // Do not wrap Resource types (file download/stream)
+        if (body instanceof Resource) {
             return body;
         }
 
