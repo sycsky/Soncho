@@ -453,9 +453,16 @@ public class IntentNode extends NodeSwitchComponent {
     private void recordExecution(WorkflowContext ctx, String userMessage, String intentId, 
                                   String intentLabel, double confidence, String targetNode, long startTime) {
         WorkflowContext.NodeExecutionDetail detail = new WorkflowContext.NodeExecutionDetail();
-        detail.setNodeId(this.getNodeId());
+        String actualNodeId = getActualNodeId();
+        detail.setNodeId(actualNodeId);
         detail.setNodeType("intent");
         detail.setNodeName(this.getName());
+        
+        // 从上下文中获取节点标签（来自 data.label）
+        Map<String, String> nodeLabels = ctx.getNodeLabels();
+        String nodeLabel = nodeLabels != null ? nodeLabels.get(actualNodeId) : null;
+        detail.setNodeLabel(nodeLabel);
+        
         detail.setInput(userMessage);
         detail.setOutput(Map.of(
             "intentId", intentId,

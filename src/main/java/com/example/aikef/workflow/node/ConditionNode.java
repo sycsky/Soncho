@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.yomahub.liteflow.annotation.LiteflowComponent;
 import com.yomahub.liteflow.core.NodeBooleanComponent;
 
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -14,6 +15,21 @@ import java.util.regex.Pattern;
  */
 @LiteflowComponent("condition")
 public class ConditionNode extends NodeBooleanComponent {
+
+    /**
+     * 获取实际的节点 ID（ReactFlow 节点 ID）
+     * EL 表达式中使用 node("componentId").tag("instanceId") 格式
+     * 通过 getTag() 获取 instanceId
+     */
+    private String getActualNodeId() {
+        // 使用 tag 获取 ReactFlow 节点 ID
+        String tag = this.getTag();
+        if (tag != null && !tag.isEmpty()) {
+            return tag;
+        }
+        // 回退到 nodeId
+        return this.getNodeId();
+    }
 
     @Override
     public boolean processBoolean() throws Exception {
@@ -50,8 +66,15 @@ public class ConditionNode extends NodeBooleanComponent {
         
         // 记录执行详情
         WorkflowContext.NodeExecutionDetail detail = new WorkflowContext.NodeExecutionDetail();
-        detail.setNodeId(this.getNodeId());
+        String actualNodeId = getActualNodeId();
+        detail.setNodeId(actualNodeId);
         detail.setNodeType("condition");
+        
+        // 从上下文中获取节点标签（来自 data.label）
+        Map<String, String> nodeLabels = ctx.getNodeLabels();
+        String nodeLabel = nodeLabels != null ? nodeLabels.get(actualNodeId) : null;
+        detail.setNodeLabel(nodeLabel);
+        
         detail.setInput(sourceValue);
         detail.setOutput(result);
         detail.setStartTime(startTime);

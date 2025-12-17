@@ -835,6 +835,10 @@ public class AiWorkflowService {
             Map<String, JsonNode> nodesConfig = parseNodesConfig(workflow.getNodesJson());
             context.setNodesConfig(nodesConfig);
             
+            // 解析节点标签映射
+            Map<String, String> nodeLabels = parseNodeLabels(workflow.getNodesJson());
+            context.setNodeLabels(nodeLabels);
+            
             // 从边数据中提取意图路由映射
             extractIntentRoutesFromEdges(workflow.getNodesJson(), workflow.getEdgesJson(), context);
 
@@ -1065,6 +1069,10 @@ public class AiWorkflowService {
             Map<String, JsonNode> nodesConfig = parseNodesConfig(workflow.getNodesJson());
             context.setNodesConfig(nodesConfig);
             
+            // 解析节点标签映射
+            Map<String, String> nodeLabels = parseNodeLabels(workflow.getNodesJson());
+            context.setNodeLabels(nodeLabels);
+            
             // 从边数据中提取意图路由映射，注入到上下文
             extractIntentRoutesFromEdges(workflow.getNodesJson(), workflow.getEdgesJson(), context);
 
@@ -1240,6 +1248,37 @@ public class AiWorkflowService {
             }
         } catch (Exception e) {
             log.error("解析节点配置失败", e);
+        }
+        return result;
+    }
+
+    /**
+     * 解析节点标签映射
+     * key: nodeId, value: 节点标签（来自 data.label）
+     */
+    private Map<String, String> parseNodeLabels(String nodesJson) {
+        Map<String, String> result = new HashMap<>();
+        try {
+            if (nodesJson == null || nodesJson.isEmpty()) {
+                log.warn("节点JSON为空，无法解析标签");
+                return result;
+            }
+            
+            List<WorkflowNodeDto> nodes = objectMapper.readValue(
+                    nodesJson, new TypeReference<List<WorkflowNodeDto>>() {});
+            
+            for (WorkflowNodeDto node : nodes) {
+                if (node.data() != null && node.data().label() != null) {
+                    result.put(node.id(), node.data().label());
+                    log.debug("解析节点标签: nodeId={}, label={}", node.id(), node.data().label());
+                } else {
+                    log.debug("节点没有标签: nodeId={}", node.id());
+                }
+            }
+            
+            log.debug("解析节点标签完成: 总数={}, 有标签的节点数={}", nodes.size(), result.size());
+        } catch (Exception e) {
+            log.error("解析节点标签失败", e);
         }
         return result;
     }

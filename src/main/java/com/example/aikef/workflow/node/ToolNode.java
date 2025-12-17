@@ -217,6 +217,11 @@ public class ToolNode extends NodeSwitchComponent {
         detail.setNodeId(nodeId);
         detail.setNodeType("tool");
         detail.setNodeName(this.getName());
+        
+        // 从上下文中获取节点标签（来自 data.label）
+        String nodeLabel = ctx.getNodeLabels().get(nodeId);
+        detail.setNodeLabel(nodeLabel);
+        
         detail.setInput(toolName);
         detail.setOutput(output);
         detail.setStartTime(startTime);

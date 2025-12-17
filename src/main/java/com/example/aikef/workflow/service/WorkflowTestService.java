@@ -471,6 +471,7 @@ public class WorkflowTestService {
                     .map(d -> new NodeDetail(
                             d.getNodeId(),
                             d.getNodeType(),
+                            d.getNodeLabel(),  // 节点标签
                             d.getInput() != null ? d.getInput().toString() : null,
                             d.getOutput() != null ? d.getOutput().toString() : null,
                             d.getDurationMs(),

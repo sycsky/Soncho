@@ -63,6 +63,12 @@ public class WorkflowContext {
     private Map<String, JsonNode> nodesConfig = new HashMap<>();
 
     /**
+     * 各节点的显示标签
+     * key: nodeId, value: 节点标签（来自 data.label）
+     */
+    private Map<String, String> nodeLabels = new HashMap<>();
+
+    /**
      * 各节点的输出
      * key: nodeId, value: 节点输出
      */
@@ -292,6 +298,14 @@ public class WorkflowContext {
         this.nodesConfig = nodesConfig;
     }
 
+    public Map<String, String> getNodeLabels() {
+        return nodeLabels;
+    }
+
+    public void setNodeLabels(Map<String, String> nodeLabels) {
+        this.nodeLabels = nodeLabels;
+    }
+
     public Map<String, Object> getNodeOutputs() {
         return nodeOutputs;
     }
@@ -463,6 +477,7 @@ public class WorkflowContext {
         private String nodeId;
         private String nodeType;
         private String nodeName;
+        private String nodeLabel;  // 节点显示标签（来自 data.label）
         private Object input;
         private Object output;
         private long startTime;
@@ -549,6 +564,14 @@ public class WorkflowContext {
 
         public void setErrorMessage(String errorMessage) {
             this.errorMessage = errorMessage;
+        }
+
+        public String getNodeLabel() {
+            return nodeLabel;
+        }
+
+        public void setNodeLabel(String nodeLabel) {
+            this.nodeLabel = nodeLabel;
         }
     }
 

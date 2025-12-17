@@ -7,6 +7,8 @@ import com.yomahub.liteflow.core.NodeComponent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
+
 /**
  * 工作流节点基类
  * 提供通用的上下文访问和日志记录功能
@@ -132,6 +134,19 @@ public abstract class BaseWorkflowNode extends NodeComponent {
         detail.setNodeId(getActualNodeId());
         detail.setNodeType(this.getNodeId()); // 组件类型（如 start, llm, intent）
         detail.setNodeName(this.getName());
+        
+        // 从上下文中获取节点标签（来自 data.label）
+        String actualNodeId = getActualNodeId();
+        Map<String, String> nodeLabels = ctx.getNodeLabels();
+        String nodeLabel = nodeLabels != null ? nodeLabels.get(actualNodeId) : null;
+        
+        if (nodeLabel == null) {
+            log.debug("未找到节点标签: nodeId={}, availableLabels={}", 
+                    actualNodeId, nodeLabels != null ? nodeLabels.keySet() : "null");
+        }
+        
+        detail.setNodeLabel(nodeLabel);
+        
         detail.setInput(input);
         detail.setOutput(output);
         detail.setStartTime(startTime);

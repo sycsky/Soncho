@@ -534,6 +534,11 @@ public class ParamExtractNode extends NodeSwitchComponent {
         detail.setNodeId(nodeId);
         detail.setNodeType("param_extract");
         detail.setNodeName(this.getName());
+        
+        // 从上下文中获取节点标签（来自 data.label）
+        String nodeLabel = ctx.getNodeLabels().get(nodeId);
+        detail.setNodeLabel(nodeLabel);
+        
         detail.setInput(toolName);
         detail.setOutput(output);
         detail.setStartTime(startTime);

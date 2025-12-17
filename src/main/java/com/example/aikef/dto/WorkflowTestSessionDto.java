@@ -44,6 +44,7 @@ public record WorkflowTestSessionDto(
     public record NodeDetail(
             String nodeId,
             String nodeType,
+            String nodeLabel,  // 节点显示标签（来自 data.label）
             String input,
             String output,
             Long durationMs,
