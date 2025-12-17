@@ -79,12 +79,10 @@ public class AiToolController {
             Authentication authentication) {
         UUID createdBy = getCurrentAgentId(authentication);
 
-        // 转换参数定义
+        // 转换参数定义（支持嵌套的 properties 和 items）
         List<ParameterDefinition> parameters = request.parameters() != null
                 ? request.parameters().stream()
-                    .map(p -> new ParameterDefinition(
-                            p.name(), p.displayName(), p.type(), p.required(),
-                            p.description(), p.enumValues(), p.defaultValue()))
+                    .map(this::convertParameterDto)
                     .toList()
                 : Collections.emptyList();
 
@@ -130,12 +128,10 @@ public class AiToolController {
             @PathVariable UUID toolId,
             @Valid @RequestBody UpdateToolDto request) {
 
-        // 转换参数定义
+        // 转换参数定义（支持嵌套的 properties 和 items）
         List<ParameterDefinition> parameters = request.parameters() != null
                 ? request.parameters().stream()
-                    .map(p -> new ParameterDefinition(
-                            p.name(), p.displayName(), p.type(), p.required(),
-                            p.description(), p.enumValues(), p.defaultValue()))
+                    .map(this::convertParameterDto)
                     .toList()
                 : null;
 
@@ -292,7 +288,9 @@ public class AiToolController {
             boolean required,
             String description,
             List<String> enumValues,
-            String defaultValue
+            String defaultValue,
+            List<ParameterDto> properties,  // 嵌套属性（当type为OBJECT时）
+            ParameterDto items  // 数组元素定义（当type为ARRAY时）
     ) {}
 
     public record CreateToolDto(
@@ -467,6 +465,37 @@ public class AiToolController {
             return ((AgentPrincipal) authentication.getPrincipal()).getId();
         }
         return null;
+    }
+
+    /**
+     * 递归转换 ParameterDto 到 ParameterDefinition（支持嵌套结构）
+     */
+    private ParameterDefinition convertParameterDto(ParameterDto dto) {
+        // 递归转换 properties
+        List<ParameterDefinition> properties = null;
+        if (dto.properties() != null && !dto.properties().isEmpty()) {
+            properties = dto.properties().stream()
+                    .map(this::convertParameterDto)
+                    .toList();
+        }
+
+        // 递归转换 items
+        ParameterDefinition items = null;
+        if (dto.items() != null) {
+            items = convertParameterDto(dto.items());
+        }
+
+        return new ParameterDefinition(
+                dto.name(),
+                dto.displayName(),
+                dto.type(),
+                dto.required(),
+                dto.description(),
+                dto.enumValues(),
+                dto.defaultValue(),
+                properties,
+                items
+        );
     }
 }
 

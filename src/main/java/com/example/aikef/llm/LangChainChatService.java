@@ -365,30 +365,82 @@ public class LangChainChatService {
     }
 
     /**
-     * 构建 JSON Schema 元素
+     * 构建 JSON Schema 元素（支持嵌套的 object 和 array）
      */
     public static JsonSchemaElement buildJsonSchemaElement(FieldSchemaDefinition field) {
+        return buildJsonSchemaElement(field, true);
+    }
+
+    /**
+     * 构建 JSON Schema 元素（支持嵌套的 object 和 array）
+     * @param field 字段定义
+     * @param strict 是否严格模式（object 类型是否要求所有属性必填）
+     */
+    private static JsonSchemaElement buildJsonSchemaElement(FieldSchemaDefinition field, boolean strict) {
+        String description = field.description();
+        
         return switch (field.type()) {
             case STRING -> JsonStringSchema.builder()
-                    .description(field.description())
+                    .description(description)
                     .build();
             case INTEGER -> JsonIntegerSchema.builder()
-                    .description(field.description())
+                    .description(description)
                     .build();
             case NUMBER -> JsonNumberSchema.builder()
-                    .description(field.description())
+                    .description(description)
                     .build();
             case BOOLEAN -> JsonBooleanSchema.builder()
-                    .description(field.description())
+                    .description(description)
                     .build();
             case ENUM -> JsonEnumSchema.builder()
                     .enumValues(field.enumValues())
-                    .description(field.description())
+                    .description(description)
                     .build();
-            case ARRAY -> JsonArraySchema.builder()
-                    .items(JsonStringSchema.builder().build())
-                    .description(field.description())
-                    .build();
+            case ARRAY -> {
+                // 如果定义了 items，使用定义的 items；否则默认使用 string
+                JsonSchemaElement itemsElement;
+                if (field.items() != null) {
+                    itemsElement = buildJsonSchemaElement(field.items(), strict);
+                } else {
+                    itemsElement = JsonStringSchema.builder().build();
+                }
+                yield JsonArraySchema.builder()
+                        .items(itemsElement)
+                        .description(description)
+                        .build();
+            }
+            case OBJECT -> {
+                // 构建嵌套对象的 properties
+                Map<String, JsonSchemaElement> properties = new LinkedHashMap<>();
+                List<String> required = new ArrayList<>();
+                
+                if (field.properties() != null) {
+                    for (FieldSchemaDefinition prop : field.properties()) {
+                        JsonSchemaElement element = buildJsonSchemaElement(prop, strict);
+                        properties.put(prop.name(), element);
+                        
+                        if (prop.required()) {
+                            required.add(prop.name());
+                        }
+                    }
+                }
+                
+                JsonObjectSchema.Builder builder = JsonObjectSchema.builder()
+                        .description(description)
+                        .properties(properties);
+                
+                if (!required.isEmpty()) {
+                    builder.required(required);
+                }
+                
+                if (strict && field.properties() != null) {
+                    // 严格模式：所有属性都必填，不允许额外属性
+                    builder.required(new ArrayList<>(properties.keySet()))
+                           .additionalProperties(false);
+                }
+                
+                yield builder.build();
+            }
         };
     }
 
@@ -673,10 +725,12 @@ public class LangChainChatService {
             FieldType type,
             String description,
             boolean required,
-            List<String> enumValues
+            List<String> enumValues,
+            List<FieldSchemaDefinition> properties,  // 嵌套属性（当type为OBJECT时）
+            FieldSchemaDefinition items  // 数组元素定义（当type为ARRAY时）
     ) {
         public enum FieldType {
-            STRING, INTEGER, NUMBER, BOOLEAN, ENUM, ARRAY
+            STRING, INTEGER, NUMBER, BOOLEAN, ENUM, ARRAY, OBJECT
         }
     }
 

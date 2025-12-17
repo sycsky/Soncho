@@ -75,7 +75,7 @@ public class AiController {
 
         log.info("test1 id: {}", req);
         JSONObject payment = new JSONObject();
-        payment.put("paymentUrl","http://www.payments.com/xccccc"+req.getStr("number"));
+        payment.put("paymentUrl","http://www.payments.com/123");
         return payment;
     }
     @PostMapping("/test1/{id}")

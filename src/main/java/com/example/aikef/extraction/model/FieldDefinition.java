@@ -78,6 +78,18 @@ public class FieldDefinition {
     private int order;
 
     /**
+     * 嵌套属性（当type为OBJECT时）
+     * 定义对象内部的字段
+     */
+    private List<FieldDefinition> properties;
+
+    /**
+     * 数组元素定义（当type为ARRAY时）
+     * 定义数组元素的类型和结构
+     */
+    private FieldDefinition items;
+
+    /**
      * 字段类型枚举
      */
     public enum FieldType {

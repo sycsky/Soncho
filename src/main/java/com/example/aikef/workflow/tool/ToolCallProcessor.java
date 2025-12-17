@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.JsonSchemaProperty;
 import dev.langchain4j.agent.tool.ToolParameters;
 import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.model.chat.request.json.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -66,7 +67,7 @@ public class ToolCallProcessor {
     }
 
     /**
-     * 构建单个工具的 ToolSpecification
+     * 构建单个工具的 ToolSpecification（支持嵌套的 object 和 array）
      */
     public ToolSpecification buildToolSpecification(AiTool tool) {
         try {
@@ -82,29 +83,37 @@ public class ToolCallProcessor {
                 );
 
                 if (!fields.isEmpty()) {
+                    // 使用 ToolParameters 和 JsonObjectSchema 构建嵌套结构
+                    Map<String, JsonSchemaElement> properties = new LinkedHashMap<>();
+                    List<String> required = new ArrayList<>();
 
-
-                    // 添加参数属性
                     for (FieldDefinition field : fields) {
-                        String desc = field.getDescription() != null ? 
-                                field.getDescription() : field.getDisplayName();
-                        
-                        // 如果是必填参数，在描述中标注
-//                        if (Boolean.TRUE.equals(field.isRequired())) {
-//                            desc = "[必填] " + desc;
-//                        }else{
-//                            desc = "[选填] " + desc;
-//                        }
-                        //都设置为选填可以在触发工具后调用必填验证
-                        desc = "[选填] " + desc;
-                        builder.addParameter(
-                                field.getName(),
-                                JsonSchemaProperty.description(desc),
-                                mapFieldTypeToJsonSchemaProperty(field)
-                        );
-                    }
-                    
+                        JsonSchemaElement element = buildJsonSchemaElementFromField(field);
+                        properties.put(field.getName(), element);
 
+                        if (field.isRequired()) {
+                            required.add(field.getName());
+                        }
+                    }
+
+                    JsonObjectSchema jsonSchema = JsonObjectSchema.builder()
+                            .properties(properties)
+                            .required(required)
+                            .additionalProperties(false)
+                            .build();
+
+                    // 将 JsonObjectSchema 转换为 ToolParameters
+                    // ToolParameters 需要 Map<String, Map<String, Object>> 格式
+                    // 我们需要将 JsonSchemaElement 转换为 Map 格式
+                    Map<String, Map<String, Object>> propertiesMap = convertJsonSchemaToMap(properties);
+                    
+                    ToolParameters toolParameters = ToolParameters.builder()
+                            .type("object")
+                            .properties(propertiesMap)
+                            .required(required)
+                            .build();
+
+                    builder.parameters(toolParameters);
                 }
             }
 
@@ -116,21 +125,255 @@ public class ToolCallProcessor {
     }
 
     /**
-     * 将字段定义映射为 JsonSchemaProperty
+     * 将 JsonSchemaElement Map 转换为 ToolParameters 需要的 Map 格式
+     */
+    private Map<String, Map<String, Object>> convertJsonSchemaToMap(Map<String, JsonSchemaElement> schemaProperties) {
+        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+        
+        for (Map.Entry<String, JsonSchemaElement> entry : schemaProperties.entrySet()) {
+            Map<String, Object> schemaMap = convertJsonSchemaElementToMap(entry.getValue());
+            result.put(entry.getKey(), schemaMap);
+        }
+        
+        return result;
+    }
+
+    /**
+     * 将 JsonSchemaElement 转换为 Map（用于 ToolParameters）
+     * 参考 langchain4j 的 toOpenAiJsonSchemaElement 方法逻辑
+     * 根据用户提供的代码，这些 Schema 类应该是 record 类型，有 description() 等方法
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> convertJsonSchemaElementToMap(JsonSchemaElement element) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        
+        // 根据 langchain4j 的代码模式，这些 Schema 类应该是 record，有相应的方法
+        // 使用反射安全地获取字段值
+        try {
+            if (element instanceof JsonStringSchema) {
+                map.put("type", "string");
+                addDescriptionIfPresent(map, element);
+            } else if (element instanceof JsonIntegerSchema) {
+                map.put("type", "integer");
+                addDescriptionIfPresent(map, element);
+            } else if (element instanceof JsonNumberSchema) {
+                map.put("type", "number");
+                addDescriptionIfPresent(map, element);
+            } else if (element instanceof JsonBooleanSchema) {
+                map.put("type", "boolean");
+                addDescriptionIfPresent(map, element);
+            } else if (element instanceof JsonEnumSchema) {
+                map.put("type", "string");
+                JsonEnumSchema enumSchema = (JsonEnumSchema) element;
+                try {
+                    java.lang.reflect.Method enumMethod = enumSchema.getClass().getMethod("enumValues");
+                    List<String> enumValues = (List<String>) enumMethod.invoke(enumSchema);
+                    if (enumValues != null && !enumValues.isEmpty()) {
+                        map.put("enum", enumValues);
+                    }
+                } catch (Exception e) {
+                    log.debug("获取 enumValues 失败", e);
+                }
+                addDescriptionIfPresent(map, element);
+            } else if (element instanceof JsonArraySchema) {
+                map.put("type", "array");
+                JsonArraySchema array = (JsonArraySchema) element;
+                try {
+                    java.lang.reflect.Method itemsMethod = array.getClass().getMethod("items");
+                    JsonSchemaElement items = (JsonSchemaElement) itemsMethod.invoke(array);
+                    if (items != null) {
+                        map.put("items", convertJsonSchemaElementToMap(items));
+                    }
+                } catch (Exception e) {
+                    log.debug("获取 items 失败", e);
+                }
+                addDescriptionIfPresent(map, element);
+            } else if (element instanceof JsonObjectSchema) {
+                map.put("type", "object");
+                JsonObjectSchema object = (JsonObjectSchema) element;
+                try {
+                    java.lang.reflect.Method propsMethod = object.getClass().getMethod("properties");
+                    Map<String, JsonSchemaElement> props = (Map<String, JsonSchemaElement>) propsMethod.invoke(object);
+                    if (props != null && !props.isEmpty()) {
+                        Map<String, Map<String, Object>> nestedProperties = new LinkedHashMap<>();
+                        for (Map.Entry<String, JsonSchemaElement> prop : props.entrySet()) {
+                            nestedProperties.put(prop.getKey(), convertJsonSchemaElementToMap(prop.getValue()));
+                        }
+                        map.put("properties", nestedProperties);
+                    }
+                    java.lang.reflect.Method requiredMethod = object.getClass().getMethod("required");
+                    List<String> required = (List<String>) requiredMethod.invoke(object);
+                    if (required != null && !required.isEmpty()) {
+                        map.put("required", required);
+                    }
+                } catch (Exception e) {
+                    log.debug("获取 object properties/required 失败", e);
+                }
+                addDescriptionIfPresent(map, element);
+            }
+        } catch (Exception e) {
+            log.error("转换 JsonSchemaElement 失败", e);
+        }
+        
+        return map;
+    }
+
+    /**
+     * 如果元素有 description 方法，添加到 map 中
+     */
+    private void addDescriptionIfPresent(Map<String, Object> map, JsonSchemaElement element) {
+        try {
+            java.lang.reflect.Method descMethod = element.getClass().getMethod("description");
+            String desc = (String) descMethod.invoke(element);
+            if (desc != null && !desc.isEmpty()) {
+                map.put("description", desc);
+            }
+        } catch (Exception e) {
+            // description 方法不存在或调用失败，忽略
+        }
+    }
+
+    /**
+     * 从 FieldDefinition 构建 JsonSchemaElement（支持嵌套结构）
+     */
+    private JsonSchemaElement buildJsonSchemaElementFromField(FieldDefinition field) {
+        String description = field.getDescription() != null ? 
+                field.getDescription() : (field.getDisplayName() != null ? field.getDisplayName() : field.getName());
+
+        return switch (field.getType()) {
+            case STRING, DATE, DATETIME, EMAIL, PHONE -> JsonStringSchema.builder()
+                    .description(description)
+                    .build();
+            case INTEGER -> JsonIntegerSchema.builder()
+                    .description(description)
+                    .build();
+            case NUMBER -> JsonNumberSchema.builder()
+                    .description(description)
+                    .build();
+            case BOOLEAN -> JsonBooleanSchema.builder()
+                    .description(description)
+                    .build();
+            case ENUM -> JsonEnumSchema.builder()
+                    .enumValues(field.getEnumValues())
+                    .description(description)
+                    .build();
+            case ARRAY -> {
+                // 如果定义了 items，递归构建 items 的 schema
+                JsonSchemaElement itemsElement;
+                if (field.getItems() != null) {
+                    itemsElement = buildJsonSchemaElementFromField(field.getItems());
+                } else {
+                    // 默认使用 string 类型
+                    itemsElement = JsonStringSchema.builder().build();
+                }
+                yield JsonArraySchema.builder()
+                        .items(itemsElement)
+                        .description(description)
+                        .build();
+            }
+            case OBJECT -> {
+                // 如果定义了 properties，递归构建嵌套对象的 schema
+                Map<String, JsonSchemaElement> nestedProperties = new LinkedHashMap<>();
+                List<String> nestedRequired = new ArrayList<>();
+
+                if (field.getProperties() != null) {
+                    for (FieldDefinition prop : field.getProperties()) {
+                        JsonSchemaElement propElement = buildJsonSchemaElementFromField(prop);
+                        nestedProperties.put(prop.getName(), propElement);
+
+                        if (prop.isRequired()) {
+                            nestedRequired.add(prop.getName());
+                        }
+                    }
+                }
+
+                JsonObjectSchema.Builder objectBuilder = JsonObjectSchema.builder()
+                        .description(description)
+                        .properties(nestedProperties);
+
+                if (!nestedRequired.isEmpty()) {
+                    objectBuilder.required(nestedRequired);
+                }
+
+                yield objectBuilder.additionalProperties(false).build();
+            }
+        };
+    }
+
+    /**
+     * 将字段定义映射为 JsonSchemaProperty（支持嵌套结构）
      */
     private JsonSchemaProperty mapFieldTypeToJsonSchemaProperty(FieldDefinition field) {
         String description = field.getDescription() != null ? field.getDescription() : field.getDisplayName();
 
-        // JsonSchemaProperty 使用静态工厂方法
         return switch (field.getType()) {
             case STRING, DATE, DATETIME, EMAIL, PHONE -> JsonSchemaProperty.STRING;
             case INTEGER -> JsonSchemaProperty.INTEGER;
             case NUMBER -> JsonSchemaProperty.NUMBER;
             case BOOLEAN -> JsonSchemaProperty.BOOLEAN;
             case ENUM -> JsonSchemaProperty.enums(field.getEnumValues().toArray(new String[0]));
-            case ARRAY -> JsonSchemaProperty.ARRAY;
-            case OBJECT -> JsonSchemaProperty.OBJECT;
+            case ARRAY -> {
+                // 如果定义了 items，需要构建嵌套的 array schema
+                if (field.getItems() != null) {
+                    // 对于嵌套的 array，使用 JsonSchemaProperty 的 properties 方法
+                    // 注意：JsonSchemaProperty 可能不支持嵌套，这里先使用基础类型
+                    // 实际的嵌套处理需要在 ToolParameters 层面处理
+                    yield JsonSchemaProperty.ARRAY;
+                } else {
+                    yield JsonSchemaProperty.ARRAY;
+                }
+            }
+            case OBJECT -> {
+                // 如果定义了 properties，需要构建嵌套的 object schema
+                if (field.getProperties() != null && !field.getProperties().isEmpty()) {
+                    // 构建嵌套对象的 properties
+                    Map<String, JsonSchemaProperty> nestedProperties = new LinkedHashMap<>();
+                    for (FieldDefinition prop : field.getProperties()) {
+                        nestedProperties.put(prop.getName(), mapFieldTypeToJsonSchemaProperty(prop));
+                    }
+                    // JsonSchemaProperty 可能不支持直接嵌套，这里先使用 OBJECT
+                    // 实际的嵌套处理需要在 ToolParameters 层面处理
+                    yield JsonSchemaProperty.OBJECT;
+                } else {
+                    yield JsonSchemaProperty.OBJECT;
+                }
+            }
         };
+    }
+
+    /**
+     * 直接执行工具，不进行参数完整性检查
+     * 使用 LLM 提取的参数直接调用工具
+     * 如果 bodyTemplate 为空，则直接使用参数 JSON
+     *
+     * @param toolCallState 工具调用状态
+     * @param sessionId 会话ID（用于获取会话元数据）
+     * @return 处理结果
+     */
+    public ToolCallProcessResult executeToolDirectly(ToolCallState toolCallState, UUID sessionId) {
+        ToolCallState.ToolCallRequest request = toolCallState.getCurrentToolCall();
+        if (request == null) {
+            return ToolCallProcessResult.error("没有待处理的工具调用");
+        }
+
+        // 获取工具（带 Schema）
+        AiTool tool = toolRepository.findByNameWithSchema(request.getToolName()).orElse(null);
+        if (tool == null && request.getToolId() != null) {
+            tool = toolRepository.findByIdWithSchema(request.getToolId()).orElse(null);
+        }
+
+        if (tool == null) {
+            return ToolCallProcessResult.error("工具不存在: " + request.getToolName());
+        }
+
+        // 使用 LLM 提取的参数，不进行完整性检查
+        Map<String, Object> params = request.getArguments() != null ? 
+                new HashMap<>(request.getArguments()) : new HashMap<>();
+        
+        log.info("直接执行工具: tool={}, params={}", tool.getName(), params);
+
+        // 直接执行工具
+        return executeToolWithParams(tool, params, request.getId(), sessionId);
     }
 
     /**

@@ -683,19 +683,9 @@ public class AiToolService {
         schema.setName("tool_" + toolName + "_params");
         schema.setDescription("工具 [" + toolName + "] 的参数定义");
 
-        // 转换为 FieldDefinition 格式
+        // 转换为 FieldDefinition 格式（支持嵌套结构）
         List<FieldDefinition> fields = parameters.stream()
-                .map(p -> {
-                    FieldDefinition field = new FieldDefinition();
-                    field.setName(p.name());
-                    field.setDisplayName(p.displayName());
-                    field.setType(p.type());
-                    field.setRequired(p.required());
-                    field.setDescription(p.description());
-                    field.setEnumValues(p.enumValues());
-                    field.setDefaultValue(p.defaultValue());
-                    return field;
-                })
+                .map(this::convertParameterDefinitionToFieldDefinition)
                 .toList();
 
         try {
@@ -713,19 +703,9 @@ public class AiToolService {
      */
     @Transactional
     public void updateSchemaForTool(ExtractionSchema schema, List<ParameterDefinition> parameters) {
-        // 转换为 FieldDefinition 格式
+        // 转换为 FieldDefinition 格式（支持嵌套结构）
         List<FieldDefinition> fields = parameters.stream()
-                .map(p -> {
-                    FieldDefinition field = new FieldDefinition();
-                    field.setName(p.name());
-                    field.setDisplayName(p.displayName());
-                    field.setType(p.type());
-                    field.setRequired(p.required());
-                    field.setDescription(p.description());
-                    field.setEnumValues(p.enumValues());
-                    field.setDefaultValue(p.defaultValue());
-                    return field;
-                })
+                .map(this::convertParameterDefinitionToFieldDefinition)
                 .toList();
 
         try {
@@ -736,6 +716,36 @@ public class AiToolService {
         }
 
         schemaRepository.save(schema);
+    }
+
+    /**
+     * 递归转换 ParameterDefinition 到 FieldDefinition（支持嵌套结构）
+     */
+    private FieldDefinition convertParameterDefinitionToFieldDefinition(ParameterDefinition param) {
+        FieldDefinition field = new FieldDefinition();
+        field.setName(param.name());
+        field.setDisplayName(param.displayName());
+        field.setType(param.type());
+        field.setRequired(param.required());
+        field.setDescription(param.description());
+        field.setEnumValues(param.enumValues());
+        field.setDefaultValue(param.defaultValue());
+
+        // 递归转换 properties（如果是 OBJECT 类型）
+        if (param.properties() != null && !param.properties().isEmpty()) {
+            List<FieldDefinition> properties = param.properties().stream()
+                    .map(this::convertParameterDefinitionToFieldDefinition)
+                    .toList();
+            field.setProperties(properties);
+        }
+
+        // 递归转换 items（如果是 ARRAY 类型）
+        if (param.items() != null) {
+            FieldDefinition items = convertParameterDefinitionToFieldDefinition(param.items());
+            field.setItems(items);
+        }
+
+        return field;
     }
 
     /**
@@ -832,7 +842,9 @@ public class AiToolService {
             boolean required,
             String description,
             List<String> enumValues,
-            String defaultValue
+            String defaultValue,
+            List<ParameterDefinition> properties,  // 嵌套属性（当type为OBJECT时）
+            ParameterDefinition items  // 数组元素定义（当type为ARRAY时）
     ) {}
 
     public record CreateToolRequest(

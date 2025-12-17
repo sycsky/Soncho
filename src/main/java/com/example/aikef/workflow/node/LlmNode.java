@@ -158,7 +158,7 @@ public class LlmNode extends BaseWorkflowNode {
             long startTime) throws Exception {
 
         // 增强系统提示词，引导 LLM 在识别到意图时强制调用工具
-        enhanceMessagesForToolCall(messages, toolSpecs);
+//        enhanceMessagesForToolCall(messages, toolSpecs);
 
         // 获取模型配置
         var modelConfig = getModelConfig(modelIdStr);
@@ -247,15 +247,17 @@ public class LlmNode extends BaseWorkflowNode {
             toolState.addToolCall(request);
         }
 
-        // 处理第一个工具调用
+        // 处理第一个工具调用（不验证参数完整性，直接执行）
         if (!toolState.getPendingToolCalls().isEmpty()) {
             ToolCallState.ToolCallRequest firstRequest = toolState.getPendingToolCalls().get(0);
             toolState.setCurrentToolCall(firstRequest);
-            toolState.setStatus(ToolCallState.Status.EXTRACTING_PARAMS);
+            toolState.setStatus(ToolCallState.Status.EXECUTING_TOOL);
             toolState.setToolId(firstRequest.getToolId());
-            // 处理工具调用（检查参数是否完整）
+            
+            // 直接执行工具，不进行参数完整性检查
+            // LLM 提取的参数直接使用，如果 bodyTemplate 为空则直接使用参数 JSON
             ToolCallProcessor.ToolCallProcessResult result = 
-                    toolCallProcessor.processToolCall(toolState, ctx.getQuery(), ctx.getSessionId());
+                    toolCallProcessor.executeToolDirectly(toolState, ctx.getSessionId());
 
             handleToolCallResult(ctx, result, messages, toolSpecs, modelIdStr, startTime);
         }
@@ -294,54 +296,6 @@ public class LlmNode extends BaseWorkflowNode {
                     // 所有工具调用都完成了，将结果发送回 LLM
                 sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime);
                 }
-            }
-
-            case NEED_MORE_PARAMS -> {
-                // 需要更多参数，暂停工作流并保存状态到数据库
-                String question = result.getQuestion();
-                toolState.setStatus(ToolCallState.Status.WAITING_USER_INPUT);
-                toolState.setPausedNodeId(getActualNodeId());
-
-                // 获取子链ID
-                String subChainId = getSubChainId(ctx);
-                
-                // 序列化当前对话历史（包含 AI 追问）
-                List<ChatMessage> historyToSave = new ArrayList<>(messages);
-                historyToSave.add(AiMessage.from(question));  // 添加 AI 追问到历史
-                String chatHistoryJson = serializeChatHistory(historyToSave);
-                
-                // 保存暂停状态到数据库（含对话历史）
-                if (ctx.getSessionId() != null && subChainId != null) {
-                    ToolCallState.ToolCallRequest currentTool = toolState.getCurrentToolCall();
-                    pauseService.pauseWorkflow(
-                            ctx.getSessionId(),
-                            ctx.getWorkflowId(),
-                            subChainId,
-                            getActualNodeId(),
-                            "TOOL_PARAM_COLLECTION",
-                            ctx,
-                            currentTool != null ? currentTool.getToolId() : null,
-                            currentTool != null ? currentTool.getToolName() : null,
-                            toolState.getCollectedParams(),
-                            toolState.getCurrentRound(),
-                            toolState.getMaxRounds(),
-                            question,
-                            chatHistoryJson  // 保存对话历史
-                    );
-                    log.info("暂停状态已保存到数据库: sessionId={}, subChainId={}, historySize={}", 
-                            ctx.getSessionId(), subChainId, historyToSave.size());
-                }
-
-                // 设置上下文状态和输出
-                ctx.pauseWorkflow("TOOL_PARAM_COLLECTION", question);
-                setOutput(question);
-                recordExecution(ctx.getQuery(), question, startTime, true, null);
-
-                log.info("工作流暂停，等待用户提供参数: missing={}", result.getMissingParams());
-                
-                // 抛出异常中断工作流执行，后续节点不会执行
-                throw new com.example.aikef.workflow.exception.WorkflowPausedException(
-                        "TOOL_PARAM_COLLECTION", question);
             }
 
             case SKIPPED -> {
@@ -458,14 +412,14 @@ public class LlmNode extends BaseWorkflowNode {
         // 获取下一个待处理的工具调用
         ToolCallState.ToolCallRequest nextRequest = toolState.getPendingToolCalls().get(0);
         toolState.setCurrentToolCall(nextRequest);
-        toolState.setStatus(ToolCallState.Status.EXTRACTING_PARAMS);
+        toolState.setStatus(ToolCallState.Status.EXECUTING_TOOL);
         toolState.setToolId(nextRequest.getToolId());
         
         log.info("处理下一个工具调用: toolName={}, toolId={}", nextRequest.getToolName(), nextRequest.getToolId());
         
-        // 处理工具调用（检查参数是否完整）
+        // 直接执行工具，不进行参数完整性检查
         ToolCallProcessor.ToolCallProcessResult result = 
-                toolCallProcessor.processToolCall(toolState, ctx.getQuery(), ctx.getSessionId());
+                toolCallProcessor.executeToolDirectly(toolState, ctx.getSessionId());
         
         handleToolCallResult(ctx, result, messages, toolSpecs, modelIdStr, startTime);
     }

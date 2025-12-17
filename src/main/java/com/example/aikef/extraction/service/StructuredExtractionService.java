@@ -251,15 +251,9 @@ public class StructuredExtractionService {
                 modelId = defaultModel.getId();
             }
 
-            // 构建字段 Schema 定义
+            // 构建字段 Schema 定义（支持嵌套结构）
             List<LangChainChatService.FieldSchemaDefinition> fieldSchemas = fields.stream()
-                    .map(f -> new LangChainChatService.FieldSchemaDefinition(
-                            f.getName(),
-                            mapFieldType(f.getType()),
-                            f.getDescription() != null ? f.getDescription() : f.getDisplayName(),
-                            f.isRequired(),
-                            f.getEnumValues()
-                    ))
+                    .map(this::convertToFieldSchemaDefinition)
                     .toList();
 
             // 构建提示词
@@ -300,8 +294,40 @@ public class StructuredExtractionService {
             case BOOLEAN -> LangChainChatService.FieldSchemaDefinition.FieldType.BOOLEAN;
             case ENUM -> LangChainChatService.FieldSchemaDefinition.FieldType.ENUM;
             case ARRAY -> LangChainChatService.FieldSchemaDefinition.FieldType.ARRAY;
-            case OBJECT -> LangChainChatService.FieldSchemaDefinition.FieldType.STRING; // 简化处理
+            case OBJECT -> LangChainChatService.FieldSchemaDefinition.FieldType.OBJECT;
         };
+    }
+
+    /**
+     * 将 FieldDefinition 转换为 FieldSchemaDefinition（支持嵌套结构）
+     */
+    private LangChainChatService.FieldSchemaDefinition convertToFieldSchemaDefinition(FieldDefinition field) {
+        String description = field.getDescription() != null ? field.getDescription() : 
+                (field.getDisplayName() != null ? field.getDisplayName() : field.getName());
+        
+        // 转换嵌套的 properties（如果是 object 类型）
+        List<LangChainChatService.FieldSchemaDefinition> properties = null;
+        if (field.getType() == FieldDefinition.FieldType.OBJECT && field.getProperties() != null) {
+            properties = field.getProperties().stream()
+                    .map(this::convertToFieldSchemaDefinition)
+                    .toList();
+        }
+        
+        // 转换 items（如果是 array 类型）
+        LangChainChatService.FieldSchemaDefinition items = null;
+        if (field.getType() == FieldDefinition.FieldType.ARRAY && field.getItems() != null) {
+            items = convertToFieldSchemaDefinition(field.getItems());
+        }
+        
+        return new LangChainChatService.FieldSchemaDefinition(
+                field.getName(),
+                mapFieldType(field.getType()),
+                description,
+                field.isRequired(),
+                field.getEnumValues(),
+                properties,
+                items
+        );
     }
 
     /**
@@ -666,16 +692,9 @@ public class StructuredExtractionService {
             Map<String, JsonSchemaElement> properties = new LinkedHashMap<>();
             List<String> requiredFields = new ArrayList<>();
 
-            // 将 FieldDefinition 转换为 FieldSchemaDefinition
+            // 将 FieldDefinition 转换为 FieldSchemaDefinition（支持嵌套结构）
             List<LangChainChatService.FieldSchemaDefinition> fieldSchemas = targetParamDefs.stream()
-                    .map(f -> new LangChainChatService.FieldSchemaDefinition(
-                            f.getName(),
-                            mapFieldType(f.getType()),
-                            f.getDescription() != null ? f.getDescription() : 
-                                    (f.getDisplayName() != null ? f.getDisplayName() : f.getName()),
-                            f.isRequired(),
-                            f.getEnumValues()
-                    ))
+                    .map(this::convertToFieldSchemaDefinition)
                     .toList();
 
             for (LangChainChatService.FieldSchemaDefinition field : fieldSchemas) {
