@@ -11,6 +11,8 @@ env:
   ECR_REPOSITORY: ai_agent/ai-kef
   ECS_CLUSTER: agent_bk
   ECS_SERVICE: agent_bk-service-4im80us1
+  ECS_TASK_FAMILY: agent_bk
+  ECS_CONTAINER_NAME: agent
 
 jobs:
   build-and-push:
@@ -41,12 +43,47 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "✅ Image pushed: $ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          echo "IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
-      - name: Deploy to ECS (force new deployment)
+      - name: Register new ECS task definition revision (use new image)
+        run: |
+          echo "Using image: ${IMAGE_URI}"
+
+          aws ecs describe-task-definition \
+            --region "${AWS_REGION}" \
+            --task-definition "${ECS_TASK_FAMILY}" \
+            --query taskDefinition > taskdef.json
+
+          cat taskdef.json | jq \
+            --arg IMAGE "${IMAGE_URI}" \
+            --arg CONTAINER "${ECS_CONTAINER_NAME}" \
+            'del(
+              .taskDefinitionArn,
+              .revision,
+              .status,
+              .requiresAttributes,
+              .compatibilities,
+              .registeredAt,
+              .registeredBy
+            )
+            | .containerDefinitions = (.containerDefinitions | map(if .name == $CONTAINER then .image = $IMAGE else . end))' \
+            > taskdef-registered.json
+
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --region "${AWS_REGION}" \
+            --cli-input-json file://taskdef-registered.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "NEW_TASK_DEF_ARN=${NEW_TASK_DEF_ARN}" >> $GITHUB_ENV
+          echo "✅ Registered new task definition: ${NEW_TASK_DEF_ARN}"
+
+      - name: Deploy to ECS (update service to new task definition)
         run: |
           aws ecs update-service \
             --region "${AWS_REGION}" \
             --cluster "${ECS_CLUSTER}" \
             --service "${ECS_SERVICE}" \
+            --task-definition "${NEW_TASK_DEF_ARN}" \
             --force-new-deployment
 
