@@ -17,6 +17,11 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     Page<Message> findBySession_IdOrderByCreatedAtAsc(UUID sessionId, Pageable pageable);
 
     /**
+     * 查询会话消息（按创建时间倒序，最新的在前）
+     */
+    Page<Message> findBySession_IdOrderByCreatedAtDesc(UUID sessionId, Pageable pageable);
+
+    /**
      * 查询客户未读消息（客服发送的消息）
      */
     List<Message> findBySessionAndReadByCustomerFalseAndSenderTypeNot(
@@ -56,14 +61,14 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     long countBySession_IdAndCreatedAtAfter(UUID sessionId, java.time.Instant after);
 
     /**
-     * 查询会话的非内部消息（客户可见）
+     * 查询会话的非内部消息（客户可见，按创建时间正序）
      */
     Page<Message> findBySession_IdAndInternalFalseOrderByCreatedAtAsc(UUID sessionId, Pageable pageable);
 
     /**
-     * 查询会话最近的N条消息（按时间倒序，用于历史记录）
+     * 查询会话的非内部消息（客户可见，按创建时间倒序，最新的在前）
      */
-    List<Message> findBySession_IdAndInternalFalseOrderByCreatedAtDesc(UUID sessionId, Pageable pageable);
+    Page<Message> findBySession_IdAndInternalFalseOrderByCreatedAtDesc(UUID sessionId, Pageable pageable);
 
     /**
      * 查询会话的最后一条指定类型的消息

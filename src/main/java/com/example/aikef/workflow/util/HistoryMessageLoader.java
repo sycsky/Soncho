@@ -4,6 +4,7 @@ import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.repository.MessageRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
@@ -86,8 +87,9 @@ public class HistoryMessageLoader {
                 }
             } else {
                 // 查询最近的N条消息（按时间倒序查询，最新的在前）
-                dbMessages = messageRepository.findBySession_IdAndInternalFalseOrderByCreatedAtDesc(
+                Page<Message> messagePage = messageRepository.findBySession_IdAndInternalFalseOrderByCreatedAtDesc(
                         sessionId, PageRequest.of(0, queryCount));
+                dbMessages = messagePage.getContent();
             }
             
             if (dbMessages.isEmpty()) {

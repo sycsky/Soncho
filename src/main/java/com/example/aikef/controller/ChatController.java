@@ -81,7 +81,7 @@ public class ChatController {
     @GetMapping("/sessions/{sessionId}/messages")
     public Page<ChatMessageDto>getSessionMessages(
             @PathVariable UUID sessionId,
-            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable,
+            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             Authentication authentication) {
         
         AgentPrincipal agentPrincipal = null;

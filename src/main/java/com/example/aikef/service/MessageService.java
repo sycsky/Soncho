@@ -64,11 +64,12 @@ public class MessageService {
         ChatSession session = chatSessionService.getSession(sessionId);
         
         // 客户只能看到非内部消息
+        // 按创建时间倒序查询，最新的消息在前
         Page<Message> messages;
         if (isCustomer) {
-            messages = messageRepository.findBySession_IdAndInternalFalseOrderByCreatedAtAsc(sessionId, pageable);
+            messages = messageRepository.findBySession_IdAndInternalFalseOrderByCreatedAtDesc(sessionId, pageable);
         } else {
-            messages = messageRepository.findBySession_IdOrderByCreatedAtAsc(sessionId, pageable);
+            messages = messageRepository.findBySession_IdOrderByCreatedAtDesc(sessionId, pageable);
         }
         
         return messages.map(message -> toMessageDto(message, isAgent, currentUserId));
