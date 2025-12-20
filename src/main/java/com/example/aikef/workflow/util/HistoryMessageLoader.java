@@ -50,6 +50,8 @@ public class HistoryMessageLoader {
                     log.debug("根据触发消息时间过滤历史记录: sessionId={}, messageId={}, createdAt={}", 
                             sessionId, messageId, maxCreatedAt);
                 } else {
+                    log.warn("无法找到触发消息: sessionId={}, messageId={}，将查询所有历史消息", 
+                            sessionId, messageId);
                     maxCreatedAt = null;
                 }
             } else {

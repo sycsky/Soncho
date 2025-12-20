@@ -8,6 +8,9 @@
 
 server:
   port: 8080
+  # 支持在负载均衡器（如ALB）后面使用HTTPS
+  # 当ALB配置了HTTPS时，应用需要信任X-Forwarded-*头
+  forward-headers-strategy: framework
 
 spring:
   application:

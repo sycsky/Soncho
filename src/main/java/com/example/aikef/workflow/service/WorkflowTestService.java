@@ -193,7 +193,6 @@ public class WorkflowTestService {
     /**
      * 发送测试消息
      */
-    @Transactional
     public WorkflowTestSessionDto sendTestMessage(String testSessionId, String userMessage) {
         TestSession session = testSessions.get(testSessionId);
         if (session == null) {
@@ -204,6 +203,25 @@ public class WorkflowTestService {
         
         // 保存用户消息到数据库
         Message userMessageEntity = messageGateway.sendAsCustomer(session.sessionId, userMessage);
+
+        
+        // 验证消息是否已保存
+        UUID messageId = userMessageEntity.getId();
+        if (messageId == null) {
+            log.error("消息ID为空: testSessionId={}, sessionId={}", testSessionId, session.sessionId);
+            throw new IllegalStateException("消息保存失败：消息ID为空");
+        }
+        
+        // 验证消息是否能在数据库中查到
+        Message verifyMessage = messageRepository.findById(messageId).orElse(null);
+        if (verifyMessage == null) {
+            log.error("消息保存后立即查询不到: testSessionId={}, sessionId={}, messageId={}", 
+                    testSessionId, session.sessionId, messageId);
+            throw new IllegalStateException("消息保存失败：无法在数据库中查询到消息");
+        }
+        
+        log.debug("消息已保存并验证: testSessionId={}, messageId={}, text={}", 
+                testSessionId, messageId, userMessage.length() > 50 ? userMessage.substring(0, 50) + "..." : userMessage);
         
         // 添加到测试会话的消息列表（用于前端显示）
         TestMessage userMsg = new TestMessage(
@@ -221,8 +239,8 @@ public class WorkflowTestService {
         
         try {
             // 使用executeForSession执行工作流，会自动匹配分类绑定的工作流
-            // 测试会话可能没有 messageId，传递 null
-            result = workflowService.executeForSession(session.sessionId, userMessage, userMessageEntity.getId());
+            // 传递消息ID用于历史记录查询
+            result = workflowService.executeForSession(session.sessionId, userMessage, messageId);
         } catch (Exception e) {
             log.error("工作流执行异常: testSessionId={}", testSessionId, e);
             result = new AiWorkflowService.WorkflowExecutionResult(
