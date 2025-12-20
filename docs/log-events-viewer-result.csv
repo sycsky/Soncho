@@ -1,0 +1,192 @@
+timestamp,message
+1765886384667,  .   ____          _            __ _ _
+1765886384667, /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+1765886384667,( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+1765886384667, \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+1765886384667,"  '  |____| .__|_| |_|_| |_\__, | / / / /"
+1765886384667, =========|_|==============|___/=/_/_/_/
+1765886384670, :: Spring Boot ::                (v3.2.5)
+1765886385050,2025-12-16T19:59:45.043+08:00  INFO 1 --- [nexus-support-ai] [           main] com.example.aikef.AiKefApplication       : Starting AiKefApplication v0.0.1-SNAPSHOT using Java 17.0.17 with PID 1 (/app/app.jar started by appuser in /app)
+1765886385057,"2025-12-16T19:59:45.057+08:00  INFO 1 --- [nexus-support-ai] [           main] com.example.aikef.AiKefApplication       : The following 1 profile is active: ""production"""
+1765886392666,2025-12-16T19:59:52.665+08:00  WARN 1 --- [nexus-support-ai] [           main] o.s.c.a.ConfigurationClassPostProcessor  : Cannot enhance @Configuration bean definition 'com.yomahub.liteflow.springboot.config.LiteflowMainAutoConfiguration' since its singleton instance has been created too early. The typical cause is a non-static @Bean method with a BeanDefinitionRegistryPostProcessor return type: Consider declaring such methods as 'static' and/or marking the containing configuration class as 'proxyBeanMethods=false'.
+1765886393953,2025-12-16T19:59:53.952+08:00  WARN 1 --- [nexus-support-ai] [           main] trationDelegate$BeanPostProcessorChecker : Bean 'com.yomahub.liteflow.springboot.config.LiteflowPropertyAutoConfiguration' of type [com.yomahub.liteflow.springboot.config.LiteflowPropertyAutoConfiguration$$SpringCGLIB$$0] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected into a currently created BeanPostProcessor [componentScanner]? Check the corresponding BeanPostProcessor declaration and its dependencies.
+1765886394035,2025-12-16T19:59:54.035+08:00  WARN 1 --- [nexus-support-ai] [           main] trationDelegate$BeanPostProcessorChecker : Bean 'liteflow-com.yomahub.liteflow.springboot.LiteflowProperty' of type [com.yomahub.liteflow.springboot.LiteflowProperty] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected into a currently created BeanPostProcessor [componentScanner]? Check the corresponding BeanPostProcessor declaration and its dependencies.
+1765886394053,2025-12-16T19:59:54.053+08:00  WARN 1 --- [nexus-support-ai] [           main] trationDelegate$BeanPostProcessorChecker : Bean 'liteflow.monitor-com.yomahub.liteflow.springboot.LiteflowMonitorProperty' of type [com.yomahub.liteflow.springboot.LiteflowMonitorProperty] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected into a currently created BeanPostProcessor [componentScanner]? Check the corresponding BeanPostProcessor declaration and its dependencies.
+1765886394056,2025-12-16T19:59:54.056+08:00  WARN 1 --- [nexus-support-ai] [           main] trationDelegate$BeanPostProcessorChecker : Bean 'liteflowConfig' of type [com.yomahub.liteflow.property.LiteflowConfig] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected into a currently created BeanPostProcessor [componentScanner]? Check the corresponding BeanPostProcessor declaration and its dependencies.
+1765886394069,2025-12-16T19:59:54.068+08:00  WARN 1 --- [nexus-support-ai] [           main] trationDelegate$BeanPostProcessorChecker : Bean 'com.yomahub.liteflow.spi.spring.SpringAware' of type [com.yomahub.liteflow.spi.spring.SpringAware] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected into a currently created BeanPostProcessor [componentScanner]? Check the corresponding BeanPostProcessor declaration and its dependencies.
+1765886398744,2025-12-16T19:59:58.741+08:00  WARN 1 --- [nexus-support-ai] [           main] org.hibernate.orm.deprecation            : HHH90000025: MySQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+1765886398832,2025-12-16T19:59:58.784+08:00  WARN 1 --- [nexus-support-ai] [           main] org.hibernate.orm.incubating             : HHH90006001: Encountered incubating setting [hibernate.type.preferred_uuid_jdbc_type].  See javadoc on corresponding `org.hibernate.cfg.AvailableSettings` constant for details.
+1765886400385,2025-12-16T20:00:00.384+08:00  WARN 1 --- [nexus-support-ai] [           main] org.hibernate.orm.incubating             : HHH90006001: Encountered incubating setting [hibernate.type.preferred_uuid_jdbc_type].  See javadoc on corresponding `org.hibernate.cfg.AvailableSettings` constant for details.
+1765886407248,2025-12-16T20:00:07.248+08:00 ERROR 1 --- [nexus-support-ai] [           main] j.LocalContainerEntityManagerFactoryBean : Failed to initialize JPA EntityManagerFactory: [PersistenceUnit: default] Unable to build Hibernate SessionFactory; nested exception is org.hibernate.tool.schema.spi.SchemaManagementException: Schema-validation: missing table [official_channel_configs]
+1765886407250,2025-12-16T20:00:07.250+08:00 ERROR 1 --- [nexus-support-ai] [           main] o.s.b.web.embedded.tomcat.TomcatStarter  : Error starting Tomcat context. Exception: org.springframework.beans.factory.UnsatisfiedDependencyException. Message: Error creating bean with name 'tokenAuthenticationFilter' defined in URL [jar:nested:/app/app.jar/!BOOT-INF/classes/!/com/example/aikef/security/TokenAuthenticationFilter.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 'redisTokenService' defined in URL [jar:nested:/app/app.jar/!BOOT-INF/classes/!/com/example/aikef/security/RedisTokenService.class]: Unsatisfied dependency expressed through constructor parameter 1: Error creating bean with name 'agentRepository' defined in com.example.aikef.repository.AgentRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration: Cannot resolve reference to bean 'jpaSharedEM_entityManagerFactory' while setting bean property 'entityManager'
+1765886407346,2025-12-16T20:00:07.345+08:00  WARN 1 --- [nexus-support-ai] [           main] o.a.c.loader.WebappClassLoaderBase       : The web application [ROOT] appears to have started a thread named [lettuce-timer-3-1] but has failed to stop it. This is very likely to create a memory leak. Stack trace of thread:
+1765886407346, java.base@17.0.17/java.lang.Thread.sleep(Native Method)
+1765886407346, io.netty.util.HashedWheelTimer$Worker.waitForNextTick(HashedWheelTimer.java:591)
+1765886407346, io.netty.util.HashedWheelTimer$Worker.run(HashedWheelTimer.java:487)
+1765886407346, io.netty.util.concurrent.FastThreadLocalRunnable.run(FastThreadLocalRunnable.java:30)
+1765886407346, java.base@17.0.17/java.lang.Thread.run(Unknown Source)
+1765886407347,2025-12-16T20:00:07.346+08:00  WARN 1 --- [nexus-support-ai] [           main] o.a.c.loader.WebappClassLoaderBase       : The web application [ROOT] appears to have started a thread named [HikariPool-1 housekeeper] but has failed to stop it. This is very likely to create a memory leak. Stack trace of thread:
+1765886407347, java.base@17.0.17/jdk.internal.misc.Unsafe.park(Native Method)
+1765886407347, java.base@17.0.17/java.util.concurrent.locks.LockSupport.parkNanos(Unknown Source)
+1765886407347, java.base@17.0.17/java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.awaitNanos(Unknown Source)
+1765886407347, java.base@17.0.17/java.util.concurrent.ScheduledThreadPoolExecutor$DelayedWorkQueue.take(Unknown Source)
+1765886407347, java.base@17.0.17/java.util.concurrent.ScheduledThreadPoolExecutor$DelayedWorkQueue.take(Unknown Source)
+1765886407347, java.base@17.0.17/java.util.concurrent.ThreadPoolExecutor.getTask(Unknown Source)
+1765886407347, java.base@17.0.17/java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)
+1765886407347, java.base@17.0.17/java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)
+1765886407347, java.base@17.0.17/java.lang.Thread.run(Unknown Source)
+1765886407350,2025-12-16T20:00:07.350+08:00  WARN 1 --- [nexus-support-ai] [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Unable to start web server
+1765886407595,2025-12-16T20:00:07.588+08:00 ERROR 1 --- [nexus-support-ai] [           main] o.s.boot.SpringApplication               : Application run failed
+1765886407595,org.springframework.context.ApplicationContextException: Unable to start web server
+1765886407595,	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.onRefresh(ServletWebServerApplicationContext.java:165) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:618) ~[spring-context-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:754) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:456) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.SpringApplication.run(SpringApplication.java:334) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1354) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1343) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at com.example.aikef.AiKefApplication.main(AiKefApplication.java:12) ~[!/:0.0.1-SNAPSHOT]
+1765886407595,	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+1765886407595,	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+1765886407595,	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+1765886407595,	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+1765886407595,	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+1765886407595,	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+1765886407595,	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+1765886407595,Caused by: org.springframework.boot.web.server.WebServerException: Unable to start embedded Tomcat
+1765886407595,	at org.springframework.boot.web.embedded.tomcat.TomcatWebServer.initialize(TomcatWebServer.java:145) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.embedded.tomcat.TomcatWebServer.<init>(TomcatWebServer.java:105) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory.getTomcatWebServer(TomcatServletWebServerFactory.java:499) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory.getWebServer(TomcatServletWebServerFactory.java:218) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.createWebServer(ServletWebServerApplicationContext.java:188) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.onRefresh(ServletWebServerApplicationContext.java:162) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	... 15 common frames omitted
+1765886407595,Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'tokenAuthenticationFilter' defined in URL [jar:nested:/app/app.jar/!BOOT-INF/classes/!/com/example/aikef/security/TokenAuthenticationFilter.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 'redisTokenService' defined in URL [jar:nested:/app/app.jar/!BOOT-INF/classes/!/com/example/aikef/security/RedisTokenService.class]: Unsatisfied dependency expressed through constructor parameter 1: Error creating bean with name 'agentRepository' defined in com.example.aikef.repository.AgentRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration: Cannot resolve reference to bean 'jpaSharedEM_entityManagerFactory' while setting bean property 'entityManager'
+1765886407595,	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:795) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:237) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1355) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1192) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:562) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:522) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:326) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:324) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:205) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.boot.web.servlet.ServletContextInitializerBeans.getOrderedBeansOfType(ServletContextInitializerBeans.java:210) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.servlet.ServletContextInitializerBeans.addAsRegistrationBean(ServletContextInitializerBeans.java:173) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.servlet.ServletContextInitializerBeans.addAsRegistrationBean(ServletContextInitializerBeans.java:168) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.servlet.ServletContextInitializerBeans.addAdaptableBeans(ServletContextInitializerBeans.java:153) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.servlet.ServletContextInitializerBeans.<init>(ServletContextInitializerBeans.java:86) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.getServletContextInitializerBeans(ServletWebServerApplicationContext.java:266) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.selfInitialize(ServletWebServerApplicationContext.java:240) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.springframework.boot.web.embedded.tomcat.TomcatStarter.onStartup(TomcatStarter.java:52) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	at org.apache.catalina.core.StandardContext.startInternal(StandardContext.java:4880) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:171) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.core.ContainerBase$StartChild.call(ContainerBase.java:1332) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.core.ContainerBase$StartChild.call(ContainerBase.java:1322) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at java.base/java.util.concurrent.FutureTask.run(Unknown Source) ~[na:na]
+1765886407595,	at org.apache.tomcat.util.threads.InlineExecutorService.execute(InlineExecutorService.java:75) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at java.base/java.util.concurrent.AbstractExecutorService.submit(Unknown Source) ~[na:na]
+1765886407595,	at org.apache.catalina.core.ContainerBase.startInternal(ContainerBase.java:866) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.core.StandardHost.startInternal(StandardHost.java:845) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:171) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.core.ContainerBase$StartChild.call(ContainerBase.java:1332) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.core.ContainerBase$StartChild.call(ContainerBase.java:1322) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at java.base/java.util.concurrent.FutureTask.run(Unknown Source) ~[na:na]
+1765886407595,	at org.apache.tomcat.util.threads.InlineExecutorService.execute(InlineExecutorService.java:75) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at java.base/java.util.concurrent.AbstractExecutorService.submit(Unknown Source) ~[na:na]
+1765886407595,	at org.apache.catalina.core.ContainerBase.startInternal(ContainerBase.java:866) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.core.StandardEngine.startInternal(StandardEngine.java:240) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:171) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.core.StandardService.startInternal(StandardService.java:433) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:171) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.core.StandardServer.startInternal(StandardServer.java:921) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.util.LifecycleBase.start(LifecycleBase.java:171) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.apache.catalina.startup.Tomcat.start(Tomcat.java:437) ~[tomcat-embed-core-10.1.20.jar!/:na]
+1765886407595,	at org.springframework.boot.web.embedded.tomcat.TomcatWebServer.initialize(TomcatWebServer.java:126) ~[spring-boot-3.2.5.jar!/:3.2.5]
+1765886407595,	... 20 common frames omitted
+1765886407595,Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'redisTokenService' defined in URL [jar:nested:/app/app.jar/!BOOT-INF/classes/!/com/example/aikef/security/RedisTokenService.class]: Unsatisfied dependency expressed through constructor parameter 1: Error creating bean with name 'agentRepository' defined in com.example.aikef.repository.AgentRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration: Cannot resolve reference to bean 'jpaSharedEM_entityManagerFactory' while setting bean property 'entityManager'
+1765886407595,	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:795) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:237) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1355) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1192) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:562) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:522) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:326) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:324) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:200) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1443) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1353) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:904) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:782) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	... 61 common frames omitted
+1765886407595,Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'agentRepository' defined in com.example.aikef.repository.AgentRepository defined in @EnableJpaRepositories declared on JpaRepositoriesRegistrar.EnableJpaRepositoriesConfiguration: Cannot resolve reference to bean 'jpaSharedEM_entityManagerFactory' while setting bean property 'entityManager'
+1765886407595,	at org.springframework.beans.factory.support.BeanDefinitionValueResolver.resolveReference(BeanDefinitionValueResolver.java:377) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.BeanDefinitionValueResolver.resolveValueIfNecessary(BeanDefinitionValueResolver.java:135) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.applyPropertyValues(AbstractAutowireCapableBeanFactory.java:1685) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1434) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:599) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:522) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:326) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:324) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:200) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1443) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1353) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:904) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:782) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	... 75 common frames omitted
+1765886407595,Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'jpaSharedEM_entityManagerFactory': Cannot resolve reference to bean 'entityManagerFactory' while setting constructor argument
+1765886407595,	at org.springframework.beans.factory.support.BeanDefinitionValueResolver.resolveReference(BeanDefinitionValueResolver.java:377) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.BeanDefinitionValueResolver.resolveValueIfNecessary(BeanDefinitionValueResolver.java:135) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.ConstructorResolver.resolveConstructorArguments(ConstructorResolver.java:682) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:509) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1335) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1165) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:562) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:522) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:326) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:324) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:200) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.BeanDefinitionValueResolver.resolveReference(BeanDefinitionValueResolver.java:365) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	... 89 common frames omitted
+1765886407595,Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'entityManagerFactory' defined in class path resource [org/springframework/boot/autoconfigure/orm/jpa/HibernateJpaConfiguration.class]: [PersistenceUnit: default] Unable to build Hibernate SessionFactory; nested exception is org.hibernate.tool.schema.spi.SchemaManagementException: Schema-validation: missing table [official_channel_configs]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1786) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:600) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:522) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:326) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:324) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:200) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.BeanDefinitionValueResolver.resolveReference(BeanDefinitionValueResolver.java:365) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	... 101 common frames omitted
+1765886407595,Caused by: jakarta.persistence.PersistenceException: [PersistenceUnit: default] Unable to build Hibernate SessionFactory; nested exception is org.hibernate.tool.schema.spi.SchemaManagementException: Schema-validation: missing table [official_channel_configs]
+1765886407595,	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.buildNativeEntityManagerFactory(AbstractEntityManagerFactoryBean.java:421) ~[spring-orm-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.afterPropertiesSet(AbstractEntityManagerFactoryBean.java:396) ~[spring-orm-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean.afterPropertiesSet(LocalContainerEntityManagerFactoryBean.java:366) ~[spring-orm-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.invokeInitMethods(AbstractAutowireCapableBeanFactory.java:1833) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1782) ~[spring-beans-6.1.6.jar!/:6.1.6]
+1765886407595,	... 108 common frames omitted
+1765886407595,Caused by: org.hibernate.tool.schema.spi.SchemaManagementException: Schema-validation: missing table [official_channel_configs]
+1765886407595,	at org.hibernate.tool.schema.internal.AbstractSchemaValidator.validateTable(AbstractSchemaValidator.java:134) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.hibernate.tool.schema.internal.GroupedSchemaValidatorImpl.validateTables(GroupedSchemaValidatorImpl.java:46) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.hibernate.tool.schema.internal.AbstractSchemaValidator.performValidation(AbstractSchemaValidator.java:97) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.hibernate.tool.schema.internal.AbstractSchemaValidator.doValidation(AbstractSchemaValidator.java:75) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.hibernate.tool.schema.spi.SchemaManagementToolCoordinator.performDatabaseAction(SchemaManagementToolCoordinator.java:295) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.hibernate.tool.schema.spi.SchemaManagementToolCoordinator.lambda$process$5(SchemaManagementToolCoordinator.java:145) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at java.base/java.util.HashMap.forEach(Unknown Source) ~[na:na]
+1765886407595,	at org.hibernate.tool.schema.spi.SchemaManagementToolCoordinator.process(SchemaManagementToolCoordinator.java:142) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.hibernate.boot.internal.SessionFactoryObserverForSchemaExport.sessionFactoryCreated(SessionFactoryObserverForSchemaExport.java:37) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.hibernate.internal.SessionFactoryObserverChain.sessionFactoryCreated(SessionFactoryObserverChain.java:35) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.hibernate.internal.SessionFactoryImpl.<init>(SessionFactoryImpl.java:315) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.hibernate.boot.internal.SessionFactoryBuilderImpl.build(SessionFactoryBuilderImpl.java:450) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.hibernate.jpa.boot.internal.EntityManagerFactoryBuilderImpl.build(EntityManagerFactoryBuilderImpl.java:1507) ~[hibernate-core-6.4.4.Final.jar!/:6.4.4.Final]
+1765886407595,	at org.springframework.orm.jpa.vendor.SpringHibernateJpaPersistenceProvider.createContainerEntityManagerFactory(SpringHibernateJpaPersistenceProvider.java:75) ~[spring-orm-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean.createNativeEntityManagerFactory(LocalContainerEntityManagerFactoryBean.java:390) ~[spring-orm-6.1.6.jar!/:6.1.6]
+1765886407595,	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.buildNativeEntityManagerFactory(AbstractEntityManagerFactoryBean.java:409) ~[spring-orm-6.1.6.jar!/:6.1.6]
+1765886407595,	... 112 common frames omitted

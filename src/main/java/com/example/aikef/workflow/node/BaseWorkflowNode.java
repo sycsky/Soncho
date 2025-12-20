@@ -28,11 +28,27 @@ public abstract class BaseWorkflowNode extends NodeComponent {
      * 获取实际的节点 ID（ReactFlow 节点 ID）
      * EL 表达式中使用 node("componentId").tag("instanceId") 格式
      * 通过 getTag() 获取 instanceId
+     * 
+     * 对于 SWITCH 节点的分支，如果 tag 不是有效的节点ID（不在 nodesConfig 中），
+     * 则尝试从上下文获取实际节点ID（用于 tool 节点等返回状态值的情况）
      */
     protected String getActualNodeId() {
         // 使用 tag 获取 ReactFlow 节点 ID
         String tag = this.getTag();
         if (tag != null && !tag.isEmpty()) {
+            // 检查 tag 是否是有效的节点ID（在 nodesConfig 中）
+            WorkflowContext ctx = getWorkflowContext();
+            if (ctx != null) {
+                JsonNode config = ctx.getNodeConfig(tag);
+                if (config != null) {
+                    // tag 是有效的节点ID
+                    return tag;
+                }
+                // tag 不是有效的节点ID，可能是状态值（如 "executed"）
+                // 尝试从上下文获取实际节点ID
+                // 注意：这需要转换器在生成 EL 时建立映射
+            }
+            // 如果上下文不可用，直接返回 tag
             return tag;
         }
         // 回退到 nodeId

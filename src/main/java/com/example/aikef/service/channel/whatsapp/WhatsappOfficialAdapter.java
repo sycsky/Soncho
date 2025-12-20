@@ -12,6 +12,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import com.example.aikef.model.Attachment;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -138,8 +140,14 @@ public class WhatsappOfficialAdapter {
 
     /**
      * 发送消息到WhatsApp Business（通过WhatsApp官方SDK）
+     * 
+     * @param config 配置
+     * @param phoneNumber 电话号码
+     * @param content 消息内容
+     * @param attachments 附件列表（可选）
      */
-    public void sendMessage(OfficialChannelConfig config, String phoneNumber, String content) {
+    public void sendMessage(OfficialChannelConfig config, String phoneNumber, String content,
+                            List<Attachment> attachments) {
         // TODO: 使用WhatsApp SDK发送消息
         // 1. 从configJson中获取phoneNumberId、accessToken
         // 2. 调用WhatsApp API发送消息

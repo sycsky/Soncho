@@ -359,7 +359,7 @@ public class IntentNode extends NodeSwitchComponent {
                     // 在历史消息中匹配
                     if (searchText.contains(labelLower)) {
                         return new IntentMatchResult(id, label, 0.7);
-                    }
+                }
                 
                 // 分词匹配
                 String[] keywords = label.split("[，,、\\s]+");

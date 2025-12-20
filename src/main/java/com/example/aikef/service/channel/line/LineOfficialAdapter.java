@@ -12,6 +12,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import com.example.aikef.model.Attachment;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -122,8 +124,14 @@ public class LineOfficialAdapter {
 
     /**
      * 发送消息到Line官方账号（通过Line官方SDK）
+     * 
+     * @param config 配置
+     * @param userId 用户ID
+     * @param content 消息内容
+     * @param attachments 附件列表（可选）
      */
-    public void sendMessage(OfficialChannelConfig config, String userId, String content) {
+    public void sendMessage(OfficialChannelConfig config, String userId, String content,
+                           List<Attachment> attachments) {
         // TODO: 使用Line SDK发送消息
         // 1. 从configJson中获取channelAccessToken
         // 2. 调用Line API发送消息

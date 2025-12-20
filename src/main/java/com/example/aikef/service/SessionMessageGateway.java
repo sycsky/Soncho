@@ -4,12 +4,16 @@ import com.example.aikef.dto.MessageDto;
 import com.example.aikef.dto.websocket.ServerEvent;
 import com.example.aikef.mapper.EntityMapper;
 import com.example.aikef.model.Agent;
+import com.example.aikef.model.Attachment;
 import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.Message;
+import com.example.aikef.model.enums.AttachmentType;
 import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.repository.ChatSessionRepository;
 import com.example.aikef.repository.MessageRepository;
 import com.example.aikef.websocket.WebSocketSessionManager;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +21,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -135,11 +141,107 @@ public class SessionMessageGateway {
      * @param agentId     客服ID（可选）
      * @param metadata    元数据（可选）
      * @param isInternal  是否内部消息
-     * @return 发送的消息
+     * @return 发送的消息（如果是结构化数据，返回最后一条消息）
      */
     @Transactional
     public Message sendMessage(UUID sessionId, String text, SenderType senderType, 
                                UUID agentId, Map<String, Object> metadata, boolean isInternal) {
+        // 检查是否是结构化数据（struct# 开头）
+        if (text != null && text.startsWith("struct#")) {
+            return sendStructuredMessage(sessionId, text, senderType, agentId, metadata, isInternal);
+        }
+
+        // 普通消息处理
+        return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+    }
+
+    /**
+     * 发送结构化消息（struct# 开头）
+     * 解析JSON对象（包含struct数组和overview），先发送overview介绍，然后循环发送消息，图片放到Attachments
+     */
+    @Transactional
+    private Message sendStructuredMessage(UUID sessionId, String text, SenderType senderType,
+                                         UUID agentId, Map<String, Object> metadata, boolean isInternal) {
+        try {
+            // 提取JSON部分（去掉 struct# 前缀）
+            String jsonStr = text.substring(7); // "struct#".length() = 7
+            
+            // 解析JSON对象（包含struct数组和overview）
+            JsonNode jsonNode = objectMapper.readTree(jsonStr);
+            JsonNode structNode = jsonNode.get("struct");
+            String overview = jsonNode.has("overview") ? jsonNode.get("overview").asText() : "";
+
+            if (structNode == null || !structNode.isArray() || structNode.size() == 0) {
+                log.warn("结构化数据为空，发送原文本");
+                return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+            }
+
+            // 转换为Map列表
+            List<Map<String, String>> items = new ArrayList<>();
+            for (JsonNode itemNode : structNode) {
+                Map<String, String> item = new HashMap<>();
+                item.put("img", itemNode.has("img") ? itemNode.get("img").asText() : "");
+                item.put("content", itemNode.has("content") ? itemNode.get("content").asText() : "");
+                items.add(item);
+            }
+
+            if (items.isEmpty()) {
+                log.warn("结构化数据为空，发送原文本");
+                return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+            }
+
+            // 限制最多发送3条
+            int maxItems = Math.min(items.size(), 3);
+            if (items.size() > 3) {
+                log.info("结构化数据有 {} 条，限制为最多发送 {} 条", items.size(), maxItems);
+            } else {
+                log.info("检测到结构化数据，将发送 {} 条消息", items.size());
+            }
+
+            Message lastMessage = null;
+
+            // 如果有overview，先发送overview作为介绍
+            if (overview != null && !overview.trim().isEmpty()) {
+                lastMessage = sendSingleMessage(sessionId, overview, senderType, agentId, metadata, isInternal, null);
+                log.info("已发送overview介绍文字");
+            }
+
+            // 发送图文数据（最多3条）
+            for (int i = 0; i < maxItems; i++) {
+                Map<String, String> item = items.get(i);
+                String content = item.getOrDefault("content", "");
+                String img = item.getOrDefault("img", "");
+
+                // 创建附件列表（如果有图片）
+                List<Attachment> attachments = null;
+                if (img != null && !img.trim().isEmpty()) {
+                    attachments = new ArrayList<>();
+                    Attachment attachment = new Attachment();
+                    attachment.setType(AttachmentType.IMAGE);
+                    attachment.setUrl(img);
+                    attachment.setName("image");
+                    attachments.add(attachment);
+                }
+
+                // 发送单条消息（带附件）
+                lastMessage = sendSingleMessage(sessionId, content, senderType, agentId, metadata, isInternal, attachments);
+            }
+
+            return lastMessage != null ? lastMessage : sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+
+        } catch (Exception e) {
+            log.error("解析结构化数据失败，发送原文本", e);
+            return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+        }
+    }
+
+    /**
+     * 发送单条消息（支持附件）
+     */
+    @Transactional
+    private Message sendSingleMessage(UUID sessionId, String text, SenderType senderType,
+                                     UUID agentId, Map<String, Object> metadata, boolean isInternal,
+                                     List<Attachment> attachments) {
         // 获取会话
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("会话不存在: " + sessionId));
@@ -150,6 +252,14 @@ public class SessionMessageGateway {
         message.setText(text);
         message.setSenderType(senderType);
         message.setInternal(isInternal);
+
+        // 设置附件
+        if (attachments != null && !attachments.isEmpty()) {
+            for (Attachment attachment : attachments) {
+                attachment.setMessage(message);
+                message.getAttachments().add(attachment);
+            }
+        }
 
         // 设置客服（如果有）
         if (agentId != null && (senderType == SenderType.AGENT || senderType == SenderType.AI)) {
@@ -195,16 +305,20 @@ public class SessionMessageGateway {
 
         // 转发到第三方平台（AI 和客服消息需要转发，客户消息不需要）
         if (senderType == SenderType.AI || senderType == SenderType.AGENT || senderType == SenderType.SYSTEM) {
-            // 先尝试官方渠道（通过SDK）
-            boolean sentToOfficial = officialChannelMessageService.sendMessageToOfficialChannel(sessionId, text, senderType);
+            // 先尝试官方渠道（通过SDK，支持附件）
+            boolean sentToOfficial = officialChannelMessageService.sendMessageToOfficialChannel(
+                    sessionId, text, senderType, attachments);
             if (!sentToOfficial) {
-                // 如果不是官方渠道，使用原有的外部平台方式
-                externalPlatformService.forwardMessageToExternalPlatform(sessionId, text, senderType);
+                // 如果不是官方渠道，使用原有的外部平台方式（支持附件）
+                externalPlatformService.forwardMessageToExternalPlatform(
+                        sessionId, text, senderType, attachments);
             }
         }
 
-        log.info("消息已发送: sessionId={}, type={}, text={}", 
-                sessionId, senderType, text.length() > 50 ? text.substring(0, 50) + "..." : text);
+        log.info("消息已发送: sessionId={}, type={}, text={}, attachments={}", 
+                sessionId, senderType, 
+                text != null && text.length() > 50 ? text.substring(0, 50) + "..." : text,
+                attachments != null ? attachments.size() : 0);
 
         return saved;
     }

@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
+import com.example.aikef.model.Attachment;
 import java.time.Instant;
 import java.util.*;
 
@@ -436,9 +437,28 @@ public class ExternalPlatformService {
     /**
      * 转发消息到第三方平台（异步）
      * 客服/AI发送的消息会根据客户语言进行翻译后转发
+     * 
+     * @param sessionId 会话ID
+     * @param content 消息内容
+     * @param senderType 发送者类型
      */
     @Async
     public void forwardMessageToExternalPlatform(UUID sessionId, String content, SenderType senderType) {
+        forwardMessageToExternalPlatform(sessionId, content, senderType, null);
+    }
+
+    /**
+     * 转发消息到第三方平台（异步，支持附件）
+     * 客服/AI发送的消息会根据客户语言进行翻译后转发
+     * 
+     * @param sessionId 会话ID
+     * @param content 消息内容
+     * @param senderType 发送者类型
+     * @param attachments 附件列表（可选）
+     */
+    @Async
+    public void forwardMessageToExternalPlatform(UUID sessionId, String content, SenderType senderType,
+                                                 java.util.List<Attachment> attachments) {
         try {
             // 查找会话的外部平台映射
             Optional<ExternalSessionMapping> mappingOpt = mappingRepository.findBySessionId(sessionId);
@@ -480,6 +500,20 @@ public class ExternalPlatformService {
             requestBody.put("senderType", senderType.name());
             requestBody.put("timestamp", System.currentTimeMillis());
             requestBody.put("externalUserId", mapping.getExternalUserId());
+            
+            // 添加附件信息（如果有）
+            if (attachments != null && !attachments.isEmpty()) {
+                List<Map<String, Object>> attachmentList = new ArrayList<>();
+                for (com.example.aikef.model.Attachment attachment : attachments) {
+                    Map<String, Object> attMap = new HashMap<>();
+                    attMap.put("type", attachment.getType());
+                    attMap.put("url", attachment.getUrl());
+                    attMap.put("name", attachment.getName());
+                    attMap.put("sizeKb", attachment.getSizeKb());
+                    attachmentList.add(attMap);
+                }
+                requestBody.put("attachments", attachmentList);
+            }
 
             // 构建请求头
             HttpHeaders headers = new HttpHeaders();

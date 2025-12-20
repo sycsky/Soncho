@@ -231,17 +231,16 @@ public class ReactFlowToLiteflowConverter {
                 String targetId = edge.targetId();
                 // 对于 switch 节点，根据节点类型决定使用哪个作为 tag：
                 // - intent 节点返回 "tag:" + targetNodeId，所以使用 targetId 作为 tag
-                // - tool 和 parameter_extraction 节点返回 "fail"/"success" 等，所以使用 sourceHandle 作为 tag
+                // - tool 节点也使用 targetId 作为 tag，以便目标节点能获取到正确的配置
+                //   注意：tool 节点需要返回 "tag:" + targetNodeId 格式才能匹配
                 String branchTag;
                 if ("intent".equals(nodeType)) {
                     // intent 节点返回 "tag:" + targetNodeId，所以使用 targetId
                     branchTag = targetId;
                 } else {
-                    // tool 和 parameter_extraction 节点返回的值（如 "fail"、"success"）对应 sourceHandle
-                    branchTag = edge.sourceHandle();
-                    if (branchTag == null || branchTag.isEmpty()) {
-                        branchTag = targetId;
-                    }
+                    // tool 节点也使用 targetId 作为 tag
+                    // 这样目标节点执行时 getTag() 返回的是实际节点ID，而不是状态值
+                    branchTag = targetId;
                 }
                 
                 // 根据分支类型添加 tag
@@ -602,7 +601,7 @@ public class ReactFlowToLiteflowConverter {
         
         // 意图节点
         if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
-            "tool".equals(nodeType) || "parameter_extraction".equals(nodeType)) {
+            "tool".equals(nodeType)) {
             return generateSwitchElForSubChain(nodeId, nodeMap, outEdges, allLlmNodeIds, workflowId, nextEdges, visited, indentLevel);
         }
         
@@ -745,15 +744,16 @@ public class ReactFlowToLiteflowConverter {
             
             if (!branchEl.isEmpty()) {
                 String targetId = edge.targetId();
-                // 对于 switch 节点，根据节点类型决定使用哪个作为 tag
+                // 对于 switch 节点，根据节点类型决定使用哪个作为 tag：
+                // - intent 节点返回 "tag:" + targetNodeId，所以使用 targetId 作为 tag
+                // - tool 节点也使用 targetId 作为 tag，以便目标节点能获取到正确的配置
                 String branchTag;
                 if ("intent".equals(nodeType)) {
                     branchTag = targetId;
                 } else {
-                    branchTag = edge.sourceHandle();
-                    if (branchTag == null || branchTag.isEmpty()) {
-                        branchTag = targetId;
-                    }
+                    // tool 节点也使用 targetId 作为 tag
+                    // 这样目标节点执行时 getTag() 返回的是实际节点ID，而不是状态值
+                    branchTag = targetId;
                 }
                 
                 // 子链不需要额外包装
@@ -852,7 +852,7 @@ public class ReactFlowToLiteflowConverter {
         
         // 意图节点特殊处理
         if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
-            "tool".equals(nodeType) || "parameter_extraction".equals(nodeType)) {
+            "tool".equals(nodeType)) {
             return generateSwitchElForMainChain(nodeId, nodeMap, outEdges, subChains, nextEdges, visited, indentLevel);
         }
         
@@ -962,15 +962,16 @@ public class ReactFlowToLiteflowConverter {
             String branchEl = generateMainChainElRecursive(edge.targetId(), nodeMap, outEdges, subChains, new HashSet<>(visited), indentLevel + 1);
             if (!branchEl.isEmpty()) {
                 String targetId = edge.targetId();
-                // 对于 switch 节点，根据节点类型决定使用哪个作为 tag
+                // 对于 switch 节点，根据节点类型决定使用哪个作为 tag：
+                // - intent 节点返回 "tag:" + targetNodeId，所以使用 targetId 作为 tag
+                // - tool 节点也使用 targetId 作为 tag，以便目标节点能获取到正确的配置
                 String branchTag;
                 if ("intent".equals(nodeType)) {
                     branchTag = targetId;
                 } else {
-                    branchTag = edge.sourceHandle();
-                    if (branchTag == null || branchTag.isEmpty()) {
-                        branchTag = targetId;
-                    }
+                    // tool 节点也使用 targetId 作为 tag
+                    // 这样目标节点执行时 getTag() 返回的是实际节点ID，而不是状态值
+                    branchTag = targetId;
                 }
                 
                 if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 

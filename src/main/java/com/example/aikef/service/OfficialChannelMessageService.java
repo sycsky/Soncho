@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -252,9 +253,27 @@ public class OfficialChannelMessageService {
      * 发送消息到官方渠道（通过官方SDK）
      * 当客服/AI发送消息时，转发到官方渠道
      * 
+     * @param sessionId 会话ID
+     * @param content 消息内容
+     * @param senderType 发送者类型
      * @return true 如果是官方渠道且发送成功，false 如果不是官方渠道
      */
     public boolean sendMessageToOfficialChannel(UUID sessionId, String content, SenderType senderType) {
+        return sendMessageToOfficialChannel(sessionId, content, senderType, null);
+    }
+
+    /**
+     * 发送消息到官方渠道（通过官方SDK，支持附件）
+     * 当客服/AI发送消息时，转发到官方渠道
+     * 
+     * @param sessionId 会话ID
+     * @param content 消息内容
+     * @param senderType 发送者类型
+     * @param attachments 附件列表（可选）
+     * @return true 如果是官方渠道且发送成功，false 如果不是官方渠道
+     */
+    public boolean sendMessageToOfficialChannel(UUID sessionId, String content, SenderType senderType, 
+                                                java.util.List<com.example.aikef.model.Attachment> attachments) {
         // 查找会话的外部平台映射（复用ExternalSessionMapping）
         var mappingOpt = mappingRepository.findBySessionId(sessionId);
         if (mappingOpt.isEmpty()) {
@@ -290,18 +309,18 @@ public class OfficialChannelMessageService {
         String externalThreadId = mapping.getExternalThreadId();
         
         try {
-            // 根据渠道类型调用对应的适配器发送消息
+            // 根据渠道类型调用对应的适配器发送消息（支持附件）
             switch (channelType) {
                 case WECHAT_OFFICIAL -> 
-                    wechatAdapter.sendMessage(config, externalUserId, content);
+                    wechatAdapter.sendMessage(config, externalUserId, content, attachments);
                 case LINE_OFFICIAL -> 
-                    lineAdapter.sendMessage(config, externalThreadId != null ? externalThreadId : externalUserId, content);
+                    lineAdapter.sendMessage(config, externalThreadId != null ? externalThreadId : externalUserId, content, attachments);
                 case WHATSAPP_OFFICIAL -> 
-                    whatsappAdapter.sendMessage(config, externalUserId, content);
+                    whatsappAdapter.sendMessage(config, externalUserId, content, attachments);
             }
             
-            log.info("消息已发送到官方渠道: channelType={}, externalUserId={}", 
-                    channelType, externalUserId);
+            log.info("消息已发送到官方渠道: channelType={}, externalUserId={}, attachments={}", 
+                    channelType, externalUserId, attachments != null ? attachments.size() : 0);
             return true;
             
         } catch (Exception e) {

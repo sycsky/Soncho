@@ -25,45 +25,10 @@ public class ReplyNode extends BaseWorkflowNode {
         WorkflowContext ctx = getWorkflowContext();
         
         try {
-            String replyType = getConfigString("replyType", "template");
+//            String replyType = getConfigString("replyType", "template");
             String reply;
-            
-            switch (replyType) {
-                case "template" -> {
-                    // 使用模板回复，支持变量替换
-                    String template = getConfigString("template", "");
-                    // 也支持 text 字段（前端可能用 text）
-                    if (template == null || template.isEmpty()) {
-                        template = getConfigString("text", "");
-                    }
-                    reply = renderTemplate(template);
-                }
-                case "lastOutput" -> {
-                    // 使用上一个节点的输出
-                    reply = ctx.getLastOutput();
-                }
-                case "nodeOutput" -> {
-                    // 使用指定节点的输出
-                    String nodeId = getConfigString("sourceNodeId", "");
-                    Object output = ctx.getOutput(nodeId);
-                    reply = output != null ? output.toString() : "";
-                }
-                case "variable" -> {
-                    // 使用变量值
-                    String variableName = getConfigString("variableName", "");
-                    Object value = ctx.getVariable(variableName);
-                    reply = value != null ? value.toString() : "";
-                }
-                default -> {
-                    // 默认也尝试解析 text 字段作为模板
-                    String text = getConfigString("text", "");
-                    if (text != null && !text.isEmpty()) {
-                        reply = renderTemplate(text);
-                    } else {
-                        reply = ctx.getLastOutput();
-                    }
-                }
-            }
+
+            reply = ctx.getLastOutput();
             
             // 设置最终回复
             ctx.setFinalReply(reply);

@@ -18,6 +18,8 @@ public interface ToolExecutionRepository extends JpaRepository<ToolExecution, UU
 
     List<ToolExecution> findBySessionId(UUID sessionId);
 
+    void deleteByTool_Id(UUID toolId);
+
     Page<ToolExecution> findByStatus(ToolExecution.ExecutionStatus status, Pageable pageable);
 
     @Query("SELECT te FROM ToolExecution te WHERE te.tool.id = :toolId AND te.createdAt >= :since ORDER BY te.createdAt DESC")

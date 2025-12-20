@@ -38,7 +38,7 @@ public class WorkflowTestController {
     /**
      * 发送测试消息
      */
-    @PostMapping("/sessions/{testSessionId}/messages")
+        @PostMapping("/sessions/{testSessionId}/messages")
     public WorkflowTestSessionDto sendMessage(
             @PathVariable String testSessionId,
             @Valid @RequestBody SendTestMessageRequest request) {

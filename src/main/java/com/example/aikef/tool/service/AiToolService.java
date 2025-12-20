@@ -59,6 +59,8 @@ public class AiToolService {
         }
 
         AiTool tool = new AiTool();
+        // AiTool 的 ID 由应用层生成（支持 upsert-by-name 复用旧 ID）
+        tool.setId(UUID.randomUUID());
         tool.setName(request.name());
         tool.setDisplayName(request.displayName());
         tool.setDescription(request.description());
@@ -237,8 +239,106 @@ public class AiToolService {
     public void deleteTool(UUID toolId) {
         AiTool tool = toolRepository.findById(toolId)
                 .orElseThrow(() -> new IllegalArgumentException("工具不存在: " + toolId));
+        // 先删除执行记录，避免外键约束导致无法删除工具
+        executionRepository.deleteByTool_Id(toolId);
         toolRepository.delete(tool);
         log.info("删除工具: id={}, name={}", toolId, tool.getName());
+    }
+
+    /**
+     * 覆盖创建工具（按 name 幂等）
+     * <p>
+     * - 若存在同名工具：立即删除旧工具（含执行记录/Schema），并复用旧工具 ID 创建新工具
+     * - 若不存在：等同于 createTool
+     */
+    @Transactional
+    public AiTool createOrReplaceToolByName(CreateToolRequest request, UUID createdBy) {
+        UUID reuseId = null;
+        String oldApiBodyTemplate = null; // 保存旧的 apiBodyTemplate
+        
+        AiTool existing = toolRepository.findByNameWithSchema(request.name()).orElse(null);
+        if (existing != null) {
+            reuseId = existing.getId();
+            // 保存旧的 apiBodyTemplate
+            oldApiBodyTemplate = existing.getApiBodyTemplate();
+            // 先删执行记录（外键）
+            executionRepository.deleteByTool_Id(reuseId);
+            // 再删工具（Schema 会 orphanRemoval 级联删除）
+            toolRepository.delete(existing);
+            // 立即 flush，避免 name 唯一键/外键约束影响后续插入
+            toolRepository.flush();
+        } else if (toolRepository.existsByName(request.name())) {
+            // 兜底：防止并发或未 fetch 到的情况
+            AiTool existing2 = toolRepository.findByName(request.name()).orElse(null);
+            if (existing2 != null) {
+                reuseId = existing2.getId();
+                // 保存旧的 apiBodyTemplate
+                oldApiBodyTemplate = existing2.getApiBodyTemplate();
+                executionRepository.deleteByTool_Id(reuseId);
+                toolRepository.delete(existing2);
+                toolRepository.flush();
+            }
+        }
+
+        AiTool tool = new AiTool();
+        // 复用旧 ID；若不存在旧工具则生成新 ID
+        tool.setId(reuseId != null ? reuseId : UUID.randomUUID());
+        tool.setName(request.name());
+        tool.setDisplayName(request.displayName());
+        tool.setDescription(request.description());
+        tool.setToolType(request.toolType());
+
+        // 创建关联的 ExtractionSchema（1对1）
+        if (request.parameters() != null && !request.parameters().isEmpty()) {
+            ExtractionSchema schema = createSchemaForTool(request.name(), request.parameters());
+            tool.setSchema(schema);
+        }
+
+        // API 配置
+        if (request.toolType() == AiTool.ToolType.API) {
+            tool.setApiMethod(request.apiMethod());
+            tool.setApiUrl(request.apiUrl());
+            tool.setApiHeaders(request.apiHeaders());
+            // 如果有旧的 apiBodyTemplate 且新请求的为空，则继承旧的
+            String apiBodyTemplate = request.apiBodyTemplate();
+            if ((apiBodyTemplate == null || apiBodyTemplate.trim().isEmpty()) && oldApiBodyTemplate != null) {
+                apiBodyTemplate = oldApiBodyTemplate;
+                log.info("继承旧的 apiBodyTemplate: toolName={}", request.name());
+            }
+            tool.setApiBodyTemplate(apiBodyTemplate);
+            tool.setApiResponsePath(request.apiResponsePath());
+            tool.setApiTimeout(request.apiTimeout() != null ? request.apiTimeout() : 30);
+        }
+
+        // MCP 配置
+        if (request.toolType() == AiTool.ToolType.MCP) {
+            tool.setMcpEndpoint(request.mcpEndpoint());
+            tool.setMcpToolName(request.mcpToolName());
+            tool.setMcpServerType(request.mcpServerType());
+            tool.setMcpConfig(request.mcpConfig());
+        }
+
+        // 认证配置
+        tool.setAuthType(request.authType() != null ? request.authType() : AiTool.AuthType.NONE);
+        tool.setAuthConfig(request.authConfig());
+
+        // 其他配置
+        tool.setInputExample(request.inputExample());
+        tool.setOutputExample(request.outputExample());
+        tool.setResultDescription(request.resultDescription());
+        tool.setResultMetadata(request.resultMetadata());
+        tool.setRetryCount(request.retryCount() != null ? request.retryCount() : 0);
+        tool.setRequireConfirmation(request.requireConfirmation() != null ? request.requireConfirmation() : false);
+        tool.setEnabled(true);
+        tool.setSortOrder(request.sortOrder() != null ? request.sortOrder() : 0);
+        tool.setTags(request.tags());
+        tool.setCreatedBy(createdBy);
+
+        AiTool saved = toolRepository.save(tool);
+        log.info("覆盖创建工具: id={}, name={}, type={}, schemaId={}",
+                saved.getId(), saved.getName(), saved.getToolType(),
+                saved.getSchema() != null ? saved.getSchema().getId() : null);
+        return saved;
     }
 
     // ==================== 工具执行 ====================
@@ -519,9 +619,10 @@ public class AiToolService {
 
     /**
      * 替换变量
-     * 支持两种格式：
+     * 支持三种格式：
      * - {{paramName}} - 从 params 中获取参数值
      * - {{meta.key}} - 从会话 metadata 中获取元数据值
+     * - {{sessionId}} - 会话ID
      */
     private String replaceVariables(String template, Map<String, Object> params, UUID sessionId) {
         if (template == null) {
@@ -546,6 +647,11 @@ public class AiToolService {
                 String metaValue = getSessionMetadataValue(sessionId, metaKey);
                 if (metaValue != null) {
                     result = result.replace(fullMatch, metaValue);
+                }
+            } else if ("sessionId".equalsIgnoreCase(varName)) {
+                // 支持 {{sessionId}} 变量
+                if (sessionId != null) {
+                    result = result.replace(fullMatch, sessionId.toString());
                 }
             } else {
                 // 从 params 中获取

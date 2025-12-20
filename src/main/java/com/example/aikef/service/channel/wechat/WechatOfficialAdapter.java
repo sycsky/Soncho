@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import com.example.aikef.model.Attachment;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -89,8 +91,14 @@ public class WechatOfficialAdapter {
 
     /**
      * 发送消息到微信服务号（通过微信官方SDK）
+     * 
+     * @param config 配置
+     * @param openId 用户openId
+     * @param content 消息内容
+     * @param attachments 附件列表（可选）
      */
-    public void sendMessage(OfficialChannelConfig config, String openId, String content) {
+    public void sendMessage(OfficialChannelConfig config, String openId, String content, 
+                           List<Attachment> attachments) {
         // TODO: 使用微信SDK发送消息
         // 1. 从configJson中获取appId、appSecret
         // 2. 获取access_token（或使用缓存的）

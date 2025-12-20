@@ -96,6 +96,8 @@ public class LlmNode extends BaseWorkflowNode {
 //                return;
 //            }
 
+//            log.info("检测到 {} 个工具调用请求，将串行处理", toolRequests.size());
+            log.info("config={}", getNodeConfig());
             // 正常的 LLM 调用流程
             processNormalLlmCall(ctx, startTime);
             
@@ -214,7 +216,7 @@ public class LlmNode extends BaseWorkflowNode {
 
         List<ToolExecutionRequest> toolRequests = aiMessage.toolExecutionRequests();
         log.info("检测到 {} 个工具调用请求，将串行处理", toolRequests.size());
-
+        log.info("config={}", getNodeConfig());
         // 初始化工具调用状态
         ToolCallState toolState = ctx.getOrCreateToolCallState();
         toolState.setStatus(ToolCallState.Status.TOOL_CALL_DETECTED);

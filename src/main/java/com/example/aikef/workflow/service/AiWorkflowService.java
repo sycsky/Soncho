@@ -94,8 +94,6 @@ public class AiWorkflowService {
         boolean isEmptyTemplate = isEmptyWorkflow(request.nodesJson());
         
         String liteflowEl = null;
-        String subChainsJson = null;
-        String llmNodeIds = null;
         
         if (!isEmptyTemplate) {
             // 非空模板：验证工作流结构
@@ -104,63 +102,9 @@ public class AiWorkflowService {
                 throw new IllegalArgumentException("工作流结构无效: " + String.join(", ", validation.errors()));
             }
             
-            // ========== 打印原始 EL 表达式（不拆分子链） ==========
-            String originalEl = converter.convert(request.nodesJson(), request.edgesJson());
-            log.info("========== 原始 EL 表达式（不拆分子链）==========\n{}", originalEl);
-            
-            // 生成临时 workflowId 用于子链命名
-            String tempWorkflowId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-            
-            // 转换为 LiteFlow EL 表达式（带子链拆分）
-            var conversionResult = converter.convertWithSubChains(
-                    request.nodesJson(), 
-                    request.edgesJson(),
-                    tempWorkflowId
-            );
-            
-            liteflowEl = conversionResult.mainChainEl();
-            
-            // ========== 打印拆分子链后的主链 EL ==========
-            log.info("========== 拆分子链后 - 主链 EL ==========\n{}", liteflowEl);
-            
-            // ========== 打印每个子链的 EL ==========
-            if (!conversionResult.subChains().isEmpty()) {
-                log.info("========== 子链 EL 表达式 ({} 个) ==========", conversionResult.subChains().size());
-                for (var entry : conversionResult.subChains().entrySet()) {
-                    String llmNodeId = entry.getKey();
-                    var subChainInfo = entry.getValue();
-                    log.info("--- 子链: {} (LLM节点: {}) ---\n节点列表: {}\nEL表达式:\n{}", 
-                            subChainInfo.chainId(),
-                            llmNodeId,
-                            subChainInfo.nodeIds(),
-                            subChainInfo.chainEl());
-                }
-            } else {
-                log.info("========== 无子链（没有 LLM 节点）==========");
-            }
-            
-            // 序列化子链信息
-            if (!conversionResult.subChains().isEmpty()) {
-                try {
-                    subChainsJson = objectMapper.writeValueAsString(conversionResult.subChains());
-                } catch (Exception e) {
-                    log.warn("序列化子链信息失败", e);
-                }
-            }
-            
-            // 序列化 LLM 节点ID列表
-            if (!conversionResult.llmNodeIds().isEmpty()) {
-                try {
-                    llmNodeIds = objectMapper.writeValueAsString(conversionResult.llmNodeIds());
-                } catch (Exception e) {
-                    log.warn("序列化 LLM 节点ID列表失败", e);
-                }
-            }
-            
-            log.info("========== 工作流转换完成 ==========");
-            log.info("LLM 节点数: {}, 子链数: {}", 
-                    conversionResult.llmNodeIds().size(),
-                    conversionResult.subChains().size());
+            // 转换为 LiteFlow EL 表达式（不使用子链拆分）
+            liteflowEl = converter.convert(request.nodesJson(), request.edgesJson());
+            log.info("========== 生成的 EL 表达式 ==========\n{}", liteflowEl);
         }
 
         AiWorkflow workflow = new AiWorkflow();
@@ -169,8 +113,6 @@ public class AiWorkflowService {
         workflow.setNodesJson(request.nodesJson() != null ? request.nodesJson() : "[]");
         workflow.setEdgesJson(request.edgesJson() != null ? request.edgesJson() : "[]");
         workflow.setLiteflowEl(liteflowEl);
-        workflow.setSubChainsJson(subChainsJson);
-        workflow.setLlmNodeIds(llmNodeIds);
         workflow.setEnabled(false);
         workflow.setVersion(1);
         workflow.setTriggerType(request.triggerType() != null ? request.triggerType() : "ALL");
@@ -189,8 +131,6 @@ public class AiWorkflowService {
         }
         
         // 注册子链到 LiteFlow
-        registerSubChains(saved);
-        
         return saved;
     }
     
@@ -393,8 +333,6 @@ public class AiWorkflowService {
         boolean isEmptyTemplate = isEmptyWorkflow(request.nodesJson());
         
         String liteflowEl = null;
-        String subChainsJson = null;
-        String llmNodeIds = null;
         
         if (!isEmptyTemplate) {
             // 验证工作流结构
@@ -403,63 +341,9 @@ public class AiWorkflowService {
                 throw new IllegalArgumentException("工作流结构无效: " + String.join(", ", validation.errors()));
             }
 
-            // ========== 打印原始 EL 表达式（不拆分子链） ==========
-            String originalEl = converter.convert(request.nodesJson(), request.edgesJson());
-            log.info("========== [更新] 原始 EL 表达式（不拆分子链）==========\n{}", originalEl);
-
-            // 使用工作流ID的简化版本作为子链前缀
-            String workflowIdShort = workflowId.toString().replace("-", "").substring(0, 8);
-            
-            // 转换为 LiteFlow EL 表达式（带子链拆分）
-            var conversionResult = converter.convertWithSubChains(
-                    request.nodesJson(), 
-                    request.edgesJson(),
-                    workflowIdShort
-            );
-            
-            liteflowEl = conversionResult.mainChainEl();
-            
-            // ========== 打印拆分子链后的主链 EL ==========
-            log.info("========== [更新] 拆分子链后 - 主链 EL ==========\n{}", liteflowEl);
-            
-            // ========== 打印每个子链的 EL ==========
-            if (!conversionResult.subChains().isEmpty()) {
-                log.info("========== [更新] 子链 EL 表达式 ({} 个) ==========", conversionResult.subChains().size());
-                for (var entry : conversionResult.subChains().entrySet()) {
-                    String llmNodeId = entry.getKey();
-                    var subChainInfo = entry.getValue();
-                    log.info("--- 子链: {} (LLM节点: {}) ---\n节点列表: {}\nEL表达式:\n{}", 
-                            subChainInfo.chainId(),
-                            llmNodeId,
-                            subChainInfo.nodeIds(),
-                            subChainInfo.chainEl());
-                }
-            } else {
-                log.info("========== [更新] 无子链（没有 LLM 节点）==========");
-            }
-            
-            // 序列化子链信息
-            if (!conversionResult.subChains().isEmpty()) {
-                try {
-                    subChainsJson = objectMapper.writeValueAsString(conversionResult.subChains());
-                } catch (Exception e) {
-                    log.warn("序列化子链信息失败", e);
-                }
-            }
-            
-            // 序列化 LLM 节点ID列表
-            if (!conversionResult.llmNodeIds().isEmpty()) {
-                try {
-                    llmNodeIds = objectMapper.writeValueAsString(conversionResult.llmNodeIds());
-                } catch (Exception e) {
-                    log.warn("序列化 LLM 节点ID列表失败", e);
-                }
-            }
-            
-            log.info("========== [更新] 工作流转换完成 ==========");
-            log.info("LLM 节点数: {}, 子链数: {}", 
-                    conversionResult.llmNodeIds().size(),
-                    conversionResult.subChains().size());
+            // 转换为 LiteFlow EL 表达式（不使用子链拆分）
+            liteflowEl = converter.convert(request.nodesJson(), request.edgesJson());
+            log.info("========== [更新] 生成的 EL 表达式 ==========\n{}", liteflowEl);
         }
 
         workflow.setName(request.name());
@@ -467,8 +351,6 @@ public class AiWorkflowService {
         workflow.setNodesJson(request.nodesJson() != null ? request.nodesJson() : "[]");
         workflow.setEdgesJson(request.edgesJson() != null ? request.edgesJson() : "[]");
         workflow.setLiteflowEl(liteflowEl);
-        workflow.setSubChainsJson(subChainsJson);
-        workflow.setLlmNodeIds(llmNodeIds);
         workflow.setVersion(workflow.getVersion() + 1);
 
         if (request.triggerType() != null) {
@@ -486,8 +368,6 @@ public class AiWorkflowService {
         }
         
         // 注册子链到 LiteFlow
-        registerSubChains(saved);
-        
         return saved;
     }
 
@@ -817,9 +697,6 @@ public class AiWorkflowService {
             AiWorkflow workflow = workflowRepository.findById(pausedState.getWorkflowId())
                     .orElseThrow(() -> new EntityNotFoundException("工作流不存在"));
 
-            // 确保子链已注册
-            registerSubChains(workflow);
-
             // 恢复上下文
             WorkflowContext context = pauseService.deserializeContext(
                     pausedState.getContextJson(),
@@ -841,6 +718,9 @@ public class AiWorkflowService {
             
             // 从边数据中提取意图路由映射
             extractIntentRoutesFromEdges(workflow.getNodesJson(), workflow.getEdgesJson(), context);
+            
+            // 从边数据中提取工具节点路由映射
+            extractToolRoutesFromEdges(workflow.getNodesJson(), workflow.getEdgesJson(), context);
 
             // 设置恢复相关的上下文信息
             context.setVariable("_resumeFromPause", true);
@@ -1075,15 +955,15 @@ public class AiWorkflowService {
             
             // 从边数据中提取意图路由映射，注入到上下文
             extractIntentRoutesFromEdges(workflow.getNodesJson(), workflow.getEdgesJson(), context);
+            
+            // 从边数据中提取工具节点路由映射，注入到上下文
+            extractToolRoutesFromEdges(workflow.getNodesJson(), workflow.getEdgesJson(), context);
 
             // 动态注册/更新 chain（使用 EL 表达式）
             String elExpression = workflow.getLiteflowEl();
             if (elExpression == null || elExpression.isBlank()) {
                 return new WorkflowExecutionResult(false, null, "工作流 EL 表达式为空", null, false);
             }
-            
-            // 先注册子链（主链会引用子链，必须先注册）
-            registerSubChains(workflow);
             
             // 包装成 THEN 表达式确保是有效的 EL
             String wrappedEl = wrapElExpression(elExpression);
@@ -1229,6 +1109,60 @@ public class AiWorkflowService {
             
         } catch (Exception e) {
             log.warn("提取意图路由映射失败", e);
+        }
+    }
+
+    /**
+     * 从边数据中提取工具节点的路由映射
+     * 为每个 tool 节点构建路由映射：sourceHandle (如 "executed", "not_executed") → 目标节点 ID
+     */
+    private void extractToolRoutesFromEdges(String nodesJson, String edgesJson, WorkflowContext context) {
+        try {
+            // 解析节点，找出所有 tool 类型的节点
+            List<WorkflowNodeDto> nodes = objectMapper.readValue(
+                    nodesJson, new TypeReference<List<WorkflowNodeDto>>() {});
+            
+            Set<String> toolNodeIds = nodes.stream()
+                    .filter(n -> "tool".equals(n.type()))
+                    .map(WorkflowNodeDto::id)
+                    .collect(java.util.stream.Collectors.toSet());
+            
+            if (toolNodeIds.isEmpty()) {
+                return;
+            }
+            
+            // 解析边
+            List<WorkflowEdgeDto> edges = objectMapper.readValue(
+                    edgesJson, new TypeReference<List<WorkflowEdgeDto>>() {});
+            
+            // 为每个工具节点构建路由映射
+            // sourceHandle (如 "executed", "not_executed") → 目标节点 ID
+            for (String toolNodeId : toolNodeIds) {
+                Map<String, String> routeMap = new HashMap<>();
+                
+                for (WorkflowEdgeDto edge : edges) {
+                    if (toolNodeId.equals(edge.source())) {
+                        // sourceHandle 就是工具节点返回的状态值（如 "executed", "not_executed"）
+                        String sourceHandle = edge.sourceHandle();
+                        if (sourceHandle == null || sourceHandle.isEmpty()) {
+                            // 如果没有 sourceHandle，使用默认值
+                            sourceHandle = "executed";
+                        }
+                        
+                        // 存储目标节点 ID
+                        routeMap.put(sourceHandle, edge.target());
+                    }
+                }
+                
+                if (!routeMap.isEmpty()) {
+                    String routesKey = "__tool_routes_" + toolNodeId;
+                    context.setVariable(routesKey, routeMap);
+                    log.debug("提取工具节点路由映射: nodeId={}, routes={}", toolNodeId, routeMap);
+                }
+            }
+            
+        } catch (Exception e) {
+            log.warn("提取工具节点路由映射失败", e);
         }
     }
 

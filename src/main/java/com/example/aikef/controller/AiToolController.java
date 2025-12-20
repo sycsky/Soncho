@@ -121,6 +121,57 @@ public class AiToolController {
     }
 
     /**
+     * 覆盖创建工具（按 name 幂等）
+     * <p>
+     * 若存在同名工具：立即删除旧工具并复用旧 ID 创建新工具。
+     */
+    @PostMapping("/upsert-by-name")
+    public ToolDto createOrReplaceToolByName(
+            @Valid @RequestBody CreateToolDto request,
+            Authentication authentication) {
+        UUID createdBy = getCurrentAgentId(authentication);
+
+        List<ParameterDefinition> parameters = request.parameters() != null
+                ? request.parameters().stream()
+                .map(this::convertParameterDto)
+                .toList()
+                : Collections.emptyList();
+
+        AiTool tool = toolService.createOrReplaceToolByName(
+                new CreateToolRequest(
+                        request.name(),
+                        request.displayName(),
+                        request.description(),
+                        request.toolType(),
+                        parameters,
+                        request.apiMethod(),
+                        request.apiUrl(),
+                        request.apiHeaders(),
+                        request.apiBodyTemplate(),
+                        request.apiResponsePath(),
+                        request.apiTimeout(),
+                        request.mcpEndpoint(),
+                        request.mcpToolName(),
+                        request.mcpServerType(),
+                        request.mcpConfig(),
+                        request.authType(),
+                        request.authConfig(),
+                        request.inputExample(),
+                        request.outputExample(),
+                        request.resultDescription(),
+                        request.resultMetadata(),
+                        request.retryCount(),
+                        request.requireConfirmation(),
+                        request.sortOrder(),
+                        request.tags()
+                ),
+                createdBy
+        );
+
+        return toDto(tool);
+    }
+
+    /**
      * 更新工具
      */
     @PutMapping("/{toolId}")

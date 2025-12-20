@@ -60,7 +60,7 @@ public class ToolNode extends NodeSwitchComponent {
         if (toolIdStr == null && toolName == null) {
             log.error("工具节点未配置 toolId 或 toolName");
             recordExecution(ctx, actualNodeId, null, "error", startTime, false, "toolId or toolName not configured");
-            return "tag:not_executed";
+            return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
         }
 
         // 查找工具
@@ -75,13 +75,13 @@ public class ToolNode extends NodeSwitchComponent {
         if (tool == null) {
             log.error("工具不存在: toolId={}, toolName={}", toolIdStr, toolName);
             recordExecution(ctx, actualNodeId, null, "error", startTime, false, "tool not found");
-            return "tag:not_executed";
+            return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
         }
 
         if (!tool.getEnabled()) {
             log.error("工具已禁用: toolName={}", tool.getName());
             recordExecution(ctx, actualNodeId, tool.getName(), "error", startTime, false, "tool is disabled");
-            return "tag:not_executed";
+            return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
         }
 
         // 从上下文 toolsParams 中获取工具参数
@@ -94,6 +94,7 @@ public class ToolNode extends NodeSwitchComponent {
 //            return "tag:not_executed";
 //        }
 
+        log.info("工具调用:{} params={}", tool.getName(), toolParams);
         // 获取工具参数定义
         List<FieldDefinition> paramDefs = getToolParameters(tool);
         List<String> requiredParams = paramDefs.stream()
@@ -120,7 +121,7 @@ public class ToolNode extends NodeSwitchComponent {
             log.info("工具必填参数缺失: toolName={}, missingParams={}", tool.getName(), missingParams);
             recordExecution(ctx, actualNodeId, tool.getName(), "tag:not_executed", startTime, true, 
                     "missing required params: " + missingParams);
-            return "tag:not_executed";
+            return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
         }
 
         // 参数匹配，执行工具
@@ -142,18 +143,32 @@ public class ToolNode extends NodeSwitchComponent {
             recordExecution(ctx, actualNodeId, tool.getName(), "tag:executed", startTime, result.success(), 
                     result.errorMessage());
 
+            // 获取路由映射，找到对应的目标节点ID
+            String routesKey = "__tool_routes_" + actualNodeId;
+            @SuppressWarnings("unchecked")
+            Map<String, String> routeKeyToNode = ctx.getVariable(routesKey);
+            
+            String targetNodeId = null;
             if (result.success()) {
                 log.info("工具执行成功: toolName={}, output={}", tool.getName(), result.output());
-                return "tag:executed";
+                // 查找 "executed" 对应的目标节点ID
+                if (routeKeyToNode != null) {
+                    targetNodeId = routeKeyToNode.get("executed");
+                }
+                if (targetNodeId == null) {
+                    // 如果没有找到，返回状态值（向后兼容）
+                    return "tag:executed";
+                }
+                return "tag:" + targetNodeId;
             } else {
                 log.warn("工具执行失败: toolName={}, error={}", tool.getName(), result.errorMessage());
-                return "tag:not_executed";
+                return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
             }
 
         } catch (Exception e) {
             log.error("工具执行异常: toolName={}", tool.getName(), e);
             recordExecution(ctx, actualNodeId, tool.getName(), "error", startTime, false, e.getMessage());
-            return "tag:not_executed";
+            return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
         }
     }
 
@@ -206,6 +221,25 @@ public class ToolNode extends NodeSwitchComponent {
      */
     private void setOutput(WorkflowContext ctx, String nodeId, Object output) {
         ctx.setOutput(nodeId, output);
+    }
+
+    /**
+     * 获取 not_executed 分支的目标节点ID
+     */
+    private String getTargetNodeIdForNotExecuted(WorkflowContext ctx, String actualNodeId) {
+        // 获取路由映射，找到对应的目标节点ID
+        String routesKey = "__tool_routes_" + actualNodeId;
+        @SuppressWarnings("unchecked")
+        Map<String, String> routeKeyToNode = ctx.getVariable(routesKey);
+        String targetNodeId = null;
+        if (routeKeyToNode != null) {
+            targetNodeId = routeKeyToNode.get("not_executed");
+        }
+        if (targetNodeId == null) {
+            // 如果没有找到，返回状态值（向后兼容）
+            return "tag:not_executed";
+        }
+        return "tag:" + targetNodeId;
     }
 
     /**
