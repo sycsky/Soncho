@@ -157,7 +157,7 @@ public class SessionMessageGateway {
 
     /**
      * 发送结构化消息（struct# 开头）
-     * 解析JSON对象（包含struct数组和overview），先发送overview介绍，然后循环发送消息，图片放到Attachments
+     * 解析JSON对象（包含struct数组和overview），将overview和前3条消息的content拼成一条消息，图片作为附件
      */
     @Transactional
     private Message sendStructuredMessage(UUID sessionId, String text, SenderType senderType,
@@ -190,44 +190,63 @@ public class SessionMessageGateway {
                 return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
             }
 
-            // 限制最多发送3条
+            // 限制最多取前3条
             int maxItems = Math.min(items.size(), 3);
             if (items.size() > 3) {
-                log.info("结构化数据有 {} 条，限制为最多发送 {} 条", items.size(), maxItems);
+                log.info("结构化数据有 {} 条，限制为最多取前 {} 条", items.size(), maxItems);
             } else {
-                log.info("检测到结构化数据，将发送 {} 条消息", items.size());
+                log.info("检测到结构化数据，将取前 {} 条消息", items.size());
             }
 
-            Message lastMessage = null;
-
-            // 如果有overview，先发送overview作为介绍
+            // 构建合并的消息内容：overview + 前3条消息的content
+            StringBuilder messageContent = new StringBuilder();
+            
+            // 添加overview（如果有）
             if (overview != null && !overview.trim().isEmpty()) {
-                lastMessage = sendSingleMessage(sessionId, overview, senderType, agentId, metadata, isInternal, null);
-                log.info("已发送overview介绍文字");
+                messageContent.append(overview.trim());
+                // overview后面添加换行
+                messageContent.append("\n\n");
             }
 
-            // 发送图文数据（最多3条）
+            // 添加前3条消息的content，每条消息之间用换行分隔
             for (int i = 0; i < maxItems; i++) {
                 Map<String, String> item = items.get(i);
                 String content = item.getOrDefault("content", "");
-                String img = item.getOrDefault("img", "");
-
-                // 创建附件列表（如果有图片）
-                List<Attachment> attachments = null;
-                if (img != null && !img.trim().isEmpty()) {
-                    attachments = new ArrayList<>();
-                    Attachment attachment = new Attachment();
-                    attachment.setType(AttachmentType.IMAGE);
-                    attachment.setUrl(img);
-                    attachment.setName("image");
-                    attachments.add(attachment);
+                if (content != null && !content.trim().isEmpty()) {
+                    // 如果不是第一条，在前面添加换行
+                    if (messageContent.length() > 0) {
+                        messageContent.append("\n");
+                    }
+                    messageContent.append(content.trim());
                 }
-
-                // 发送单条消息（带附件）
-                lastMessage = sendSingleMessage(sessionId, content, senderType, agentId, metadata, isInternal, attachments);
             }
 
-            return lastMessage != null ? lastMessage : sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+            // 收集前3条消息的图片作为附件
+            List<Attachment> attachments = new ArrayList<>();
+            for (int i = 0; i < maxItems; i++) {
+                Map<String, String> item = items.get(i);
+                String img = item.getOrDefault("img", "");
+                if (img != null && !img.trim().isEmpty()) {
+                    Attachment attachment = new Attachment();
+                    attachment.setType(AttachmentType.IMAGE);
+                    attachment.setUrl(img.trim());
+                    attachment.setName("image_" + (i + 1));
+                    attachments.add(attachment);
+                }
+            }
+
+            // 发送合并后的单条消息（带所有图片附件）
+            String finalContent = messageContent.toString().trim();
+            if (finalContent.isEmpty()) {
+                log.warn("合并后的消息内容为空，发送原文本");
+                return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+            }
+
+            List<Attachment> finalAttachments = attachments.isEmpty() ? null : attachments;
+            log.info("发送合并的结构化消息: contentLength={}, attachmentCount={}", 
+                    finalContent.length(), finalAttachments != null ? finalAttachments.size() : 0);
+            
+            return sendSingleMessage(sessionId, finalContent, senderType, agentId, metadata, isInternal, finalAttachments);
 
         } catch (Exception e) {
             log.error("解析结构化数据失败，发送原文本", e);

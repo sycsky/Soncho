@@ -126,7 +126,7 @@ public class ImageTextSplitNode extends BaseWorkflowNode {
                     .apiKey(modelConfig.getApiKey())
                     .baseUrl(modelConfig.getBaseUrl())
                     .modelName(modelConfig.getModelName())
-                    .temperature(0.3) // 使用较低温度保证输出稳定性
+                    .temperature(1.0) // 使用较低温度保证输出稳定性
                     .timeout(Duration.ofSeconds(60))
                     .build();
 

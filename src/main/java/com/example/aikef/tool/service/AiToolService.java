@@ -465,54 +465,54 @@ public class AiToolService {
      */
     private ToolExecutionResult executeApiToolInternal(AiTool tool, Map<String, Object> params, UUID sessionId) 
             throws Exception {
-        // 构建请求头
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
+            // 构建请求头
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
 
-        if (tool.getApiHeaders() != null && !tool.getApiHeaders().isEmpty()) {
-            Map<String, String> customHeaders = objectMapper.readValue(tool.getApiHeaders(),
-                    new TypeReference<Map<String, String>>() {});
+            if (tool.getApiHeaders() != null && !tool.getApiHeaders().isEmpty()) {
+                Map<String, String> customHeaders = objectMapper.readValue(tool.getApiHeaders(),
+                        new TypeReference<Map<String, String>>() {});
             // 替换请求头中的变量（包括 metadata）
             customHeaders.forEach((key, value) -> {
                 String replacedValue = replaceVariables(value, params, sessionId);
                 headers.set(key, replacedValue);
             });
-        }
+            }
 
-        // 处理认证
-        applyAuthentication(headers, tool, params);
+            // 处理认证
+            applyAuthentication(headers, tool, params);
 
         // 构建请求 URL（替换变量，包括会话元数据）
         String url = replaceVariables(tool.getApiUrl(), params, sessionId);
 
-        // 构建请求体
-        String body = null;
-        if (tool.getApiBodyTemplate() != null && !tool.getApiBodyTemplate().isEmpty()) {
+            // 构建请求体
+            String body = null;
+            if (tool.getApiBodyTemplate() != null && !tool.getApiBodyTemplate().isEmpty()) {
             body = replaceVariables(tool.getApiBodyTemplate(), params, sessionId);
-        } else if (params != null && !params.isEmpty()) {
-            body = objectMapper.writeValueAsString(params);
-        }
+            } else if (params != null && !params.isEmpty()) {
+                body = objectMapper.writeValueAsString(params);
+            }
 
-        HttpEntity<String> entity = new HttpEntity<>(body, headers);
+            HttpEntity<String> entity = new HttpEntity<>(body, headers);
 
-        // 发送请求
-        HttpMethod method = HttpMethod.valueOf(tool.getApiMethod().toUpperCase());
-        ResponseEntity<String> response = restTemplate.exchange(url, method, entity, String.class);
+            // 发送请求
+            HttpMethod method = HttpMethod.valueOf(tool.getApiMethod().toUpperCase());
+            ResponseEntity<String> response = restTemplate.exchange(url, method, entity, String.class);
 
-        // 解析响应
-        String output = response.getBody();
-        if (tool.getApiResponsePath() != null && !tool.getApiResponsePath().isEmpty()) {
-            output = extractByJsonPath(response.getBody(), tool.getApiResponsePath());
-        }
+            // 解析响应
+            String output = response.getBody();
+            if (tool.getApiResponsePath() != null && !tool.getApiResponsePath().isEmpty()) {
+                output = extractByJsonPath(response.getBody(), tool.getApiResponsePath());
+            }
 
-        return new ToolExecutionResult(
-                response.getStatusCode().is2xxSuccessful(),
-                output,
-                null,
-                response.getStatusCode().value(),
-                null,
-                null
-        );
+            return new ToolExecutionResult(
+                    response.getStatusCode().is2xxSuccessful(),
+                    output,
+                    null,
+                    response.getStatusCode().value(),
+                    null,
+                    null
+            );
     }
     
     /**
@@ -549,7 +549,7 @@ public class AiToolService {
                 lowerMessage.contains("no route to host") ||
                 lowerMessage.contains("unknown host")) {
                 return true;
-            }
+        }
         }
         
         return false;
@@ -635,7 +635,7 @@ public class AiToolService {
         // 支持字母、数字、下划线和点号
         Pattern pattern = Pattern.compile("\\{\\{([\\w.]+)}}");
         Matcher matcher = pattern.matcher(template);
-        
+
         while (matcher.find()) {
             String varName = matcher.group(1);
             String fullMatch = matcher.group(0); // 完整的 {{xxx}} 或 {{meta.xxx}}
@@ -656,8 +656,8 @@ public class AiToolService {
             } else {
                 // 从 params 中获取
                 if (params != null) {
-                    Object value = params.get(varName);
-                    if (value != null) {
+            Object value = params.get(varName);
+            if (value != null) {
                         result = result.replace(fullMatch, value.toString());
                     }
                 }
