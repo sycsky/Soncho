@@ -204,18 +204,18 @@ public class SessionMessageGateway {
             // 添加overview（如果有）
             if (overview != null && !overview.trim().isEmpty()) {
                 messageContent.append(overview.trim());
-                // overview后面添加换行
-                messageContent.append("\n\n");
+                // overview后面添加多个换行
+                messageContent.append("\n");
             }
 
-            // 添加前3条消息的content，每条消息之间用换行分隔
+            // 添加前3条消息的content，每条消息之间用多个换行分隔
             for (int i = 0; i < maxItems; i++) {
                 Map<String, String> item = items.get(i);
                 String content = item.getOrDefault("content", "");
                 if (content != null && !content.trim().isEmpty()) {
-                    // 如果不是第一条，在前面添加换行
+                    // 如果不是第一条，在前面添加多个换行
                     if (messageContent.length() > 0) {
-                        messageContent.append("\n");
+                        messageContent.append("\n\n\n");
                     }
                     messageContent.append(content.trim());
                 }
