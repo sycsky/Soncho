@@ -15,6 +15,7 @@ public class AiWorkflow {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(columnDefinition = "CHAR(36)")
     private UUID id;
 
     /**

@@ -10,6 +10,8 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 基于 Redis 的 Token 服务实现
@@ -18,7 +20,8 @@ import java.util.UUID;
 @Component
 public class RedisTokenService implements TokenService {
 
-    private static final Duration DEFAULT_TTL = Duration.ofDays(30);
+    private static final Logger log = LoggerFactory.getLogger(RedisTokenService.class);
+    private static final Duration DEFAULT_TTL = Duration.ofDays(30); // 30天 = 2,592,000秒
     private static final String KEY_PREFIX = "agent_token:";
 
     private final StringRedisTemplate redisTemplate;
@@ -35,6 +38,9 @@ public class RedisTokenService implements TokenService {
         String key = KEY_PREFIX + token;
         // 存储 agentId
         redisTemplate.opsForValue().set(key, principal.getId().toString(), DEFAULT_TTL);
+        log.debug("客服Token已创建: agentId={}, token前缀={}, TTL={}天 ({}秒)", 
+                principal.getId(), token.substring(0, Math.min(20, token.length())), 
+                DEFAULT_TTL.toDays(), DEFAULT_TTL.getSeconds());
         return token;
     }
 

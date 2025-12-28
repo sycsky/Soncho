@@ -151,7 +151,6 @@ public class AiToolService {
         if (request.apiTimeout() != null) tool.setApiTimeout(request.apiTimeout());
 
 
-
         // MCP 配置更新
         if (request.mcpEndpoint() != null) tool.setMcpEndpoint(request.mcpEndpoint());
         if (request.mcpToolName() != null) tool.setMcpToolName(request.mcpToolName());
@@ -255,7 +254,7 @@ public class AiToolService {
     public AiTool createOrReplaceToolByName(CreateToolRequest request, UUID createdBy) {
         UUID reuseId = null;
         String oldApiBodyTemplate = null; // 保存旧的 apiBodyTemplate
-        
+
         AiTool existing = toolRepository.findByNameWithSchema(request.name()).orElse(null);
         if (existing != null) {
             reuseId = existing.getId();
@@ -426,25 +425,25 @@ public class AiToolService {
         int maxRetries = tool.getRetryCount() != null ? tool.getRetryCount() : 0;
         int retryCount = 0;
         Exception lastException = null;
-        
+
         while (retryCount <= maxRetries) {
             try {
                 // 如果是重试，记录日志
                 if (retryCount > 0) {
-                    log.info("API 工具重试中: tool={}, 第 {}/{} 次重试", 
+                    log.info("API 工具重试中: tool={}, 第 {}/{} 次重试",
                             tool.getName(), retryCount, maxRetries);
                     // 重试前等待一段时间（指数退避）
                     Thread.sleep(1000L * retryCount);
                 }
-                
+
                 return executeApiToolInternal(tool, params, sessionId);
-                
+
             } catch (Exception e) {
                 lastException = e;
-                
+
                 // 判断是否是网络问题（可重试）
                 if (isNetworkException(e) && retryCount < maxRetries) {
-                    log.warn("API 工具执行网络异常，准备重试: tool={}, retry={}/{}, error={}", 
+                    log.warn("API 工具执行网络异常，准备重试: tool={}, retry={}/{}, error={}",
                             tool.getName(), retryCount + 1, maxRetries, e.getMessage());
                     retryCount++;
                 } else {
@@ -454,67 +453,68 @@ public class AiToolService {
                 }
             }
         }
-        
-        return new ToolExecutionResult(false, null, 
-                lastException != null ? lastException.getMessage() : "执行失败", 
+
+        return new ToolExecutionResult(false, null,
+                lastException != null ? lastException.getMessage() : "执行失败",
                 null, null, null);
     }
-    
+
     /**
      * 实际执行 API 工具调用
      */
-    private ToolExecutionResult executeApiToolInternal(AiTool tool, Map<String, Object> params, UUID sessionId) 
+    private ToolExecutionResult executeApiToolInternal(AiTool tool, Map<String, Object> params, UUID sessionId)
             throws Exception {
-            // 构建请求头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
+        // 构建请求头
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
 
-            if (tool.getApiHeaders() != null && !tool.getApiHeaders().isEmpty()) {
-                Map<String, String> customHeaders = objectMapper.readValue(tool.getApiHeaders(),
-                        new TypeReference<Map<String, String>>() {});
+        if (tool.getApiHeaders() != null && !tool.getApiHeaders().isEmpty()) {
+            Map<String, String> customHeaders = objectMapper.readValue(tool.getApiHeaders(),
+                    new TypeReference<Map<String, String>>() {
+                    });
             // 替换请求头中的变量（包括 metadata）
             customHeaders.forEach((key, value) -> {
                 String replacedValue = replaceVariables(value, params, sessionId);
                 headers.set(key, replacedValue);
             });
-            }
+        }
 
-            // 处理认证
-            applyAuthentication(headers, tool, params);
+        // 处理认证
+        applyAuthentication(headers, tool, params);
 
         // 构建请求 URL（替换变量，包括会话元数据）
         String url = replaceVariables(tool.getApiUrl(), params, sessionId);
 
-            // 构建请求体
-            String body = null;
-            if (tool.getApiBodyTemplate() != null && !tool.getApiBodyTemplate().isEmpty()) {
+        // 构建请求体
+        String body = null;
+        if (tool.getApiBodyTemplate() != null && !tool.getApiBodyTemplate().isEmpty()) {
             body = replaceVariables(tool.getApiBodyTemplate(), params, sessionId);
-            } else if (params != null && !params.isEmpty()) {
-                body = objectMapper.writeValueAsString(params);
-            }
+        } else if (params != null && !params.isEmpty()) {
+            body = objectMapper.writeValueAsString(params);
+        }
 
-            HttpEntity<String> entity = new HttpEntity<>(body, headers);
+        HttpEntity<String> entity = new HttpEntity<>(body, headers);
 
-            // 发送请求
-            HttpMethod method = HttpMethod.valueOf(tool.getApiMethod().toUpperCase());
-            ResponseEntity<String> response = restTemplate.exchange(url, method, entity, String.class);
+        // 发送请求
+        HttpMethod method = HttpMethod.valueOf(tool.getApiMethod().toUpperCase());
+        ResponseEntity<String> response = restTemplate.exchange(url, method, entity, String.class);
 
-            // 解析响应
-            String output = response.getBody();
-            if (tool.getApiResponsePath() != null && !tool.getApiResponsePath().isEmpty()) {
-                output = extractByJsonPath(response.getBody(), tool.getApiResponsePath());
-            }
+        // 解析响应
+        String output = response.getBody();
+        if (tool.getApiResponsePath() != null && !tool.getApiResponsePath().isEmpty()) {
+            output = extractByJsonPath(response.getBody(), tool.getApiResponsePath());
+        }
 
-            return new ToolExecutionResult(
-                    response.getStatusCode().is2xxSuccessful(),
-                    output,
-                    null,
-                    response.getStatusCode().value(),
-                    null,
-                    null
-            );
+        return new ToolExecutionResult(
+                response.getStatusCode().is2xxSuccessful(),
+                output,
+                null,
+                response.getStatusCode().value(),
+                null,
+                null
+        );
     }
-    
+
     /**
      * 判断是否是网络异常（可重试）
      */
@@ -523,35 +523,35 @@ public class AiToolService {
         if (e instanceof ResourceAccessException) {
             return true;
         }
-        
+
         // 检查根本原因
         Throwable cause = e.getCause();
         while (cause != null) {
             if (cause instanceof ConnectException ||
-                cause instanceof SocketTimeoutException ||
-                cause instanceof UnknownHostException ||
-                cause instanceof java.net.NoRouteToHostException ||
-                cause instanceof java.net.PortUnreachableException) {
+                    cause instanceof SocketTimeoutException ||
+                    cause instanceof UnknownHostException ||
+                    cause instanceof java.net.NoRouteToHostException ||
+                    cause instanceof java.net.PortUnreachableException) {
                 return true;
             }
             cause = cause.getCause();
         }
-        
+
         // 检查异常消息
         String message = e.getMessage();
         if (message != null) {
             String lowerMessage = message.toLowerCase();
             if (lowerMessage.contains("connection refused") ||
-                lowerMessage.contains("connection timed out") ||
-                lowerMessage.contains("read timed out") ||
-                lowerMessage.contains("connect timed out") ||
-                lowerMessage.contains("network is unreachable") ||
-                lowerMessage.contains("no route to host") ||
-                lowerMessage.contains("unknown host")) {
+                    lowerMessage.contains("connection timed out") ||
+                    lowerMessage.contains("read timed out") ||
+                    lowerMessage.contains("connect timed out") ||
+                    lowerMessage.contains("network is unreachable") ||
+                    lowerMessage.contains("no route to host") ||
+                    lowerMessage.contains("unknown host")) {
                 return true;
+            }
         }
-        }
-        
+
         return false;
     }
 
@@ -580,7 +580,8 @@ public class AiToolService {
 
         try {
             Map<String, String> authConfig = tool.getAuthConfig() != null
-                    ? objectMapper.readValue(tool.getAuthConfig(), new TypeReference<Map<String, String>>() {})
+                    ? objectMapper.readValue(tool.getAuthConfig(), new TypeReference<Map<String, String>>() {
+            })
                     : new HashMap<>();
 
             switch (tool.getAuthType()) {
@@ -630,7 +631,7 @@ public class AiToolService {
         }
 
         String result = template;
-        
+
         // 匹配 {{xxx}} 或 {{meta.xxx}} 格式
         // 支持字母、数字、下划线和点号
         Pattern pattern = Pattern.compile("\\{\\{([\\w.]+)}}");
@@ -639,7 +640,7 @@ public class AiToolService {
         while (matcher.find()) {
             String varName = matcher.group(1);
             String fullMatch = matcher.group(0); // 完整的 {{xxx}} 或 {{meta.xxx}}
-            
+
             // 检查是否是 meta.xxx 格式
             if (varName.startsWith("meta.")) {
                 // 从会话 metadata 中获取
@@ -656,17 +657,21 @@ public class AiToolService {
             } else {
                 // 从 params 中获取
                 if (params != null) {
-            Object value = params.get(varName);
-            if (value != null) {
+                    Object value = params.get(varName);
+                    if (value != null) {
                         result = result.replace(fullMatch, value.toString());
+                    }else {
+                        result = result.replace(fullMatch, "");
                     }
+                }else  {
+                    result = result.replace(fullMatch, "");
                 }
             }
         }
 
         return result;
     }
-    
+
     /**
      * 从会话 metadata 中获取指定 key 的值
      */
@@ -674,19 +679,19 @@ public class AiToolService {
         if (sessionId == null || key == null || key.isEmpty()) {
             return null;
         }
-        
+
         try {
             com.example.aikef.model.ChatSession session = chatSessionService.getSession(sessionId);
             String metadataJson = session.getMetadata();
-            
+
             if (metadataJson == null || metadataJson.isEmpty()) {
                 return null;
             }
-            
+
             // 解析 JSON
             JsonNode metadata = objectMapper.readTree(metadataJson);
             JsonNode valueNode = metadata.get(key);
-            
+
             if (valueNode != null && !valueNode.isNull()) {
                 if (valueNode.isTextual()) {
                     return valueNode.asText();
@@ -695,11 +700,11 @@ public class AiToolService {
                     return valueNode.toString();
                 }
             }
-            
+
         } catch (Exception e) {
             log.warn("获取会话元数据失败: sessionId={}, key={}, error={}", sessionId, key, e.getMessage());
         }
-        
+
         return null;
     }
 
@@ -862,7 +867,8 @@ public class AiToolService {
             return Collections.emptyList();
         }
         try {
-            return objectMapper.readValue(fieldsJson, new TypeReference<List<FieldDefinition>>() {});
+            return objectMapper.readValue(fieldsJson, new TypeReference<List<FieldDefinition>>() {
+            });
         } catch (JsonProcessingException e) {
             log.warn("解析字段定义失败", e);
             return Collections.emptyList();
@@ -951,7 +957,8 @@ public class AiToolService {
             String defaultValue,
             List<ParameterDefinition> properties,  // 嵌套属性（当type为OBJECT时）
             ParameterDefinition items  // 数组元素定义（当type为ARRAY时）
-    ) {}
+    ) {
+    }
 
     public record CreateToolRequest(
             String name,
@@ -983,7 +990,8 @@ public class AiToolService {
             Boolean requireConfirmation,
             Integer sortOrder,
             String tags
-    ) {}
+    ) {
+    }
 
     public record UpdateToolRequest(
             String displayName,
@@ -1010,7 +1018,8 @@ public class AiToolService {
             Boolean enabled,
             Integer sortOrder,
             String tags
-    ) {}
+    ) {
+    }
 
     public record ToolExecutionResult(
             boolean success,
@@ -1019,13 +1028,15 @@ public class AiToolService {
             Integer httpStatus,
             Long durationMs,
             UUID executionId
-    ) {}
+    ) {
+    }
 
     public record ToolStats(
             long successCount,
             long failedCount,
             double avgDurationMs
-    ) {}
+    ) {
+    }
 
     public record ToolDefinition(
             String name,
@@ -1033,6 +1044,7 @@ public class AiToolService {
             List<FieldDefinition> parameters,
             String inputExample,
             String outputExample
-    ) {}
+    ) {
+    }
 }
 

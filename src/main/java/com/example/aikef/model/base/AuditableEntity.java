@@ -15,7 +15,7 @@ public abstract class AuditableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false, updatable = false, columnDefinition = "CHAR(36)")
     private UUID id;
 
     @Column(name = "created_at", nullable = false, updatable = false)

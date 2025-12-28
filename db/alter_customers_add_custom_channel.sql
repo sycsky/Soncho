@@ -12,3 +12,5 @@ MODIFY COLUMN primary_channel ENUM('WEB', 'WECHAT', 'WHATSAPP', 'LINE', 'TELEGRA
 
 
 
+
+

@@ -4,6 +4,9 @@ import com.example.aikef.workflow.context.WorkflowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -14,22 +17,26 @@ import java.util.regex.Pattern;
  * 变量格式: {{namespace.key}}
  * 
  * 支持的命名空间:
- * - sys: 系统变量 (query, lastOutput, intent, sessionId, customerId)
+ * - sys: 系统变量 (query, lastOutput, intent, sessionId, customerId, now)
  * - var: 自定义变量
  * - node: 节点输出
  * - customer: 客户信息
  * - entity: 提取的实体
  * - agent: Agent 会话变量 (sysPrompt)
+ * - event: 事件数据 (eventData，来自 webhook)
  * 
  * 示例:
  * - {{sys.query}} - 用户输入查询
  * - {{sys.lastOutput}} - 上一个节点的输出
  * - {{sys.intent}} - 识别的意图
+ * - {{sys.now}} - 当前日期 (格式: yyyy-MM-dd)
  * - {{var.orderId}} - 自定义变量 orderId
  * - {{node.llm_1}} - 节点 llm_1 的输出
  * - {{customer.name}} - 客户姓名
  * - {{entity.productName}} - 提取的实体 productName
  * - {{agent.sysPrompt}} - Agent 会话的系统提示词
+ * - {{event.orderId}} - 事件数据中的 orderId 字段
+ * - {{event.userName}} - 事件数据中的 userName 字段
  */
 public class TemplateEngine {
 
@@ -98,6 +105,7 @@ public class TemplateEngine {
             case "customer" -> resolveCustomerInfo(key, ctx);
             case "entity" -> resolveEntity(key, ctx);
             case "agent" -> resolveAgentVariable(key, ctx);
+            case "event" -> resolveEventData(key, ctx);
             default -> {
                 log.warn("未知的命名空间: {}", namespace);
                 yield "";
@@ -128,6 +136,8 @@ public class TemplateEngine {
                     String.valueOf(ctx.isNeedHumanTransfer());
             case "humantransferreason", "human_transfer_reason" -> 
                     nullToEmpty(ctx.getHumanTransferReason());
+            case "now", "date", "currentdate", "current_date" -> 
+                    LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             default -> {
                 log.warn("未知的系统变量: {}", key);
                 yield "";
@@ -183,6 +193,36 @@ public class TemplateEngine {
                 yield "";
             }
         };
+    }
+
+    /**
+     * 解析事件数据 (eventData)
+     * 从工作流变量的 eventData 中获取指定字段
+     * 
+     * 示例: {{event.orderId}} 会从 eventData Map 中获取 "orderId" 字段
+     */
+    private static String resolveEventData(String key, WorkflowContext ctx) {
+        // 从 variables 中获取 eventData
+        Object eventDataObj = ctx.getVariable("eventData");
+        if (eventDataObj == null) {
+            log.debug("eventData 不存在于工作流变量中");
+            return "";
+        }
+
+        // eventData 应该是一个 Map<String, Object>
+        if (eventDataObj instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> eventData = (Map<String, Object>) eventDataObj;
+            Object value = eventData.get(key);
+            if (value != null) {
+                return value.toString();
+            }
+            log.debug("eventData 中不存在字段: {}", key);
+            return "";
+        }
+
+        log.warn("eventData 不是 Map 类型: {}", eventDataObj.getClass().getName());
+        return "";
     }
 
     /**

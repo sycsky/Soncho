@@ -90,7 +90,7 @@ public class ReactFlowToLiteflowConverter {
         
         // 生成 EL 表达式（带格式化）
         Set<String> visited = new HashSet<>();
-        String el = generateEl(startNodeId, nodeMap, outEdges, visited, 0);
+        String el = generateEl(startNodeId, nodeMap, outEdges, inEdges, visited, 0);
         
         log.info("生成 LiteFlow EL 表达式:\n{}", el);
         return el;
@@ -131,6 +131,7 @@ public class ReactFlowToLiteflowConverter {
     private String generateEl(String nodeId, 
                               Map<String, WorkflowNodeDto> nodeMap,
                               Map<String, List<EdgeInfo>> outEdges,
+                              Map<String, List<String>> inEdges,
                               Set<String> visited,
                               int indentLevel) {
         if (visited.contains(nodeId)) {
@@ -149,14 +150,15 @@ public class ReactFlowToLiteflowConverter {
         
         // 条件节点特殊处理 (IF)
         if ("condition".equals(nodeType)) {
-            return generateConditionEl(nodeId, nodeMap, outEdges, nextEdges, visited, indentLevel);
+            return generateConditionEl(nodeId, nodeMap, outEdges, inEdges, nextEdges, visited, indentLevel);
         }
         
         // Switch 节点特殊处理 (SWITCH)
         // 支持 intent、intent_router、tool、parameter_extraction 类型
+        // 注意：这些节点是 NodeSwitchComponent，必须使用 SWITCH 语法，即使只有一个出边
         if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
             "tool".equals(nodeType) || "parameter_extraction".equals(nodeType)) {
-            return generateSwitchEl(nodeId, nodeMap, outEdges, nextEdges, visited, indentLevel);
+            return generateSwitchEl(nodeId, nodeMap, outEdges, inEdges, nextEdges, visited, indentLevel);
         }
         
         // 普通节点 - 使用 node("nodeType").tag("nodeId") 格式
@@ -166,22 +168,101 @@ public class ReactFlowToLiteflowConverter {
         if (!nextEdges.isEmpty()) {
             if (nextEdges.size() == 1) {
                 // 单个后继节点 - 串行
-                String nextEl = generateEl(nextEdges.get(0).targetId, nodeMap, outEdges, new HashSet<>(visited), indentLevel);
+                String nextEl = generateEl(nextEdges.get(0).targetId, nodeMap, outEdges, inEdges, new HashSet<>(visited), indentLevel);
                 if (!nextEl.isEmpty()) {
                     el.append(",\n").append(indent(indentLevel)).append(nextEl);
                 }
             } else {
                 // 多个后继节点 - 并行
-                el.append(",\n").append(indent(indentLevel)).append("WHEN(\n");
-                List<String> parallelEls = new ArrayList<>();
-                for (EdgeInfo nextEdge : nextEdges) {
-                    String nextEl = generateEl(nextEdge.targetId, nodeMap, outEdges, new HashSet<>(visited), indentLevel + 1);
-                    if (!nextEl.isEmpty()) {
-                        parallelEls.add(indent(indentLevel + 1) + nextEl);
+                // 检测是否有汇聚点（所有分支最终都指向同一个节点）
+                // 使用 findConvergeNode 方法来检测汇聚点
+                String convergeNodeId = findConvergeNode(nextEdges, nodeMap, outEdges, inEdges);
+                
+                // 如果找到汇聚点，只生成到汇聚点之前的节点，然后在 WHEN 之后添加汇聚点
+                if (convergeNodeId != null) {
+                    // 有汇聚点：每个分支只生成到汇聚点之前
+                    List<String> parallelEls = new ArrayList<>();
+                    for (EdgeInfo nextEdge : nextEdges) {
+                        if (nextEdge.targetId().equals(convergeNodeId)) {
+                            // 如果分支直接指向汇聚点，只生成分支的第一个节点（实际上就是汇聚点本身，但这里应该跳过）
+                            // 实际上，如果所有分支都直接指向汇聚点，那么 WHEN 内部应该只有汇聚点本身
+                            // 但这种情况应该不会发生，因为如果所有分支都指向同一个节点，应该被检测为汇聚点
+                            // 这里先跳过，因为汇聚点会在 WHEN 之后添加
+                            continue;
+                        }
+                        // 为每个分支创建独立的 visited 集合
+                        Set<String> branchVisited = new HashSet<>(visited);
+                        // 递归生成从目标节点开始的流程，但遇到汇聚点时停止
+                        String branchEl = generateElUntilConverge(nextEdge.targetId, convergeNodeId, nodeMap, outEdges, inEdges, branchVisited, indentLevel + 1);
+                        if (!branchEl.isEmpty()) {
+                            String finalBranchEl;
+                            if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 
+                                !branchEl.trim().startsWith("IF(") && !branchEl.trim().startsWith("WHEN(") && 
+                                !branchEl.trim().startsWith("THEN(")) {
+                                String indentedBranchEl = branchEl.replace("\n", "\n" + indent(indentLevel + 2));
+                                finalBranchEl = "THEN(\n" + indent(indentLevel + 2) + indentedBranchEl.trim() + 
+                                               "\n" + indent(indentLevel + 1) + ")";
+                            } else if (branchEl.trim().startsWith("SWITCH(") || branchEl.trim().startsWith("IF(") || 
+                                       branchEl.trim().startsWith("WHEN(")) {
+                                finalBranchEl = branchEl;
+                            } else {
+                                finalBranchEl = indent(indentLevel + 1) + branchEl.trim();
+                            }
+                            parallelEls.add(finalBranchEl);
+                        }
+                    }
+                    
+                    // 如果所有分支都直接指向汇聚点，WHEN 内部应该为空，但这种情况应该不会发生
+                    // 如果 parallelEls 为空，说明所有分支都直接指向汇聚点，WHEN 内部应该只有汇聚点本身
+                    if (parallelEls.isEmpty()) {
+                        // 所有分支都直接指向汇聚点，WHEN 内部应该只有汇聚点本身
+                        parallelEls.add(indent(indentLevel + 1) + formatNodeRef(
+                                nodeMap.get(convergeNodeId) != null ? nodeMap.get(convergeNodeId).type() : "unknown",
+                                convergeNodeId));
+                    }
+                    
+                    if (!parallelEls.isEmpty()) {
+                        el.append(",\n").append(indent(indentLevel)).append("WHEN(\n");
+                        el.append(String.join(",\n", parallelEls));
+                        el.append("\n").append(indent(indentLevel)).append(")");
+                        
+                        // 在 WHEN 之后添加汇聚点
+                        if (convergeNodeId != null && !visited.contains(convergeNodeId)) {
+                            String convergeEl = generateEl(convergeNodeId, nodeMap, outEdges, inEdges, visited, indentLevel);
+                            if (!convergeEl.isEmpty()) {
+                                el.append(",\n").append(indent(indentLevel)).append(convergeEl);
+                            }
+                        }
+                    }
+                } else {
+                    // 没有汇聚点：每个分支递归生成完整的子流程
+                    List<String> parallelEls = new ArrayList<>();
+                    for (EdgeInfo nextEdge : nextEdges) {
+                        Set<String> branchVisited = new HashSet<>(visited);
+                        String branchEl = generateEl(nextEdge.targetId, nodeMap, outEdges, inEdges, branchVisited, indentLevel + 1);
+                        if (!branchEl.isEmpty()) {
+                            String finalBranchEl;
+                            if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 
+                                !branchEl.trim().startsWith("IF(") && !branchEl.trim().startsWith("WHEN(") && 
+                                !branchEl.trim().startsWith("THEN(")) {
+                                String indentedBranchEl = branchEl.replace("\n", "\n" + indent(indentLevel + 2));
+                                finalBranchEl = "THEN(\n" + indent(indentLevel + 2) + indentedBranchEl.trim() + 
+                                               "\n" + indent(indentLevel + 1) + ")";
+                            } else if (branchEl.trim().startsWith("SWITCH(") || branchEl.trim().startsWith("IF(") || 
+                                       branchEl.trim().startsWith("WHEN(")) {
+                                finalBranchEl = branchEl;
+                            } else {
+                                finalBranchEl = indent(indentLevel + 1) + branchEl.trim();
+                            }
+                            parallelEls.add(finalBranchEl);
+                        }
+                    }
+                    if (!parallelEls.isEmpty()) {
+                        el.append(",\n").append(indent(indentLevel)).append("WHEN(\n");
+                        el.append(String.join(",\n", parallelEls));
+                        el.append("\n").append(indent(indentLevel)).append(")");
                     }
                 }
-                el.append(String.join(",\n", parallelEls));
-                el.append("\n").append(indent(indentLevel)).append(")");
             }
         }
         
@@ -208,6 +289,7 @@ public class ReactFlowToLiteflowConverter {
     private String generateSwitchEl(String nodeId,
                                     Map<String, WorkflowNodeDto> nodeMap,
                                     Map<String, List<EdgeInfo>> outEdges,
+                                    Map<String, List<String>> inEdges,
                                     List<EdgeInfo> nextEdges,
                                     Set<String> visited,
                                     int indentLevel) {
@@ -226,7 +308,7 @@ public class ReactFlowToLiteflowConverter {
         List<String> branchEls = new ArrayList<>();
         for (EdgeInfo edge : nextEdges) {
             // 递归生成从目标节点开始的完整流程
-            String branchEl = generateEl(edge.targetId, nodeMap, outEdges, new HashSet<>(visited), indentLevel + 1);
+            String branchEl = generateEl(edge.targetId, nodeMap, outEdges, inEdges, new HashSet<>(visited), indentLevel + 1);
             if (!branchEl.isEmpty()) {
                 String targetId = edge.targetId();
                 // 对于 switch 节点，根据节点类型决定使用哪个作为 tag：
@@ -288,6 +370,7 @@ public class ReactFlowToLiteflowConverter {
     private String generateConditionEl(String nodeId,
                                         Map<String, WorkflowNodeDto> nodeMap,
                                         Map<String, List<EdgeInfo>> outEdges,
+                                        Map<String, List<String>> inEdges,
                                         List<EdgeInfo> nextEdges,
                                         Set<String> visited,
                                         int indentLevel) {
@@ -300,7 +383,7 @@ public class ReactFlowToLiteflowConverter {
         String falseBranch = "";
         
         for (EdgeInfo edge : nextEdges) {
-            String branchEl = generateEl(edge.targetId, nodeMap, outEdges, new HashSet<>(visited), indentLevel + 1);
+            String branchEl = generateEl(edge.targetId, nodeMap, outEdges, inEdges, new HashSet<>(visited), indentLevel + 1);
             if ("true".equals(edge.sourceHandle) || "yes".equals(edge.sourceHandle)) {
                 trueBranch = branchEl;
             } else if ("false".equals(edge.sourceHandle) || "no".equals(edge.sourceHandle)) {
@@ -327,6 +410,216 @@ public class ReactFlowToLiteflowConverter {
         }
         
         el.append("\n").append(indent(indentLevel)).append(")");
+        
+        return el.toString();
+    }
+
+    /**
+     * 查找并行分支的汇聚点
+     * 汇聚点是指所有分支最终都指向的同一个节点
+     */
+    private String findConvergeNode(List<EdgeInfo> nextEdges,
+                                     Map<String, WorkflowNodeDto> nodeMap,
+                                     Map<String, List<EdgeInfo>> outEdges,
+                                     Map<String, List<String>> inEdges) {
+        // 收集所有分支路径上的所有节点（包括分支起始节点）
+        Set<String> allNodesInBranches = new HashSet<>();
+        Set<String> branchStartNodes = nextEdges.stream()
+                .map(EdgeInfo::targetId)
+                .collect(Collectors.toSet());
+        allNodesInBranches.addAll(branchStartNodes);
+        
+        for (EdgeInfo edge : nextEdges) {
+            collectNodesInBranch(edge.targetId, nodeMap, outEdges, allNodesInBranches, new HashSet<>());
+        }
+        
+        // 查找有多个入边的节点，且这些入边都来自并行分支路径上的节点
+        // 遍历所有可能被分支路径上的节点指向的节点（不仅仅是分支路径上的节点）
+        Set<String> allPossibleConvergeNodes = new HashSet<>();
+        for (String branchNode : allNodesInBranches) {
+            List<EdgeInfo> outEdgesForNode = outEdges.getOrDefault(branchNode, Collections.emptyList());
+            for (EdgeInfo edge : outEdgesForNode) {
+                allPossibleConvergeNodes.add(edge.targetId());
+            }
+        }
+        
+        // 检查每个可能的汇聚点
+        for (String nodeId : allPossibleConvergeNodes) {
+            List<String> targetInEdges = inEdges.getOrDefault(nodeId, Collections.emptyList());
+            // 如果节点有多个入边，且这些入边都来自并行分支路径上的节点，则它是汇聚点
+            if (targetInEdges.size() >= nextEdges.size()) {
+                // 检查这些入边是否都来自分支路径上的节点
+                boolean allFromBranches = targetInEdges.stream()
+                        .allMatch(sourceId -> allNodesInBranches.contains(sourceId));
+                
+                if (allFromBranches && targetInEdges.size() >= nextEdges.size()) {
+                    log.debug("检测到汇聚点: nodeId={}, inEdges={}, branchNodes={}", 
+                            nodeId, targetInEdges, allNodesInBranches);
+                    return nodeId;
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 递归收集分支路径上的所有节点
+     */
+    private void collectNodesInBranch(String nodeId,
+                                      Map<String, WorkflowNodeDto> nodeMap,
+                                      Map<String, List<EdgeInfo>> outEdges,
+                                      Set<String> collected,
+                                      Set<String> visited) {
+        if (visited.contains(nodeId)) {
+            return;
+        }
+        visited.add(nodeId);
+        collected.add(nodeId);
+        
+        List<EdgeInfo> nextEdges = outEdges.getOrDefault(nodeId, Collections.emptyList());
+        for (EdgeInfo edge : nextEdges) {
+            collectNodesInBranch(edge.targetId, nodeMap, outEdges, collected, visited);
+        }
+    }
+
+    /**
+     * 递归生成 EL 表达式，直到遇到汇聚点为止
+     * 如果节点有出边指向汇聚点，则不生成汇聚点，只生成到汇聚点之前的节点
+     */
+    private String generateElUntilConverge(String nodeId,
+                                           String convergeNodeId,
+                                           Map<String, WorkflowNodeDto> nodeMap,
+                                           Map<String, List<EdgeInfo>> outEdges,
+                                           Map<String, List<String>> inEdges,
+                                           Set<String> visited,
+                                           int indentLevel) {
+        // 如果当前节点就是汇聚点，停止递归
+        if (nodeId.equals(convergeNodeId)) {
+            return "";
+        }
+        
+        if (visited.contains(nodeId)) {
+            return "";
+        }
+        visited.add(nodeId);
+        
+        WorkflowNodeDto node = nodeMap.get(nodeId);
+        if (node == null) {
+            return "";
+        }
+        
+        List<EdgeInfo> nextEdges = outEdges.getOrDefault(nodeId, Collections.emptyList());
+        String nodeType = node.type();
+        
+        // 如果是特殊节点类型，使用对应的生成方法
+        if ("condition".equals(nodeType)) {
+            return generateConditionEl(nodeId, nodeMap, outEdges, inEdges, nextEdges, visited, indentLevel);
+        }
+        
+        if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
+            "tool".equals(nodeType) || "parameter_extraction".equals(nodeType)) {
+            return generateSwitchEl(nodeId, nodeMap, outEdges, inEdges, nextEdges, visited, indentLevel);
+        }
+        
+        // 普通节点
+        StringBuilder el = new StringBuilder();
+        el.append(formatNodeRef(nodeType, nodeId));
+        
+        if (!nextEdges.isEmpty()) {
+            // 检查是否有出边指向汇聚点
+            boolean hasConvergeEdge = nextEdges.stream()
+                    .anyMatch(edge -> edge.targetId().equals(convergeNodeId));
+            
+            if (hasConvergeEdge && nextEdges.size() == 1) {
+                // 如果只有一个出边且指向汇聚点，不生成后续节点
+                // 汇聚点会在 WHEN 之后统一生成
+                return el.toString();
+            } else if (hasConvergeEdge) {
+                // 如果有多个出边，其中一个指向汇聚点，需要特殊处理
+                // 只生成不指向汇聚点的出边
+                List<EdgeInfo> nonConvergeEdges = nextEdges.stream()
+                        .filter(edge -> !edge.targetId().equals(convergeNodeId))
+                        .toList();
+                
+                if (!nonConvergeEdges.isEmpty()) {
+                    if (nonConvergeEdges.size() == 1) {
+                        String nextEl = generateElUntilConverge(nonConvergeEdges.get(0).targetId, convergeNodeId, 
+                                nodeMap, outEdges, inEdges, new HashSet<>(visited), indentLevel);
+                        if (!nextEl.isEmpty()) {
+                            el.append(",\n").append(indent(indentLevel)).append(nextEl);
+                        }
+                    } else {
+                        // 多个非汇聚点出边，生成 WHEN
+                        List<String> parallelEls = new ArrayList<>();
+                        for (EdgeInfo nextEdge : nonConvergeEdges) {
+                            Set<String> branchVisited = new HashSet<>(visited);
+                            String branchEl = generateElUntilConverge(nextEdge.targetId, convergeNodeId, 
+                                    nodeMap, outEdges, inEdges, branchVisited, indentLevel + 1);
+                            if (!branchEl.isEmpty()) {
+                                String finalBranchEl;
+                                if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 
+                                    !branchEl.trim().startsWith("IF(") && !branchEl.trim().startsWith("WHEN(") && 
+                                    !branchEl.trim().startsWith("THEN(")) {
+                                    String indentedBranchEl = branchEl.replace("\n", "\n" + indent(indentLevel + 2));
+                                    finalBranchEl = "THEN(\n" + indent(indentLevel + 2) + indentedBranchEl.trim() + 
+                                                   "\n" + indent(indentLevel + 1) + ")";
+                                } else if (branchEl.trim().startsWith("SWITCH(") || branchEl.trim().startsWith("IF(") || 
+                                           branchEl.trim().startsWith("WHEN(")) {
+                                    finalBranchEl = branchEl;
+                                } else {
+                                    finalBranchEl = indent(indentLevel + 1) + branchEl.trim();
+                                }
+                                parallelEls.add(finalBranchEl);
+                            }
+                        }
+                        if (!parallelEls.isEmpty()) {
+                            el.append(",\n").append(indent(indentLevel)).append("WHEN(\n");
+                            el.append(String.join(",\n", parallelEls));
+                            el.append("\n").append(indent(indentLevel)).append(")");
+                        }
+                    }
+                }
+            } else {
+                // 没有指向汇聚点的出边，正常递归生成
+                if (nextEdges.size() == 1) {
+                    String nextEl = generateElUntilConverge(nextEdges.get(0).targetId, convergeNodeId, 
+                            nodeMap, outEdges, inEdges, new HashSet<>(visited), indentLevel);
+                    if (!nextEl.isEmpty()) {
+                        el.append(",\n").append(indent(indentLevel)).append(nextEl);
+                    }
+                } else {
+                    // 多个出边，生成 WHEN
+                    List<String> parallelEls = new ArrayList<>();
+                    for (EdgeInfo nextEdge : nextEdges) {
+                        Set<String> branchVisited = new HashSet<>(visited);
+                        String branchEl = generateElUntilConverge(nextEdge.targetId, convergeNodeId, 
+                                nodeMap, outEdges, inEdges, branchVisited, indentLevel + 1);
+                        if (!branchEl.isEmpty()) {
+                            String finalBranchEl;
+                            if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 
+                                !branchEl.trim().startsWith("IF(") && !branchEl.trim().startsWith("WHEN(") && 
+                                !branchEl.trim().startsWith("THEN(")) {
+                                String indentedBranchEl = branchEl.replace("\n", "\n" + indent(indentLevel + 2));
+                                finalBranchEl = "THEN(\n" + indent(indentLevel + 2) + indentedBranchEl.trim() + 
+                                               "\n" + indent(indentLevel + 1) + ")";
+                            } else if (branchEl.trim().startsWith("SWITCH(") || branchEl.trim().startsWith("IF(") || 
+                                       branchEl.trim().startsWith("WHEN(")) {
+                                finalBranchEl = branchEl;
+                            } else {
+                                finalBranchEl = indent(indentLevel + 1) + branchEl.trim();
+                            }
+                            parallelEls.add(finalBranchEl);
+                        }
+                    }
+                    if (!parallelEls.isEmpty()) {
+                        el.append(",\n").append(indent(indentLevel)).append("WHEN(\n");
+                        el.append(String.join(",\n", parallelEls));
+                        el.append("\n").append(indent(indentLevel)).append(")");
+                    }
+                }
+            }
+        }
         
         return el.toString();
     }

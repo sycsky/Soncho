@@ -157,7 +157,8 @@ public class SessionMessageGateway {
 
     /**
      * 发送结构化消息（struct# 开头）
-     * 解析JSON对象（包含struct数组和overview），将overview和前3条消息的content拼成一条消息，图片作为附件
+     * 解析JSON对象（包含struct数组和overview），将前3条消息的content拼成一条消息，图片作为附件
+     * 注意：overview 不会被拼接到消息内容中
      */
     @Transactional
     private Message sendStructuredMessage(UUID sessionId, String text, SenderType senderType,
@@ -198,15 +199,8 @@ public class SessionMessageGateway {
                 log.info("检测到结构化数据，将取前 {} 条消息", items.size());
             }
 
-            // 构建合并的消息内容：overview + 前3条消息的content
+            // 构建合并的消息内容：前3条消息的content（不包含overview）
             StringBuilder messageContent = new StringBuilder();
-            
-            // 添加overview（如果有）
-            if (overview != null && !overview.trim().isEmpty()) {
-                messageContent.append(overview.trim());
-                // overview后面添加多个换行
-                messageContent.append("\n");
-            }
 
             // 添加前3条消息的content，每条消息之间用多个换行分隔
             for (int i = 0; i < maxItems; i++) {

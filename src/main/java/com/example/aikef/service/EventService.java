@@ -5,6 +5,7 @@ import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.Event;
 import com.example.aikef.repository.ChatSessionRepository;
 import com.example.aikef.repository.EventRepository;
+import com.example.aikef.service.SessionMessageGateway;
 import com.example.aikef.workflow.service.AiWorkflowService;
 import jakarta.annotation.Resource;
 import jakarta.persistence.EntityNotFoundException;
@@ -35,6 +36,9 @@ public class EventService {
 
     @Resource
     private AiWorkflowService workflowService;
+
+    @Resource
+    private SessionMessageGateway messageGateway;
 
     /**
      * 获取所有事件
@@ -204,12 +208,29 @@ public class EventService {
                 ? eventData.get("message").toString() 
                 : "事件触发: " + eventName;
 
-        return workflowService.executeWorkflow(
+        AiWorkflowService.WorkflowExecutionResult result = workflowService.executeWorkflow(
                 event.getWorkflow().getId(), 
                 sessionId, 
                 triggerMessage, 
                 variables
         );
+
+        // 如果工作流执行成功且有回复，发送 AI 回复消息（类似用户对话工作流）
+        if (result.success() && result.reply() != null && !result.reply().isBlank()) {
+            try {
+                messageGateway.sendAiMessage(sessionId, result.reply());
+                log.info("事件触发工作流执行成功，已发送 AI 回复: eventName={}, sessionId={}, replyLength={}", 
+                        eventName, sessionId, result.reply().length());
+            } catch (Exception e) {
+                log.error("发送 AI 回复失败: eventName={}, sessionId={}", eventName, sessionId, e);
+                // 即使发送失败，也返回工作流执行结果
+            }
+        } else if (!result.success()) {
+            log.warn("事件触发工作流执行失败: eventName={}, sessionId={}, error={}", 
+                    eventName, sessionId, result.errorMessage());
+        }
+
+        return result;
     }
 
     /**

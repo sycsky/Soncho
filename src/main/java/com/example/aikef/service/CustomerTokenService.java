@@ -6,13 +6,16 @@ import com.example.aikef.security.CustomerPrincipal;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
 public class CustomerTokenService {
 
-    private static final Duration DEFAULT_TTL = Duration.ofDays(30);
+    private static final Logger log = LoggerFactory.getLogger(CustomerTokenService.class);
+    private static final Duration DEFAULT_TTL = Duration.ofDays(30); // 30天 = 2,592,000秒
     private static final String KEY_PREFIX = "cust_token:";
 
     private final CustomerRepository customerRepository;
@@ -27,6 +30,9 @@ public class CustomerTokenService {
         String token = "cust_" + UUID.randomUUID();
         String key = KEY_PREFIX + token;
         redisTemplate.opsForValue().set(key, customer.getId().toString(), DEFAULT_TTL);
+        log.debug("客户Token已创建: customerId={}, token前缀={}, TTL={}天 ({}秒)", 
+                customer.getId(), token.substring(0, Math.min(20, token.length())), 
+                DEFAULT_TTL.toDays(), DEFAULT_TTL.getSeconds());
         return token;
     }
 

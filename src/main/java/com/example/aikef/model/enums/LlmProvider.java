@@ -40,6 +40,11 @@ public enum LlmProvider {
     DEEPSEEK("DeepSeek", "https://api.deepseek.com/v1"),
     
     /**
+     * Google Gemini
+     */
+    GEMINI("Google Gemini", "https://generativelanguage.googleapis.com/v1beta"),
+    
+    /**
      * 自定义 OpenAI 兼容接口
      */
     CUSTOM("自定义", null);

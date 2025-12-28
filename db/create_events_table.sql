@@ -22,3 +22,5 @@ CREATE INDEX idx_events_enabled ON events(enabled);
 CREATE INDEX idx_events_sort_order ON events(sort_order);
 CREATE INDEX idx_events_workflow_id ON events(workflow_id);
 
+
+

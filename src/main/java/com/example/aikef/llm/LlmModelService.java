@@ -169,6 +169,7 @@ public class LlmModelService {
                 new ProviderInfo(LlmProvider.DASHSCOPE.name(), LlmProvider.DASHSCOPE.getDisplayName(), LlmProvider.DASHSCOPE.getDefaultBaseUrl()),
                 new ProviderInfo(LlmProvider.MOONSHOT.name(), LlmProvider.MOONSHOT.getDisplayName(), LlmProvider.MOONSHOT.getDefaultBaseUrl()),
                 new ProviderInfo(LlmProvider.DEEPSEEK.name(), LlmProvider.DEEPSEEK.getDisplayName(), LlmProvider.DEEPSEEK.getDefaultBaseUrl()),
+                new ProviderInfo(LlmProvider.GEMINI.name(), LlmProvider.GEMINI.getDisplayName(), LlmProvider.GEMINI.getDefaultBaseUrl()),
                 new ProviderInfo(LlmProvider.CUSTOM.name(), LlmProvider.CUSTOM.getDisplayName(), null)
         );
     }
