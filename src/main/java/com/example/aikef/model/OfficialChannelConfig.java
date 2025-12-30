@@ -77,8 +77,8 @@ public class OfficialChannelConfig extends AuditableEntity {
      */
     public enum ChannelType {
         WECHAT_OFFICIAL,  // 微信服务号
+        WECHAT_KF,        // 微信客服
         LINE_OFFICIAL,    // Line官方账号
         WHATSAPP_OFFICIAL // WhatsApp Business
     }
 }
-

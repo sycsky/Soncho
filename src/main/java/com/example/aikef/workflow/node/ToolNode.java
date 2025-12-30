@@ -50,16 +50,16 @@ public class ToolNode extends NodeSwitchComponent {
     public String processSwitch() throws Exception {
         long startTime = System.currentTimeMillis();
         WorkflowContext ctx = this.getContextBean(WorkflowContext.class);
-        String actualNodeId = getActualNodeId();
+        String actualNodeId = BaseWorkflowNode.resolveActualNodeId(this.getTag(), this.getNodeId(), ctx);
         JsonNode config = ctx.getNodeConfig(actualNodeId);
 
         // 获取工具ID或工具名称
-        String toolIdStr = getConfigValue(config, "toolId", null);
-        String toolName = getConfigValue(config, "toolName", null);
+        String toolIdStr = BaseWorkflowNode.readConfigString(config, "toolId", null);
+        String toolName = BaseWorkflowNode.readConfigString(config, "toolName", null);
 
         if (toolIdStr == null && toolName == null) {
             log.error("工具节点未配置 toolId 或 toolName");
-            recordExecution(ctx, actualNodeId, null, "error", startTime, false, "toolId or toolName not configured");
+            BaseWorkflowNode.recordExecution(ctx, actualNodeId, this.getNodeId(), this.getName(), null, "error", startTime, false, "toolId or toolName not configured");
             return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
         }
 
@@ -68,19 +68,25 @@ public class ToolNode extends NodeSwitchComponent {
         if (toolName != null && !toolName.isEmpty()) {
             tool = toolRepository.findByNameWithSchema(toolName).orElse(null);
         }
-        if (tool == null && toolIdStr != null && !toolIdStr.isEmpty()) {
-            tool = toolRepository.findByIdWithSchema(UUID.fromString(toolIdStr)).orElse(null);
+        if (tool == null) {
+            UUID toolId = BaseWorkflowNode.parseUuidValue(toolIdStr);
+            if (toolIdStr != null && !toolIdStr.isEmpty() && toolId == null) {
+                log.warn("无效的工具ID: {}", toolIdStr);
+            }
+            if (toolId != null) {
+                tool = toolRepository.findByIdWithSchema(toolId).orElse(null);
+            }
         }
 
         if (tool == null) {
             log.error("工具不存在: toolId={}, toolName={}", toolIdStr, toolName);
-            recordExecution(ctx, actualNodeId, null, "error", startTime, false, "tool not found");
+            BaseWorkflowNode.recordExecution(ctx, actualNodeId, this.getNodeId(), this.getName(), null, "error", startTime, false, "tool not found");
             return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
         }
 
         if (!tool.getEnabled()) {
             log.error("工具已禁用: toolName={}", tool.getName());
-            recordExecution(ctx, actualNodeId, tool.getName(), "error", startTime, false, "tool is disabled");
+            BaseWorkflowNode.recordExecution(ctx, actualNodeId, this.getNodeId(), this.getName(), tool.getName(), "error", startTime, false, "tool is disabled");
             return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
         }
 
@@ -119,7 +125,7 @@ public class ToolNode extends NodeSwitchComponent {
 
         if (!allRequiredParamsPresent) {
             log.info("工具必填参数缺失: toolName={}, missingParams={}", tool.getName(), missingParams);
-            recordExecution(ctx, actualNodeId, tool.getName(), "tag:not_executed", startTime, true, 
+            BaseWorkflowNode.recordExecution(ctx, actualNodeId, this.getNodeId(), this.getName(), tool.getName(), "tag:not_executed", startTime, true,
                     "missing required params: " + missingParams);
             return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
         }
@@ -139,8 +145,8 @@ public class ToolNode extends NodeSwitchComponent {
                     (result.output() != null ? result.output() : "工具执行成功") : 
                     ("工具执行失败: " + (result.errorMessage() != null ? result.errorMessage() : "未知错误"));
 
-            setOutput(ctx, actualNodeId, output);
-            recordExecution(ctx, actualNodeId, tool.getName(), "tag:executed", startTime, result.success(), 
+            ctx.setOutput(actualNodeId, output);
+            BaseWorkflowNode.recordExecution(ctx, actualNodeId, this.getNodeId(), this.getName(), tool.getName(), "tag:executed", startTime, result.success(),
                     result.errorMessage());
 
             // 获取路由映射，找到对应的目标节点ID
@@ -167,7 +173,7 @@ public class ToolNode extends NodeSwitchComponent {
 
         } catch (Exception e) {
             log.error("工具执行异常: toolName={}", tool.getName(), e);
-            recordExecution(ctx, actualNodeId, tool.getName(), "error", startTime, false, e.getMessage());
+            BaseWorkflowNode.recordExecution(ctx, actualNodeId, this.getNodeId(), this.getName(), tool.getName(), "error", startTime, false, e.getMessage());
             return getTargetNodeIdForNotExecuted(ctx, actualNodeId);
         }
     }
@@ -192,38 +198,6 @@ public class ToolNode extends NodeSwitchComponent {
     }
 
     /**
-     * 获取配置值
-     */
-    private String getConfigValue(JsonNode config, String key, String defaultValue) {
-        if (config == null || !config.has(key)) {
-            return defaultValue;
-        }
-        JsonNode value = config.get(key);
-        if (value.isNull()) {
-            return defaultValue;
-        }
-        return value.asText();
-    }
-
-    /**
-     * 获取实际节点ID
-     */
-    private String getActualNodeId() {
-        String tag = this.getTag();
-        if (tag != null && !tag.isEmpty()) {
-            return tag;
-        }
-        return this.getNodeId();
-    }
-
-    /**
-     * 设置节点输出
-     */
-    private void setOutput(WorkflowContext ctx, String nodeId, Object output) {
-        ctx.setOutput(nodeId, output);
-    }
-
-    /**
      * 获取 not_executed 分支的目标节点ID
      */
     private String getTargetNodeIdForNotExecuted(WorkflowContext ctx, String actualNodeId) {
@@ -242,28 +216,4 @@ public class ToolNode extends NodeSwitchComponent {
         return "tag:" + targetNodeId;
     }
 
-    /**
-     * 记录节点执行详情
-     */
-    private void recordExecution(WorkflowContext ctx, String nodeId, String toolName, 
-                                Object output, long startTime, boolean success, String errorMessage) {
-        WorkflowContext.NodeExecutionDetail detail = new WorkflowContext.NodeExecutionDetail();
-        detail.setNodeId(nodeId);
-        detail.setNodeType("tool");
-        detail.setNodeName(this.getName());
-        
-        // 从上下文中获取节点标签（来自 data.label）
-        String nodeLabel = ctx.getNodeLabels().get(nodeId);
-        detail.setNodeLabel(nodeLabel);
-        
-        detail.setInput(toolName);
-        detail.setOutput(output);
-        detail.setStartTime(startTime);
-        detail.setEndTime(System.currentTimeMillis());
-        detail.setDurationMs(detail.getEndTime() - startTime);
-        detail.setSuccess(success);
-        detail.setErrorMessage(errorMessage);
-        ctx.addNodeExecutionDetail(detail);
-    }
 }
-

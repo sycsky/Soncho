@@ -8,6 +8,7 @@ import com.example.aikef.extraction.repository.ExtractionSessionRepository;
 import com.example.aikef.llm.LangChainChatService;
 import com.example.aikef.llm.LlmModelService;
 import com.example.aikef.model.LlmModel;
+import com.example.aikef.model.enums.LlmProvider;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -708,34 +709,33 @@ public class StructuredExtractionService {
 
             // 构建 JsonObjectSchema
             dev.langchain4j.model.chat.request.json.JsonObjectSchema jsonSchema = JsonObjectSchema.builder()
-                    .properties(properties)
+                    .addProperties(properties)
                     .required(requiredFields)
                     .additionalProperties(false)
                     .build();
+            
+            List<ChatMessage> actualMessages;
+            if (messages != null && !messages.isEmpty()) {
+                actualMessages = messages;
+            } else if (prompt != null && !prompt.isBlank()) {
+                actualMessages = List.of(UserMessage.from(prompt));
+            } else {
+                actualMessages = List.of(UserMessage.from(getDefaultExtractionPrompt()));
+            }
 
-            // 构建 ResponseFormat
-            ResponseFormat responseFormat = ResponseFormat.builder()
-                    .type(ResponseFormatType.JSON)
-                    .jsonSchema(JsonSchema.builder()
-                            .name(name != null ? name : "extraction_result")
-                            .rootElement(jsonSchema)
-                            .build())
-                    .build();
+            LangChainChatService.StructuredOutputResponse response = chatService.chatWithStructuredOutputMessages(
+                    modelId,
+                    actualMessages,
+                    jsonSchema,
+                    name != null ? name : "extraction_result",
+                    null
+            );
 
-            LlmModel modelConfig = llmModelService.getModel(modelId);
+            if (response.success() && response.jsonResult() != null && !response.jsonResult().isBlank()) {
+                return response.jsonResult();
+            }
 
-            OpenAiChatModel chatModel = chatService.createOpenAiModelWithResponseFormat(modelConfig, null);
-            // 构建消息列表
-            // 构建请求
-            ChatRequest request = ChatRequest.builder()
-                    .messages(messages)
-                    .responseFormat(responseFormat)
-                    .build();
-
-            // 调用 LLM
-            ChatResponse response = chatModel.chat(request);
-
-            return response.aiMessage().text();
+            return extractAsJsonFallback(modelId, prompt, actualMessages, targetParamDefs);
 
         } catch (Exception e) {
             log.error("JSON 提取失败", e);
@@ -803,7 +803,7 @@ public class StructuredExtractionService {
             if (messages != null && !messages.isEmpty()) {
                 for (ChatMessage msg : messages) {
                     if (msg instanceof UserMessage) {
-                        extractPrompt.append("用户: ").append(((UserMessage) msg).text()).append("\n");
+                        extractPrompt.append("用户: ").append(((UserMessage) msg).singleText()).append("\n");
                     } else if (msg instanceof AiMessage) {
                         extractPrompt.append("助手: ").append(((AiMessage) msg).text()).append("\n");
                     }

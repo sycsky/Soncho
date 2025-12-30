@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 工作流节点基类
@@ -16,6 +17,64 @@ import java.util.Map;
 public abstract class BaseWorkflowNode extends NodeComponent {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
+
+    static String resolveActualNodeId(String tag, String nodeId, WorkflowContext ctx) {
+        if (tag != null && !tag.isEmpty()) {
+            if (ctx != null) {
+                JsonNode config = ctx.getNodeConfig(tag);
+                if (config != null) {
+                    return tag;
+                }
+            }
+            return tag;
+        }
+        return nodeId;
+    }
+
+    static String readConfigString(JsonNode config, String key, String defaultValue) {
+        if (config == null || !config.has(key) || config.get(key).isNull()) {
+            return defaultValue;
+        }
+        return config.get(key).asText(defaultValue);
+    }
+
+    static int readConfigInt(JsonNode config, String key, int defaultValue) {
+        if (config == null || !config.has(key) || config.get(key).isNull()) {
+            return defaultValue;
+        }
+        return config.get(key).asInt(defaultValue);
+    }
+
+    static UUID parseUuidValue(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    static void recordExecution(WorkflowContext ctx, String nodeId, String nodeType, String nodeName, Object input, Object output, long startTime, boolean success, String errorMessage) {
+        WorkflowContext.NodeExecutionDetail detail = new WorkflowContext.NodeExecutionDetail();
+        detail.setNodeId(nodeId);
+        detail.setNodeType(nodeType);
+        detail.setNodeName(nodeName);
+
+        Map<String, String> nodeLabels = ctx.getNodeLabels();
+        String nodeLabel = nodeLabels != null ? nodeLabels.get(nodeId) : null;
+        detail.setNodeLabel(nodeLabel);
+
+        detail.setInput(input);
+        detail.setOutput(output);
+        detail.setStartTime(startTime);
+        detail.setEndTime(System.currentTimeMillis());
+        detail.setDurationMs(detail.getEndTime() - startTime);
+        detail.setSuccess(success);
+        detail.setErrorMessage(errorMessage);
+        ctx.addNodeExecutionDetail(detail);
+    }
 
     /**
      * 获取工作流上下文
@@ -67,8 +126,8 @@ public abstract class BaseWorkflowNode extends NodeComponent {
      */
     protected String getConfigString(String key) {
         JsonNode config = getNodeConfig();
-        if (config != null && config.has(key)) {
-            return config.get(key).asText();
+        if (config != null && config.has(key) && !config.get(key).isNull()) {
+            return config.get(key).asText(null);
         }
         return null;
     }
@@ -86,7 +145,7 @@ public abstract class BaseWorkflowNode extends NodeComponent {
      */
     protected Integer getConfigInt(String key, Integer defaultValue) {
         JsonNode config = getNodeConfig();
-        if (config != null && config.has(key)) {
+        if (config != null && config.has(key) && !config.get(key).isNull()) {
             return config.get(key).asInt(defaultValue);
         }
         return defaultValue;
@@ -97,10 +156,40 @@ public abstract class BaseWorkflowNode extends NodeComponent {
      */
     protected Boolean getConfigBoolean(String key, Boolean defaultValue) {
         JsonNode config = getNodeConfig();
-        if (config != null && config.has(key)) {
+        if (config != null && config.has(key) && !config.get(key).isNull()) {
             return config.get(key).asBoolean(defaultValue);
         }
         return defaultValue;
+    }
+
+    protected Double getConfigDouble(String key, Double defaultValue) {
+        JsonNode config = getNodeConfig();
+        if (config == null || !config.has(key) || config.get(key).isNull()) {
+            return defaultValue;
+        }
+        JsonNode value = config.get(key);
+        if (value.isNumber()) {
+            return value.doubleValue();
+        }
+        if (value.isTextual()) {
+            try {
+                return Double.parseDouble(value.asText());
+            } catch (NumberFormatException e) {
+                return defaultValue;
+            }
+        }
+        return value.asDouble(defaultValue != null ? defaultValue : 0.0);
+    }
+
+    protected UUID parseUuid(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**
@@ -173,4 +262,3 @@ public abstract class BaseWorkflowNode extends NodeComponent {
         ctx.addNodeExecutionDetail(detail);
     }
 }
-

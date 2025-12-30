@@ -148,9 +148,9 @@ public class OfficialChannelService {
     private String getDisplayName(OfficialChannelConfig.ChannelType channelType) {
         return switch (channelType) {
             case WECHAT_OFFICIAL -> "微信服务号";
+            case WECHAT_KF -> "微信客服";
             case LINE_OFFICIAL -> "Line官方账号";
             case WHATSAPP_OFFICIAL -> "WhatsApp Business";
         };
     }
 }
-

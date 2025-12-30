@@ -20,14 +20,10 @@ import com.yomahub.liteflow.annotation.LiteflowComponent;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.*;
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.openai.OpenAiChatModel;
 import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.time.Duration;
 import java.util.*;
 import java.util.Map;
 
@@ -141,7 +137,7 @@ public class LlmNode extends BaseWorkflowNode {
 
         // 如果有工具，使用带工具的调用方式
         if (!toolSpecs.isEmpty()) {
-            handleLlmCallWithTools(ctx, messages, toolSpecs, modelIdStr, temperature, startTime);
+            handleLlmCallWithTools(ctx, messages, toolSpecs, modelIdStr, temperature, maxTokens, startTime);
         } else {
             // 普通 LLM 调用
             handleNormalLlmCall(ctx, messages, modelIdStr, systemPrompt, temperature, maxTokens, startTime);
@@ -157,31 +153,14 @@ public class LlmNode extends BaseWorkflowNode {
             List<ToolSpecification> toolSpecs,
             String modelIdStr,
             Double temperature,
+            Integer maxTokens,
             long startTime) throws Exception {
 
         // 增强系统提示词，引导 LLM 在识别到意图时强制调用工具
 //        enhanceMessagesForToolCall(messages, toolSpecs);
 
-        // 获取模型配置
-        var modelConfig = getModelConfig(modelIdStr);
-        
-        // 创建支持工具的 ChatModel
-        OpenAiChatModel chatModel = OpenAiChatModel.builder()
-                .apiKey(modelConfig.getApiKey())
-                .baseUrl(modelConfig.getBaseUrl())
-                .modelName(modelConfig.getModelName())
-                .temperature(temperature != null ? temperature : modelConfig.getDefaultTemperature())
-                .timeout(Duration.ofSeconds(60))
-                .build();
-
-        // 构建带工具的请求
-        ChatRequest request = ChatRequest.builder()
-                .messages(messages)
-                .toolSpecifications(toolSpecs)
-                .build();
-
-        // 调用 LLM
-        ChatResponse response = chatModel.chat(request);
+        UUID modelId = parseModelId(modelIdStr);
+        ChatResponse response = langChainChatService.chatWithTools(modelId, messages, toolSpecs, temperature, maxTokens);
         AiMessage aiMessage = response.aiMessage();
 
         log.info("LLM 响应: hasToolExecutionRequests={}, text={}", 
@@ -354,7 +333,7 @@ public class LlmNode extends BaseWorkflowNode {
 
         // 获取模型ID
         String modelIdStr = getConfigString("modelId", null);
-        UUID modelId = modelIdStr != null ? UUID.fromString(modelIdStr) : null;
+        UUID modelId = parseModelId(modelIdStr);
 
         // 继续参数收集
         ToolCallProcessor.ToolCallProcessResult result = 
@@ -522,25 +501,14 @@ public class LlmNode extends BaseWorkflowNode {
         }
 
         // 调用 LLM
-        LangChainChatService.LlmChatResponse response;
-        if (modelIdStr != null && !modelIdStr.isEmpty()) {
-            UUID modelId = UUID.fromString(modelIdStr);
-            response = langChainChatService.chatWithMessages(
-                    modelId,
-                    systemPrompt,
-                    historyMessages,
-                    temperature,
-                    maxTokens
-            );
-        } else {
-            response = langChainChatService.chatWithMessages(
-                    null,
-                    systemPrompt,
-                    historyMessages,
-                    temperature,
-                    maxTokens
-            );
-        }
+        UUID modelId = parseModelId(modelIdStr);
+        LangChainChatService.LlmChatResponse response = langChainChatService.chatWithMessages(
+                modelId,
+                systemPrompt,
+                historyMessages,
+                temperature,
+                maxTokens
+        );
 
         if (!response.success()) {
             throw new RuntimeException("LLM 调用失败: " + response.errorMessage());
@@ -792,18 +760,6 @@ public class LlmNode extends BaseWorkflowNode {
     }
 
     /**
-     * 获取模型配置
-     */
-    private com.example.aikef.model.LlmModel getModelConfig(String modelIdStr) {
-        if (modelIdStr != null && !modelIdStr.isEmpty()) {
-            return llmModelService.getModel(UUID.fromString(modelIdStr));
-        } else {
-            return llmModelService.getDefaultModel()
-                    .orElseThrow(() -> new RuntimeException("未配置默认模型"));
-        }
-    }
-
-    /**
      * 构建输入信息（用于日志记录）
      */
     private String buildInputInfo(List<ChatMessage> messages) {
@@ -822,11 +778,15 @@ public class LlmNode extends BaseWorkflowNode {
         return sb.toString();
     }
 
-    private Double getConfigDouble(String key, Double defaultValue) {
-        var config = getNodeConfig();
-        if (config != null && config.has(key) && !config.get(key).isNull()) {
-            return config.get(key).asDouble(defaultValue != null ? defaultValue : 0.0);
+    private UUID parseModelId(String modelIdStr) {
+        if (modelIdStr == null || modelIdStr.isBlank()) {
+            return null;
         }
-        return defaultValue;
+        try {
+            return UUID.fromString(modelIdStr);
+        } catch (Exception e) {
+            log.warn("无效的模型ID: {}", modelIdStr);
+            return null;
+        }
     }
 }

@@ -2,11 +2,11 @@ package com.example.aikef.workflow.node;
 
 import com.example.aikef.extraction.model.FieldDefinition;
 import com.example.aikef.llm.LangChainChatService;
-import com.example.aikef.llm.LlmModelService;
 import com.example.aikef.tool.model.AiTool;
 import com.example.aikef.tool.repository.AiToolRepository;
 import com.example.aikef.workflow.context.WorkflowContext;
 import com.example.aikef.workflow.util.HistoryMessageLoader;
+import com.example.aikef.workflow.util.TemplateEngine;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,30 +54,16 @@ public class ParamExtractNode extends NodeSwitchComponent {
     private LangChainChatService langChainChatService;
 
     @Resource
-    private LlmModelService llmModelService;
-
-    @Resource
     private HistoryMessageLoader historyMessageLoader;
 
     @Resource
     private ObjectMapper objectMapper;
 
-    /**
-     * 获取实际的节点 ID（ReactFlow 节点 ID）
-     */
-    private String getActualNodeId() {
-        String tag = this.getTag();
-        if (tag != null && !tag.isEmpty()) {
-            return tag;
-        }
-        return this.getNodeId();
-    }
-
     @Override
     public String processSwitch() throws Exception {
         long startTime = System.currentTimeMillis();
         WorkflowContext ctx = this.getContextBean(WorkflowContext.class);
-        String actualNodeId = getActualNodeId();
+        String actualNodeId = BaseWorkflowNode.resolveActualNodeId(this.getTag(), this.getNodeId(), ctx);
         JsonNode config = ctx.getNodeConfig(actualNodeId);
 
         if (config == null) {
@@ -86,8 +72,8 @@ public class ParamExtractNode extends NodeSwitchComponent {
         }
 
         // 获取工具ID或工具名称
-        String toolIdStr = getConfigValue(config, "toolId", null);
-        String toolName = getConfigValue(config, "toolName", null);
+        String toolIdStr = BaseWorkflowNode.readConfigString(config, "toolId", null);
+        String toolName = BaseWorkflowNode.readConfigString(config, "toolName", null);
 
         if (toolIdStr == null && toolName == null) {
             log.error("参数提取节点未配置 toolId 或 toolName");
@@ -99,8 +85,14 @@ public class ParamExtractNode extends NodeSwitchComponent {
         if (toolName != null && !toolName.isEmpty()) {
             tool = toolRepository.findByNameWithSchema(toolName).orElse(null);
         }
-        if (tool == null && toolIdStr != null && !toolIdStr.isEmpty()) {
-            tool = toolRepository.findByIdWithSchema(UUID.fromString(toolIdStr)).orElse(null);
+        if (tool == null) {
+            UUID toolId = BaseWorkflowNode.parseUuidValue(toolIdStr);
+            if (toolIdStr != null && !toolIdStr.isEmpty() && toolId == null) {
+                log.warn("无效的工具ID: {}", toolIdStr);
+            }
+            if (toolId != null) {
+                tool = toolRepository.findByIdWithSchema(toolId).orElse(null);
+            }
         }
 
         if (tool == null) {
@@ -130,7 +122,7 @@ public class ParamExtractNode extends NodeSwitchComponent {
 
         // 获取历史聊天记录
         List<LangChainChatService.ChatHistoryMessage> chatHistory = new ArrayList<>();
-        int historyCount = getConfigInt(config, "historyCount", 0);
+        int historyCount = BaseWorkflowNode.readConfigInt(config, "historyCount", 0);
         if (historyCount > 0 && ctx.getSessionId() != null) {
             chatHistory = loadHistoryMessages(ctx.getSessionId(), historyCount, ctx.getMessageId());
             log.debug("加载了 {} 条历史消息用于参数提取", chatHistory.size());
@@ -143,18 +135,14 @@ public class ParamExtractNode extends NodeSwitchComponent {
         }
 
         // 获取模型ID
-        String modelIdStr = getConfigValue(config, "modelId", null);
-        UUID modelId = null;
-        if (modelIdStr != null && !modelIdStr.isEmpty()) {
-            try {
-                modelId = UUID.fromString(modelIdStr);
-            } catch (Exception e) {
-                log.warn("无效的模型ID: {}", modelIdStr);
-            }
+        String modelIdStr = BaseWorkflowNode.readConfigString(config, "modelId", null);
+        UUID modelId = BaseWorkflowNode.parseUuidValue(modelIdStr);
+        if (modelIdStr != null && !modelIdStr.isEmpty() && modelId == null) {
+            log.warn("无效的模型ID: {}", modelIdStr);
         }
 
         // 构建系统提示词
-        String systemPrompt = buildSystemPrompt(config, extractParamDefs, tool.getName());
+        String systemPrompt = buildSystemPrompt(ctx, config, extractParamDefs, tool.getName());
 
         // 使用LLM提取参数
         Map<String, Object> extractedParams = extractParametersWithLLM(
@@ -218,10 +206,10 @@ public class ParamExtractNode extends NodeSwitchComponent {
     /**
      * 构建系统提示词
      */
-    private String buildSystemPrompt(JsonNode config, List<FieldDefinition> paramDefs, String toolName) {
-        String customPrompt = getConfigValue(config, "systemPrompt", null);
+    private String buildSystemPrompt(WorkflowContext ctx, JsonNode config, List<FieldDefinition> paramDefs, String toolName) {
+        String customPrompt = BaseWorkflowNode.readConfigString(config, "systemPrompt", null);
         if (customPrompt != null && !customPrompt.trim().isEmpty()) {
-            return customPrompt;
+            return TemplateEngine.render(customPrompt, ctx);
         }
 
         StringBuilder sb = new StringBuilder();
@@ -363,33 +351,4 @@ public class ParamExtractNode extends NodeSwitchComponent {
                 })
                 .collect(Collectors.toList());
     }
-
-    /**
-     * 获取配置值
-     */
-    private String getConfigValue(JsonNode config, String key, String defaultValue) {
-        if (config == null || !config.has(key)) {
-            return defaultValue;
-        }
-        JsonNode value = config.get(key);
-        if (value.isNull()) {
-            return defaultValue;
-        }
-        return value.asText();
-    }
-
-    /**
-     * 获取配置整数值
-     */
-    private int getConfigInt(JsonNode config, String key, int defaultValue) {
-        if (config == null || !config.has(key)) {
-            return defaultValue;
-        }
-        JsonNode value = config.get(key);
-        if (value.isNull()) {
-            return defaultValue;
-        }
-        return value.asInt(defaultValue);
-    }
 }
-

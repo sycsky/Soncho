@@ -53,6 +53,28 @@ public class OfficialChannelWebhookController {
         return ResponseEntity.ok("OK");
     }
 
+    @RequestMapping(value = "/wechat_kf/webhook", method = {RequestMethod.GET, RequestMethod.POST})
+    public ResponseEntity<String> wechatKfWebhook(
+            @RequestParam(required = false) String signature,
+            @RequestParam(required = false) String timestamp,
+            @RequestParam(required = false) String nonce,
+            @RequestParam(required = false) String echostr,
+            @RequestBody(required = false) String body) {
+
+        log.info("收到微信客服Webhook: method={}, signature={}, echostr={}",
+                body != null ? "POST" : "GET", signature, echostr);
+
+        if (echostr != null) {
+            return messageService.verifyWechatKfWebhook(signature, timestamp, nonce, echostr);
+        }
+
+        if (body != null) {
+            return messageService.handleWechatKfMessage(body, signature, timestamp, nonce);
+        }
+
+        return ResponseEntity.ok("OK");
+    }
+
     /**
      * 接收Line官方账号Webhook消息
      * 

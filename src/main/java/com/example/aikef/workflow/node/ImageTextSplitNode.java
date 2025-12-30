@@ -8,24 +8,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yomahub.liteflow.annotation.LiteflowComponent;
-import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.SystemMessage;
-import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ResponseFormat;
-import dev.langchain4j.model.chat.request.ResponseFormatType;
 import dev.langchain4j.model.chat.request.json.JsonArraySchema;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
-import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.chat.request.json.JsonStringSchema;
-import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.model.openai.OpenAiChatModel;
 import jakarta.annotation.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -121,15 +110,6 @@ public class ImageTextSplitNode extends BaseWorkflowNode {
             // 获取模型配置
             LlmModel modelConfig = getModelConfig(modelIdStr);
 
-            // 创建支持结构化输出的 ChatModel
-            OpenAiChatModel chatModel = OpenAiChatModel.builder()
-                    .apiKey(modelConfig.getApiKey())
-                    .baseUrl(modelConfig.getBaseUrl())
-                    .modelName(modelConfig.getModelName())
-                    .temperature(1.0) // 使用较低温度保证输出稳定性
-                    .timeout(Duration.ofSeconds(60))
-                    .build();
-
             // 构建 JSON Schema（对象，包含 struct 数组和 overview 介绍文字）
             Map<String, dev.langchain4j.model.chat.request.json.JsonSchemaElement> itemProperties = new LinkedHashMap<>();
             itemProperties.put("img", JsonStringSchema.builder()
@@ -140,7 +120,7 @@ public class ImageTextSplitNode extends BaseWorkflowNode {
                     .build());
 
             JsonObjectSchema itemSchema = JsonObjectSchema.builder()
-                    .properties(itemProperties)
+                    .addProperties(itemProperties)
                     .required("img", "content")
                     .build();
 
@@ -154,39 +134,25 @@ public class ImageTextSplitNode extends BaseWorkflowNode {
                     .build());
 
             JsonObjectSchema rootSchema = JsonObjectSchema.builder()
-                    .properties(rootProperties)
+                    .addProperties(rootProperties)
                     .required("struct", "overview")
                     .build();
+            
+            LangChainChatService.StructuredOutputResponse response = langChainChatService.chatWithStructuredOutput(
+                    modelConfig.getId(),
+                    systemPrompt,
+                    extractionPrompt,
+                    rootSchema,
+                    "image_text_items",
+                    1.0
+            );
 
-            JsonSchema jsonSchema = JsonSchema.builder()
-                    .name("image_text_items")
-                    .rootElement(rootSchema)
-                    .build();
-
-            // 构建消息列表
-            List<ChatMessage> messages = new ArrayList<>();
-            if (systemPrompt != null && !systemPrompt.isEmpty()) {
-                messages.add(SystemMessage.from(systemPrompt));
+            if (!response.success() || response.jsonResult() == null || response.jsonResult().trim().isEmpty()) {
+                log.warn("LLM结构化输出失败: {}", response.errorMessage());
+                return null;
             }
-            messages.add(UserMessage.from(extractionPrompt));
 
-            // 构建 ResponseFormat
-            ResponseFormat responseFormat = ResponseFormat.builder()
-                    .type(ResponseFormatType.JSON)
-                    .jsonSchema(jsonSchema)
-                    .build();
-
-            // 构建请求
-            ChatRequest request = ChatRequest.builder()
-                    .messages(messages)
-                    .responseFormat(responseFormat)
-                    .build();
-
-            // 调用 LLM
-            ChatResponse response = chatModel.chat(request);
-            AiMessage aiMessage = response.aiMessage();
-
-            String jsonText = aiMessage.text();
+            String jsonText = response.jsonResult();
             if (jsonText == null || jsonText.trim().isEmpty()) {
                 log.warn("LLM返回为空，无法提取图文数据");
                 return null;
@@ -346,5 +312,3 @@ public class ImageTextSplitNode extends BaseWorkflowNode {
         }
     }
 }
-
-

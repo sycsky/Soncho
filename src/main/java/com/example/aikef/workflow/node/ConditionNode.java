@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.yomahub.liteflow.annotation.LiteflowComponent;
 import com.yomahub.liteflow.core.NodeBooleanComponent;
 
-import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -16,31 +15,17 @@ import java.util.regex.Pattern;
 @LiteflowComponent("condition")
 public class ConditionNode extends NodeBooleanComponent {
 
-    /**
-     * 获取实际的节点 ID（ReactFlow 节点 ID）
-     * EL 表达式中使用 node("componentId").tag("instanceId") 格式
-     * 通过 getTag() 获取 instanceId
-     */
-    private String getActualNodeId() {
-        // 使用 tag 获取 ReactFlow 节点 ID
-        String tag = this.getTag();
-        if (tag != null && !tag.isEmpty()) {
-            return tag;
-        }
-        // 回退到 nodeId
-        return this.getNodeId();
-    }
-
     @Override
     public boolean processBoolean() throws Exception {
         long startTime = System.currentTimeMillis();
         WorkflowContext ctx = this.getContextBean(WorkflowContext.class);
-        JsonNode config = ctx.getNodeConfig(this.getNodeId());
+        String actualNodeId = BaseWorkflowNode.resolveActualNodeId(this.getTag(), this.getNodeId(), ctx);
+        JsonNode config = ctx.getNodeConfig(actualNodeId);
         
         boolean result = false;
-        String conditionType = getConfigValue(config, "conditionType", "contains");
-        String targetValue = getConfigValue(config, "value", "");
-        String sourceType = getConfigValue(config, "sourceType", "lastOutput"); // lastOutput, userMessage, intent, variable
+        String conditionType = BaseWorkflowNode.readConfigString(config, "conditionType", "contains");
+        String targetValue = BaseWorkflowNode.readConfigString(config, "value", "");
+        String sourceType = BaseWorkflowNode.readConfigString(config, "sourceType", "lastOutput"); // lastOutput, userMessage, intent, variable
         
         // 获取要判断的值
         String sourceValue = getSourceValue(ctx, sourceType, config);
@@ -58,30 +43,19 @@ public class ConditionNode extends NodeBooleanComponent {
             case "isNotEmpty" -> sourceValue != null && !sourceValue.trim().isEmpty();
             case "intentEquals" -> targetValue.equals(ctx.getIntent());
             case "confidenceGreaterThan" -> {
-                Double threshold = Double.parseDouble(targetValue);
-                yield ctx.getIntentConfidence() != null && ctx.getIntentConfidence() > threshold;
+                Double threshold;
+                try {
+                    threshold = Double.parseDouble(targetValue);
+                } catch (Exception e) {
+                    threshold = null;
+                }
+                yield threshold != null && ctx.getIntentConfidence() != null && ctx.getIntentConfidence() > threshold;
             }
             default -> false;
         };
         
         // 记录执行详情
-        WorkflowContext.NodeExecutionDetail detail = new WorkflowContext.NodeExecutionDetail();
-        String actualNodeId = getActualNodeId();
-        detail.setNodeId(actualNodeId);
-        detail.setNodeType("condition");
-        
-        // 从上下文中获取节点标签（来自 data.label）
-        Map<String, String> nodeLabels = ctx.getNodeLabels();
-        String nodeLabel = nodeLabels != null ? nodeLabels.get(actualNodeId) : null;
-        detail.setNodeLabel(nodeLabel);
-        
-        detail.setInput(sourceValue);
-        detail.setOutput(result);
-        detail.setStartTime(startTime);
-        detail.setEndTime(System.currentTimeMillis());
-        detail.setDurationMs(detail.getEndTime() - startTime);
-        detail.setSuccess(true);
-        ctx.addNodeExecutionDetail(detail);
+        BaseWorkflowNode.recordExecution(ctx, actualNodeId, this.getNodeId(), this.getName(), sourceValue, result, startTime, true, null);
         
         return result;
     }
@@ -92,24 +66,17 @@ public class ConditionNode extends NodeBooleanComponent {
             case "query", "userMessage" -> ctx.getQuery();
             case "intent" -> ctx.getIntent();
             case "variable" -> {
-                String variableName = getConfigValue(config, "variableName", "");
+                String variableName = BaseWorkflowNode.readConfigString(config, "variableName", "");
                 Object value = ctx.getVariable(variableName);
                 yield value != null ? value.toString() : null;
             }
             case "entity" -> {
-                String entityName = getConfigValue(config, "entityName", "");
+                String entityName = BaseWorkflowNode.readConfigString(config, "entityName", "");
                 Object value = ctx.getEntities().get(entityName);
                 yield value != null ? value.toString() : null;
             }
             default -> ctx.getLastOutput();
         };
-    }
-
-    private String getConfigValue(JsonNode config, String key, String defaultValue) {
-        if (config != null && config.has(key)) {
-            return config.get(key).asText(defaultValue);
-        }
-        return defaultValue;
     }
 }
 

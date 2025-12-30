@@ -45,6 +45,11 @@ public enum LlmProvider {
     GEMINI("Google Gemini", "https://generativelanguage.googleapis.com/v1beta"),
     
     /**
+     * HuggingFace
+     */
+    HUGGINGFACE("HuggingFace", "https://router.huggingface.co/v1"),
+    
+    /**
      * 自定义 OpenAI 兼容接口
      */
     CUSTOM("自定义", null);
@@ -65,4 +70,3 @@ public enum LlmProvider {
         return defaultBaseUrl;
     }
 }
-

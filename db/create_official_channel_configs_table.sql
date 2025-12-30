@@ -1,7 +1,7 @@
 -- 创建官方渠道配置表
 CREATE TABLE IF NOT EXISTS official_channel_configs (
     id CHAR(36) PRIMARY KEY,
-    channel_type VARCHAR(20) NOT NULL UNIQUE COMMENT '渠道类型（WECHAT_OFFICIAL, LINE_OFFICIAL, WHATSAPP_OFFICIAL）',
+    channel_type VARCHAR(20) NOT NULL UNIQUE COMMENT '渠道类型（WECHAT_OFFICIAL, WECHAT_KF, LINE_OFFICIAL, WHATSAPP_OFFICIAL）',
     display_name VARCHAR(100) COMMENT '渠道显示名称',
     enabled BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否启用',
     config_json TEXT COMMENT '配置信息（JSON格式，存储各平台特定的配置）',
@@ -16,4 +16,3 @@ CREATE TABLE IF NOT EXISTS official_channel_configs (
     INDEX idx_category_id (category_id),
     FOREIGN KEY (category_id) REFERENCES session_categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='官方渠道配置表';
-

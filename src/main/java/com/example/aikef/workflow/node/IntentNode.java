@@ -65,28 +65,13 @@ public class IntentNode extends NodeSwitchComponent {
     @Resource
     private HistoryMessageLoader historyMessageLoader;
 
-    /**
-     * 获取实际的节点 ID（ReactFlow 节点 ID）
-     * EL 表达式中使用 node("componentId").tag("instanceId") 格式
-     * 通过 getTag() 获取 instanceId
-     */
-    private String getActualNodeId() {
-        // 使用 tag 获取 ReactFlow 节点 ID
-        String tag = this.getTag();
-        if (tag != null && !tag.isEmpty()) {
-            return tag;
-        }
-        // 回退到 nodeId
-        return this.getNodeId();
-    }
-
     @Override
     public String processSwitch() throws Exception {
 
         log.info("开始执行意图识别节点");
         long startTime = System.currentTimeMillis();
         WorkflowContext ctx = this.getContextBean(WorkflowContext.class);
-        String actualNodeId = getActualNodeId();
+        String actualNodeId = BaseWorkflowNode.resolveActualNodeId(this.getTag(), this.getNodeId(), ctx);
         JsonNode config = ctx.getNodeConfig(actualNodeId);
         
         String userMessage = ctx.getQuery();
@@ -104,7 +89,7 @@ public class IntentNode extends NodeSwitchComponent {
         
         // 2. 获取历史聊天记录（如果配置了 historyCount）
         List<LangChainChatService.ChatHistoryMessage> chatHistory = new ArrayList<>();
-        int historyCount = getConfigInt(config, "historyCount", 0);
+        int historyCount = BaseWorkflowNode.readConfigInt(config, "historyCount", 0);
         boolean useHistoryOnly = historyCount >= 1; // 如果 historyCount >= 1，只使用历史记录
         if (historyCount > 0 && ctx.getSessionId() != null) {
             chatHistory = loadHistoryMessages(ctx.getSessionId(), historyCount, ctx.getMessageId());
@@ -123,7 +108,7 @@ public class IntentNode extends NodeSwitchComponent {
         }
         
         // 3. 识别意图，返回匹配的意图 id（即 sourceHandle）
-        String recognitionType = getConfigValue(config, "recognitionType", "llm");
+        String recognitionType = BaseWorkflowNode.readConfigString(config, "recognitionType", "llm");
         String matchedIntentId;
         String matchedIntentLabel;
         double confidence;
@@ -185,7 +170,22 @@ public class IntentNode extends NodeSwitchComponent {
                 userMessage, matchedIntentLabel, matchedIntentId, confidence, targetNodeId);
         
         // 记录执行详情
-        recordExecution(ctx, userMessage, matchedIntentId, matchedIntentLabel, confidence, targetNodeId, startTime);
+        BaseWorkflowNode.recordExecution(
+                ctx,
+                actualNodeId,
+                this.getNodeId(),
+                this.getName(),
+                userMessage,
+                Map.of(
+                        "intentId", matchedIntentId,
+                        "intentLabel", matchedIntentLabel,
+                        "confidence", confidence,
+                        "targetNode", targetNodeId
+                ),
+                startTime,
+                true,
+                null
+        );
         
         // 返回 tag:targetNodeId 格式，LiteFlow SWITCH 会匹配 TO 列表中 tag 为 targetNodeId 的节点
         return "tag:" + targetNodeId;
@@ -243,7 +243,7 @@ public class IntentNode extends NodeSwitchComponent {
         }
         
         // 合并自定义提示（如果配置了）
-        String customPrompt = getConfigValue(config, "customPrompt", null);
+        String customPrompt = BaseWorkflowNode.readConfigString(config, "customPrompt", null);
         String systemPrompt;
         if (customPrompt != null && !customPrompt.trim().isEmpty()) {
             // 支持模板变量替换（如 {{sys.query}}, {{sys.intent}} 等）
@@ -254,14 +254,18 @@ public class IntentNode extends NodeSwitchComponent {
         }
         
         try {
-            String modelIdStr = getConfigValue(config, "modelId", null);
-            String modelCode = getConfigValue(config, "modelCode", null);
+            String modelIdStr = BaseWorkflowNode.readConfigString(config, "modelId", null);
+            String modelCode = BaseWorkflowNode.readConfigString(config, "modelCode", null);
             
             LangChainChatService.LlmChatResponse response;
             
             if (modelIdStr != null && !modelIdStr.isEmpty()) {
-                UUID modelId = UUID.fromString(modelIdStr);
-                response = langChainChatService.chatWithMessages(modelId, systemPrompt, chatHistory, 0.1, 100);
+                UUID modelId = BaseWorkflowNode.parseUuidValue(modelIdStr);
+                if (modelId != null) {
+                    response = langChainChatService.chatWithMessages(modelId, systemPrompt, chatHistory, 0.1, 100);
+                } else {
+                    response = langChainChatService.chatWithMessages(null, systemPrompt, chatHistory, 0.1, 100);
+                }
             } else if (modelCode != null && !modelCode.isEmpty()) {
                 response = langChainChatService.chatWithMessagesByCode(modelCode, systemPrompt, chatHistory, 0.1, 100);
             } else {
@@ -432,49 +436,8 @@ public class IntentNode extends NodeSwitchComponent {
         return historyMessages;
     }
 
-    private String getConfigValue(JsonNode config, String key, String defaultValue) {
-        if (config != null && config.has(key) && !config.get(key).isNull()) {
-            return config.get(key).asText(defaultValue);
-        }
-        return defaultValue;
-    }
-
-    private int getConfigInt(JsonNode config, String key, int defaultValue) {
-        if (config != null && config.has(key) && !config.get(key).isNull()) {
-            return config.get(key).asInt(defaultValue);
-        }
-        return defaultValue;
-    }
-
     private String getDefaultRouteId(JsonNode config) {
-        return getConfigValue(config, "defaultRouteId", "default");
-    }
-
-    private void recordExecution(WorkflowContext ctx, String userMessage, String intentId, 
-                                  String intentLabel, double confidence, String targetNode, long startTime) {
-        WorkflowContext.NodeExecutionDetail detail = new WorkflowContext.NodeExecutionDetail();
-        String actualNodeId = getActualNodeId();
-        detail.setNodeId(actualNodeId);
-        detail.setNodeType("intent");
-        detail.setNodeName(this.getName());
-        
-        // 从上下文中获取节点标签（来自 data.label）
-        Map<String, String> nodeLabels = ctx.getNodeLabels();
-        String nodeLabel = nodeLabels != null ? nodeLabels.get(actualNodeId) : null;
-        detail.setNodeLabel(nodeLabel);
-        
-        detail.setInput(userMessage);
-        detail.setOutput(Map.of(
-            "intentId", intentId,
-            "intentLabel", intentLabel,
-            "confidence", confidence,
-            "targetNode", targetNode
-        ));
-        detail.setStartTime(startTime);
-        detail.setEndTime(System.currentTimeMillis());
-        detail.setDurationMs(detail.getEndTime() - startTime);
-        detail.setSuccess(true);
-        ctx.addNodeExecutionDetail(detail);
+        return BaseWorkflowNode.readConfigString(config, "defaultRouteId", "default");
     }
 
     /**
@@ -482,5 +445,3 @@ public class IntentNode extends NodeSwitchComponent {
      */
     private record IntentMatchResult(String id, String label, double confidence) {}
 }
-
-

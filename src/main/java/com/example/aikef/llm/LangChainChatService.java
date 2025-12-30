@@ -2,11 +2,12 @@ package com.example.aikef.llm;
 
 import com.example.aikef.model.LlmModel;
 import com.example.aikef.model.enums.LlmProvider;
+import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.request.ResponseFormatType;
@@ -14,8 +15,7 @@ import dev.langchain4j.model.chat.request.json.*;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.model.zhipu.ZhipuAiChatModel;
-import dev.langchain4j.model.output.Response;
+import dev.langchain4j.community.model.zhipu.ZhipuAiChatModel;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * LangChain4j 聊天服务
- * 根据模型配置动态创建和管理 ChatLanguageModel 实例
+ * 根据模型配置动态创建和管理 ChatModel 实例
  */
 @Service
 public class LangChainChatService {
@@ -38,9 +38,9 @@ public class LangChainChatService {
 
     /**
      * 模型实例缓存
-     * key: modelId, value: ChatLanguageModel
+     * key: modelId, value: ChatModel
      */
-    private final Map<UUID, ChatLanguageModel> modelCache = new ConcurrentHashMap<>();
+    private final Map<UUID, ChatModel> modelCache = new ConcurrentHashMap<>();
 
     /**
      * 模型版本缓存（用于检测配置变更）
@@ -96,7 +96,7 @@ public class LangChainChatService {
         }
 
         // 获取或创建模型实例（如果指定了超时，创建新实例，不使用缓存）
-        ChatLanguageModel chatModel;
+        ChatModel chatModel;
         if (timeoutSeconds != null && timeoutSeconds > 60) {
             // 使用自定义超时，创建新实例（不缓存）
             chatModel = createChatModelWithTimeout(modelConfig, temperature, maxTokens, timeoutSeconds);
@@ -111,10 +111,10 @@ public class LangChainChatService {
         // 发送请求
         long startTime = System.currentTimeMillis();
         try {
-            Response<AiMessage> response = chatModel.generate(messages);
+            ChatResponse response = chatModel.chat(messages);
             long duration = System.currentTimeMillis() - startTime;
 
-            String reply = response.content().text();
+            String reply = response.aiMessage().text();
             
             // 估算 Token 使用量
             int inputTokens = estimateTokens(messages);
@@ -192,7 +192,7 @@ public class LangChainChatService {
         }
 
         // 获取或创建模型实例
-        ChatLanguageModel chatModel = getOrCreateModel(modelConfig, temperature, maxTokens);
+        ChatModel chatModel = getOrCreateModel(modelConfig, temperature, maxTokens);
 
         // 构建 LangChain4j 消息列表
         List<ChatMessage> chatMessages = buildMessagesFromList(systemPrompt, messages);
@@ -201,10 +201,10 @@ public class LangChainChatService {
         // 发送请求
         long startTime = System.currentTimeMillis();
         try {
-            Response<AiMessage> response = chatModel.generate(chatMessages);
+            ChatResponse response = chatModel.chat(chatMessages);
             long duration = System.currentTimeMillis() - startTime;
 
-            String reply = response.content().text();
+            String reply = response.aiMessage().text();
             
             int inputTokens = estimateTokens(chatMessages);
             int outputTokens = estimateTokens(reply);
@@ -250,6 +250,35 @@ public class LangChainChatService {
         return chatWithMessages(model.getId(), systemPrompt, messages, temperature, maxTokens);
     }
 
+    public ChatResponse chatWithTools(
+            UUID modelId,
+            List<ChatMessage> messages,
+            List<ToolSpecification> toolSpecifications,
+            Double temperature,
+            Integer maxTokens) {
+
+        LlmModel modelConfig;
+        if (modelId != null) {
+            modelConfig = llmModelService.getModel(modelId);
+        } else {
+            modelConfig = llmModelService.getDefaultModel()
+                    .orElseThrow(() -> new EntityNotFoundException("未配置默认模型"));
+        }
+
+        if (!modelConfig.getEnabled()) {
+            throw new IllegalStateException("模型已禁用: " + modelConfig.getName());
+        }
+
+        ChatModel chatModel = getOrCreateModel(modelConfig, temperature, maxTokens);
+        ChatRequest.Builder requestBuilder = ChatRequest.builder().messages(messages);
+
+        if (toolSpecifications != null && !toolSpecifications.isEmpty()) {
+            requestBuilder.toolSpecifications(toolSpecifications);
+        }
+
+        return chatModel.chat(requestBuilder.build());
+    }
+
     /**
      * 简单聊天（使用默认模型）
      */
@@ -292,37 +321,125 @@ public class LangChainChatService {
             throw new IllegalStateException("模型已禁用: " + modelConfig.getName());
         }
 
-        // 创建支持 ResponseFormat 的模型
-        OpenAiChatModel chatModel = createOpenAiModelWithResponseFormat(modelConfig, temperature);
+        LlmProvider provider = LlmProvider.valueOf(modelConfig.getProvider());
 
         // 构建消息
         List<ChatMessage> messages = new ArrayList<>();
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
             messages.add(SystemMessage.from(systemPrompt));
         }
-        messages.add(UserMessage.from(userMessage));
-
-        // 构建 ResponseFormat
-        ResponseFormat responseFormat = ResponseFormat.builder()
-                .type(ResponseFormatType.JSON)
-                .jsonSchema(JsonSchema.builder()
-                        .name(schemaName != null ? schemaName : "extraction_result")
-                        .rootElement(jsonSchema)
-                        .build())
-                .build();
-
-        // 构建请求
-        ChatRequest request = ChatRequest.builder()
-                .messages(messages)
-                .responseFormat(responseFormat)
-                .build();
+        String actualUserMessage = userMessage;
+        if (!supportsResponseFormat(provider)) {
+            actualUserMessage = userMessage + "\n\n请只输出一个 JSON 对象，不要输出任何额外文本。JSON 必须满足如下 JSON Schema:\n" + jsonSchema;
+        }
+        messages.add(UserMessage.from(actualUserMessage));
 
         long startTime = System.currentTimeMillis();
         try {
-            ChatResponse response = chatModel.chat(request);
+            String jsonResult;
+            if (supportsResponseFormat(provider)) {
+                ChatModel chatModel = getOrCreateModel(modelConfig, temperature, null);
+
+                ResponseFormat responseFormat = ResponseFormat.builder()
+                        .type(ResponseFormatType.JSON)
+                        .jsonSchema(JsonSchema.builder()
+                                .name(schemaName != null ? schemaName : "extraction_result")
+                                .rootElement(jsonSchema)
+                                .build())
+                        .build();
+
+                ChatRequest request = ChatRequest.builder()
+                        .messages(messages)
+                        .responseFormat(responseFormat)
+                        .build();
+
+                ChatResponse response = chatModel.chat(request);
+                jsonResult = response.aiMessage().text();
+            } else {
+                ChatModel chatModel = getOrCreateModel(modelConfig, temperature, null);
+                ChatResponse response = chatModel.chat(messages);
+                jsonResult = response.aiMessage().text();
+            }
             long duration = System.currentTimeMillis() - startTime;
 
-            String jsonResult = response.aiMessage().text();
+            log.info("结构化输出完成: model={}, duration={}ms, schema={}",
+                    modelConfig.getName(), duration, schemaName);
+
+            return new StructuredOutputResponse(
+                    true,
+                    jsonResult,
+                    null,
+                    modelConfig.getId(),
+                    modelConfig.getName(),
+                    duration
+            );
+
+        } catch (Exception e) {
+            log.error("结构化输出失败: model={}, schema={}", modelConfig.getName(), schemaName, e);
+            return new StructuredOutputResponse(
+                    false,
+                    null,
+                    e.getMessage(),
+                    modelConfig.getId(),
+                    modelConfig.getName(),
+                    System.currentTimeMillis() - startTime
+            );
+        }
+    }
+
+    public StructuredOutputResponse chatWithStructuredOutputMessages(
+            UUID modelId,
+            List<ChatMessage> messages,
+            JsonObjectSchema jsonSchema,
+            String schemaName,
+            Double temperature) {
+
+        LlmModel modelConfig;
+        if (modelId != null) {
+            modelConfig = llmModelService.getModel(modelId);
+        } else {
+            modelConfig = llmModelService.getDefaultModel()
+                    .orElseThrow(() -> new EntityNotFoundException("未配置默认模型"));
+        }
+
+        if (!modelConfig.getEnabled()) {
+            throw new IllegalStateException("模型已禁用: " + modelConfig.getName());
+        }
+
+        LlmProvider provider = LlmProvider.valueOf(modelConfig.getProvider());
+
+        List<ChatMessage> actualMessages = new ArrayList<>(messages != null ? messages : Collections.emptyList());
+        if (!supportsResponseFormat(provider)) {
+            actualMessages.add(UserMessage.from("\n\n请只输出一个 JSON 对象，不要输出任何额外文本。JSON 必须满足如下 JSON Schema:\n" + jsonSchema));
+        }
+
+        long startTime = System.currentTimeMillis();
+        try {
+            String jsonResult;
+            if (supportsResponseFormat(provider)) {
+                ChatModel chatModel = getOrCreateModel(modelConfig, temperature, null);
+
+                ResponseFormat responseFormat = ResponseFormat.builder()
+                        .type(ResponseFormatType.JSON)
+                        .jsonSchema(JsonSchema.builder()
+                                .name(schemaName != null ? schemaName : "extraction_result")
+                                .rootElement(jsonSchema)
+                                .build())
+                        .build();
+
+                ChatRequest request = ChatRequest.builder()
+                        .messages(actualMessages)
+                        .responseFormat(responseFormat)
+                        .build();
+
+                ChatResponse response = chatModel.chat(request);
+                jsonResult = response.aiMessage().text();
+            } else {
+                ChatModel chatModel = getOrCreateModel(modelConfig, temperature, null);
+                ChatResponse response = chatModel.chat(actualMessages);
+                jsonResult = response.aiMessage().text();
+            }
+            long duration = System.currentTimeMillis() - startTime;
 
             log.info("结构化输出完成: model={}, duration={}ms, schema={}",
                     modelConfig.getName(), duration, schemaName);
@@ -375,7 +492,7 @@ public class LangChainChatService {
 
         // 构建 JsonObjectSchema
         JsonObjectSchema jsonSchema = JsonObjectSchema.builder()
-                .properties(properties)
+                .addProperties(properties)
                 .required(requiredFields)
                 .additionalProperties(false)
                 .build();
@@ -447,7 +564,7 @@ public class LangChainChatService {
                 
                 JsonObjectSchema.Builder builder = JsonObjectSchema.builder()
                         .description(description)
-                        .properties(properties);
+                        .addProperties(properties);
                 
                 if (!required.isEmpty()) {
                     builder.required(required);
@@ -462,33 +579,6 @@ public class LangChainChatService {
                 yield builder.build();
             }
         };
-    }
-
-    /**
-     * 创建支持 ResponseFormat 的 OpenAI 模型
-     */
-    public OpenAiChatModel createOpenAiModelWithResponseFormat(LlmModel config, Double temperature) {
-        double temp = temperature != null ? temperature 
-                : (config.getDefaultTemperature() != null ? config.getDefaultTemperature() : 1);
-        
-        // gpt-5 及其变体版本的 temperature 如果小于 1，则设置为 1
-        // 变体包括：gpt-5, gpt-5-turbo, gpt-5o, gpt-5o-mini, gpt-5o-2024-xxx 等
-        if (config.getModelName() != null && config.getModelName().matches(".*gpt-5.*")) {
-            if (temp < 1.0) {
-                temp = 1.0;
-            }
-        }
-
-        return OpenAiChatModel.builder()
-                .apiKey(config.getApiKey())
-                .baseUrl(config.getBaseUrl())
-                .modelName(config.getModelName())
-                .temperature(temp)
-                .timeout(Duration.ofSeconds(60))
-                .strictJsonSchema(true)
-                .logRequests(true)
-                .logResponses(true)
-                .build();
     }
 
     /**
@@ -514,7 +604,7 @@ public class LangChainChatService {
     /**
      * 获取或创建模型实例
      */
-    private ChatLanguageModel getOrCreateModel(LlmModel config, Double temperature, Integer maxTokens) {
+    private ChatModel getOrCreateModel(LlmModel config, Double temperature, Integer maxTokens) {
         UUID modelId = config.getId();
         long currentVersion = config.getUpdatedAt() != null ? config.getUpdatedAt().toEpochMilli() : 0;
 
@@ -525,7 +615,7 @@ public class LangChainChatService {
         }
 
         // 创建新的模型实例
-        ChatLanguageModel chatModel = createChatModel(config, temperature, maxTokens);
+        ChatModel chatModel = createChatModel(config, temperature, maxTokens);
         modelCache.put(modelId, chatModel);
         modelVersionCache.put(modelId, currentVersion);
 
@@ -533,76 +623,108 @@ public class LangChainChatService {
     }
 
     /**
-     * 根据配置创建 ChatLanguageModel
+     * 根据配置创建 ChatModel
      */
-    private ChatLanguageModel createChatModel(LlmModel config, Double temperature, Integer maxTokens) {
+    private ChatModel createChatModel(LlmModel config, Double temperature, Integer maxTokens) {
         return createChatModelWithTimeout(config, temperature, maxTokens, 60);
     }
 
     /**
-     * 根据配置创建 ChatLanguageModel（支持自定义超时）
+     * 根据配置创建 ChatModel（支持自定义超时）
      */
-    private ChatLanguageModel createChatModelWithTimeout(LlmModel config, Double temperature, Integer maxTokens, int timeoutSeconds) {
+    private ChatModel createChatModelWithTimeout(LlmModel config, Double temperature, Integer maxTokens, int timeoutSeconds) {
         String provider = config.getProvider();
         
         // 使用节点配置的参数，如果没有则使用模型默认值，最后使用系统默认值
         double temp = temperature != null ? temperature 
                 : (config.getDefaultTemperature() != null ? config.getDefaultTemperature() : 1);
-        
-        // gpt-5 及其变体版本的 temperature 如果小于 1，则设置为 1
-        // 变体包括：gpt-5, gpt-5-turbo, gpt-5o, gpt-5o-mini, gpt-5o-2024-xxx 等
-        if (config.getModelName() != null && config.getModelName().matches(".*gpt-5.*")) {
-            if (temp < 1.0) {
-                temp = 1.0;
-            }
-        }
-        
         int tokens = maxTokens != null ? maxTokens 
                 : (config.getDefaultMaxTokens() != null ? config.getDefaultMaxTokens() : 2000);
 
         return switch (LlmProvider.valueOf(provider)) {
-            case OPENAI, CUSTOM, DASHSCOPE, MOONSHOT, DEEPSEEK, GEMINI -> createOpenAiCompatibleModel(config, temp, tokens, timeoutSeconds);
+            case OPENAI, CUSTOM, DASHSCOPE, MOONSHOT, DEEPSEEK, HUGGINGFACE -> createOpenAiCompatibleModel(config, temp, tokens, timeoutSeconds);
             case AZURE_OPENAI -> createAzureOpenAiModel(config, temp, tokens, timeoutSeconds);
             case OLLAMA -> createOllamaModel(config, temp, tokens, timeoutSeconds);
             case ZHIPU -> createZhipuModel(config, temp, tokens, timeoutSeconds);
+            case GEMINI -> throw new UnsupportedOperationException("暂不支持的提供商: " + provider);
         };
     }
 
     /**
      * 创建 OpenAI 兼容模型（包括 OpenAI、DeepSeek、Moonshot 等）
      */
-    private ChatLanguageModel createOpenAiCompatibleModel(LlmModel config, double temperature, int maxTokens) {
+    private ChatModel createOpenAiCompatibleModel(LlmModel config, double temperature, int maxTokens) {
         return createOpenAiCompatibleModel(config, temperature, maxTokens, 60);
     }
 
     /**
      * 创建 OpenAI 兼容模型（支持自定义超时）
      */
-    private ChatLanguageModel createOpenAiCompatibleModel(LlmModel config, double temperature, int maxTokens, int timeoutSeconds) {
-        // 注意：temperature 已经在 createChatModelWithTimeout 中处理过 gpt-5 的情况
-        return OpenAiChatModel.builder()
-                .apiKey(config.getApiKey())
-                .baseUrl(config.getBaseUrl())
-                .modelName(config.getModelName())
-                .temperature(temperature)
+    private ChatModel createOpenAiCompatibleModel(LlmModel config, double temperature, int maxTokens, int timeoutSeconds) {
+        String baseUrl = resolveOpenAiCompatibleBaseUrl(config);
+        if(config.getModelName().contains("gpt-5")){
+            if(temperature<1.0){
+                temperature=1.0;
+            }
+            return OpenAiChatModel.builder()
+                    .apiKey(config.getApiKey())
+                    .baseUrl(baseUrl)
+                    .modelName(config.getModelName())
+                    .temperature(temperature)
+//                    .maxCompletionTokens(maxTokens)
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .strictJsonSchema(true)
+                    .logRequests(true)
+                    .logResponses(true)
+                    .build();
+        }else{
+            return OpenAiChatModel.builder()
+                    .apiKey(config.getApiKey())
+                    .baseUrl(baseUrl)
+                    .modelName(config.getModelName())
+                    .temperature(temperature)
 //                    .maxTokens(maxTokens)
-                .timeout(Duration.ofSeconds(timeoutSeconds))
-                .logRequests(true)
-                .logResponses(true)
-                .build();
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .strictJsonSchema(true)
+                    .logRequests(true)
+                    .logResponses(true)
+                    .build();
+        }
+    }
+
+    private String resolveOpenAiCompatibleBaseUrl(LlmModel config) {
+        String configured = config.getBaseUrl();
+        if (configured != null && !configured.isBlank()) {
+            return configured;
+        }
+
+        LlmProvider provider = LlmProvider.valueOf(config.getProvider());
+        String defaultBaseUrl = provider.getDefaultBaseUrl();
+        if (defaultBaseUrl != null && !defaultBaseUrl.isBlank()) {
+            return defaultBaseUrl;
+        }
+
+        throw new IllegalArgumentException("未配置 baseUrl: model=" + config.getName() + ", provider=" + provider.name());
+    }
+
+    private boolean supportsResponseFormat(LlmProvider provider) {
+        return switch (provider) {
+            case OPENAI, AZURE_OPENAI, CUSTOM, DASHSCOPE, MOONSHOT, DEEPSEEK, HUGGINGFACE -> true;
+            case OLLAMA, ZHIPU, GEMINI -> false;
+        };
     }
 
     /**
      * 创建 Azure OpenAI 模型
      */
-    private ChatLanguageModel createAzureOpenAiModel(LlmModel config, double temperature, int maxTokens) {
+    private ChatModel createAzureOpenAiModel(LlmModel config, double temperature, int maxTokens) {
         return createAzureOpenAiModel(config, temperature, maxTokens, 60);
     }
 
     /**
      * 创建 Azure OpenAI 模型（支持自定义超时）
      */
-    private ChatLanguageModel createAzureOpenAiModel(LlmModel config, double temperature, int maxTokens, int timeoutSeconds) {
+    private ChatModel createAzureOpenAiModel(LlmModel config, double temperature, int maxTokens, int timeoutSeconds) {
         // 注意：Azure OpenAI 需要不同的配置方式
         // 这里使用 OpenAI 兼容模式
         return OpenAiChatModel.builder()
@@ -613,20 +735,21 @@ public class LangChainChatService {
                 .temperature(temperature)
                 .maxTokens(maxTokens)
                 .timeout(Duration.ofSeconds(timeoutSeconds))
+                .strictJsonSchema(true)
                 .build();
     }
 
     /**
      * 创建 Ollama 模型
      */
-    private ChatLanguageModel createOllamaModel(LlmModel config, double temperature, int maxTokens) {
+    private ChatModel createOllamaModel(LlmModel config, double temperature, int maxTokens) {
         return createOllamaModel(config, temperature, maxTokens, 120);
     }
 
     /**
      * 创建 Ollama 模型（支持自定义超时）
      */
-    private ChatLanguageModel createOllamaModel(LlmModel config, double temperature, int maxTokens, int timeoutSeconds) {
+    private ChatModel createOllamaModel(LlmModel config, double temperature, int maxTokens, int timeoutSeconds) {
         String baseUrl = config.getBaseUrl() != null ? 
                 config.getBaseUrl() : "http://localhost:11434";
         
@@ -641,7 +764,7 @@ public class LangChainChatService {
     /**
      * 创建智谱 AI 模型
      */
-    private ChatLanguageModel createZhipuModel(LlmModel config, double temperature, int maxTokens) {
+    private ChatModel createZhipuModel(LlmModel config, double temperature, int maxTokens) {
         return createZhipuModel(config, temperature, maxTokens, 60);
     }
 
@@ -649,7 +772,7 @@ public class LangChainChatService {
      * 创建智谱 AI 模型（支持自定义超时）
      * 注意：ZhipuAiChatModel 可能不支持 timeout 参数，这里保持原样
      */
-    private ChatLanguageModel createZhipuModel(LlmModel config, double temperature, int maxTokens, int timeoutSeconds) {
+    private ChatModel createZhipuModel(LlmModel config, double temperature, int maxTokens, int timeoutSeconds) {
         // ZhipuAiChatModel 可能不支持 timeout，先保持原样
         return ZhipuAiChatModel.builder()
                 .apiKey(config.getApiKey())
@@ -800,4 +923,3 @@ public class LangChainChatService {
             String content
     ) {}
 }
-

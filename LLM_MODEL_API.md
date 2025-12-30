@@ -367,7 +367,7 @@ mysql -u root -p your_database < db/create_llm_models.sql
 ├──────────────────────────────────────────────────────────┤
 │  1. LlmNode 从配置读取 modelId                             │
 │  2. LangChainChatService 根据 modelId 获取模型配置         │
-│  3. 动态创建 ChatLanguageModel 实例                        │
+│  3. 动态创建 ChatModel 实例                                │
 │  4. 发送请求并返回结果                                     │
 └──────────────────────────────────────────────────────────┘
 ```

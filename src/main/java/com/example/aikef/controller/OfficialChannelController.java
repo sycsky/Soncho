@@ -124,6 +124,7 @@ public class OfficialChannelController {
     public List<ChannelTypeInfo> getChannelTypes() {
         return List.of(
                 new ChannelTypeInfo("WECHAT_OFFICIAL", "微信服务号"),
+                new ChannelTypeInfo("WECHAT_KF", "微信客服"),
                 new ChannelTypeInfo("LINE_OFFICIAL", "Line官方账号"),
                 new ChannelTypeInfo("WHATSAPP_OFFICIAL", "WhatsApp Business")
         );
@@ -142,4 +143,3 @@ public class OfficialChannelController {
 
     public record ChannelTypeInfo(String value, String label) {}
 }
-

@@ -17,7 +17,23 @@
 
     <properties>
         <java.version>17</java.version>
+        <langchain4j.version>1.10.0</langchain4j.version>
+        <langchain4j.community.version>1.10.0-beta18</langchain4j.community.version>
+        <langchain4j.pgvector.version>1.10.0-beta18</langchain4j.pgvector.version>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>maven-central-direct</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <dependencies>
         <dependency>
@@ -85,49 +101,42 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
-            <version>0.35.0</version>
+            <version>${langchain4j.version}</version>
         </dependency>
         
         <!-- LangChain4j OpenAI 支持 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-open-ai</artifactId>
-            <version>0.35.0</version>
+            <version>${langchain4j.version}</version>
         </dependency>
         
         <!-- LangChain4j Azure OpenAI 支持 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-azure-open-ai</artifactId>
-            <version>0.35.0</version>
+            <version>${langchain4j.version}</version>
         </dependency>
         
         <!-- LangChain4j Ollama 支持（本地模型）-->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-ollama</artifactId>
-            <version>0.35.0</version>
+            <version>${langchain4j.version}</version>
         </dependency>
         
-        <!-- LangChain4j 智谱 AI 支持 -->
+        <!-- LangChain4j 智谱 AI 支持（社区模块） -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-zhipu-ai</artifactId>
-            <version>0.35.0</version>
+            <artifactId>langchain4j-community-zhipu-ai</artifactId>
+            <version>${langchain4j.community.version}</version>
         </dependency>
         
         <!-- LangChain4j PGVector 向量存储 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-pgvector</artifactId>
-            <version>0.35.0</version>
-        </dependency>
-        
-        <!-- LangChain4j 嵌入模型 -->
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-embeddings</artifactId>
-            <version>0.35.0</version>
+            <version>${langchain4j.pgvector.version}</version>
         </dependency>
         
         <!-- AWS S3 SDK v2 -->
