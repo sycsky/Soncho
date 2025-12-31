@@ -79,6 +79,14 @@ public class OfficialChannelConfig extends AuditableEntity {
         WECHAT_OFFICIAL,  // 微信服务号
         WECHAT_KF,        // 微信客服
         LINE_OFFICIAL,    // Line官方账号
-        WHATSAPP_OFFICIAL // WhatsApp Business
+        WHATSAPP_OFFICIAL, // WhatsApp Business
+        FACEBOOK_MESSENGER, // Facebook Messenger
+        INSTAGRAM,        // Instagram
+        TELEGRAM,         // Telegram
+        TWITTER,          // X (Twitter)
+        DOUYIN,           // 抖音
+        RED_BOOK,         // 小红书
+        WEIBO,            // 微博
+        EMAIL             // 邮件
     }
 }

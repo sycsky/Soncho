@@ -43,16 +43,174 @@ public class WechatOfficialAdapter {
     private final OfficialChannelService channelService;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
+    private final WechatAesUtil aesUtil;
 
     private static final ConcurrentHashMap<String, TokenCacheEntry> ACCESS_TOKEN_CACHE = new ConcurrentHashMap<>();
 
     private record TokenCacheEntry(String accessToken, long expiresAtEpochMs) {}
 
     /**
+     * 获取 Access Token
+     */
+    public String getAccessToken(OfficialChannelConfig config) {
+        Map<String, Object> configData = channelService.parseConfigJson(config);
+        String appId = (String) configData.get("appId"); // corpid
+        String appSecret = (String) configData.get("appSecret"); // corpsecret
+
+        if (appId == null || appSecret == null) {
+            throw new RuntimeException("WeChat configuration missing appId or appSecret");
+        }
+
+        TokenCacheEntry entry = ACCESS_TOKEN_CACHE.get(appId);
+        if (entry != null && entry.expiresAtEpochMs > System.currentTimeMillis()) {
+            return entry.accessToken;
+        }
+
+        String url = UriComponentsBuilder.fromHttpUrl("https://qyapi.weixin.qq.com/cgi-bin/gettoken")
+                .queryParam("corpid", appId)
+                .queryParam("corpsecret", appSecret)
+                .build()
+                .toUriString();
+
+        try {
+            String response = restTemplate.getForObject(url, String.class);
+            Map<String, Object> result = objectMapper.readValue(response, Map.class);
+
+            if (result.containsKey("access_token")) {
+                String accessToken = (String) result.get("access_token");
+                Integer expiresIn = (Integer) result.get("expires_in");
+                long expiresAt = System.currentTimeMillis() + (expiresIn * 1000L) - 60000; // Buffer 1 minute
+
+                ACCESS_TOKEN_CACHE.put(appId, new TokenCacheEntry(accessToken, expiresAt));
+                return accessToken;
+            } else {
+                throw new RuntimeException("Failed to get access token: " + response);
+            }
+        } catch (Exception e) {
+            log.error("Failed to get access token", e);
+            throw new RuntimeException("Failed to get access token", e);
+        }
+    }
+
+    public record SyncResult(List<WebhookMessageRequest> messages, String nextCursor) {}
+
+    /**
+     * 同步微信客服消息
+     */
+    public SyncResult syncMessages(OfficialChannelConfig config, String token, String cursor) {
+        String accessToken = getAccessToken(config);
+        String url = "https://qyapi.weixin.qq.com/cgi-bin/kf/sync_msg?access_token=" + accessToken;
+        
+        List<WebhookMessageRequest> allRequests = new ArrayList<>();
+        String nextCursor = cursor;
+        boolean hasMore = true;
+        
+        while (hasMore) {
+            Map<String, Object> requestBody = new java.util.HashMap<>();
+            requestBody.put("token", token);
+            requestBody.put("cursor", nextCursor);
+            requestBody.put("limit", 1000);
+            
+            try {
+                HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody);
+                String response = restTemplate.postForObject(url, entity, String.class);
+                
+                Map<String, Object> result = objectMapper.readValue(response, Map.class);
+                
+                if ((Integer) result.getOrDefault("errcode", 0) != 0) {
+                    log.error("同步消息失败: {}", response);
+                    break;
+                }
+                
+                nextCursor = (String) result.get("next_cursor");
+                Integer hasMoreInt = (Integer) result.get("has_more");
+                hasMore = hasMoreInt != null && hasMoreInt == 1;
+                
+                List<Map<String, Object>> msgList = (List<Map<String, Object>>) result.get("msg_list");
+                if (msgList == null || msgList.isEmpty()) {
+                    continue;
+                }
+                
+                for (Map<String, Object> msg : msgList) {
+                    // origin: 3-客户发送的消息, 4-系统推送的消息, 5-接待人员在企业微信客户端发送的消息
+                    Integer origin = (Integer) msg.get("origin");
+                    if (origin == null || origin != 3) {
+                        continue;
+                    }
+                    
+                    String msgType = (String) msg.get("msgtype");
+                    String externalUserId = (String) msg.get("external_userid");
+                    String openKfId = (String) msg.get("open_kfid");
+                    String msgId = (String) msg.get("msgid");
+                    
+                    String content = "";
+                    String attachmentUrl = null;
+                    String attachmentName = null;
+                    
+                    if ("text".equals(msgType)) {
+                        Map<String, Object> text = (Map<String, Object>) msg.get("text");
+                        content = (String) text.get("content");
+                    } else if ("image".equals(msgType)) {
+                        Map<String, Object> image = (Map<String, Object>) msg.get("image");
+                        attachmentUrl = (String) image.get("media_id"); // 需要换取临时素材或永久素材，这里暂时存media_id
+                        attachmentName = "image";
+                        content = "[图片]";
+                    } else if ("voice".equals(msgType)) {
+                        content = "[语音]";
+                    } else if ("file".equals(msgType)) {
+                        content = "[文件]";
+                    } else {
+                        content = "[不支持的消息类型: " + msgType + "]";
+                    }
+                    
+                    // 构造 Metadata
+                    Map<String, Object> metadata = new java.util.HashMap<>();
+                    metadata.put("open_kfid", openKfId);
+                    metadata.put("msgid", msgId);
+                    
+                    Long sendTime = ((Number) msg.get("send_time")).longValue() * 1000L;
+                    
+                    WebhookMessageRequest req = new WebhookMessageRequest(
+                            externalUserId, 
+                            content,
+                            msgType,
+                            externalUserId,
+                            "微信用户",
+                            null,
+                            null,
+                            null,
+                            attachmentUrl,
+                            attachmentName,
+                            sendTime,
+                            null,
+                            metadata
+                    );
+                    
+                    allRequests.add(req);
+                }
+                
+            } catch (Exception e) {
+                log.error("同步消息异常", e);
+                break;
+            }
+        }
+        
+        return new SyncResult(allRequests, nextCursor);
+    }
+
+    /**
      * 验证微信Webhook签名
      */
     public boolean verifySignature(OfficialChannelConfig config, String signature, 
                                    String timestamp, String nonce) {
+        return verifySignature(config, signature, timestamp, nonce, null);
+    }
+
+    /**
+     * 验证微信Webhook签名 (支持 echostr 加密验证)
+     */
+    public boolean verifySignature(OfficialChannelConfig config, String signature, 
+                                   String timestamp, String nonce, String echostr) {
         if (signature == null || timestamp == null || nonce == null) {
             return false;
         }
@@ -64,10 +222,13 @@ public class WechatOfficialAdapter {
             return false;
         }
 
-        List<String> parts = new ArrayList<>(3);
+        List<String> parts = new ArrayList<>(4);
         parts.add(token);
         parts.add(timestamp);
         parts.add(nonce);
+        if (echostr != null) {
+            parts.add(echostr);
+        }
         Collections.sort(parts);
         String toHash = String.join("", parts);
 
@@ -80,6 +241,61 @@ public class WechatOfficialAdapter {
             log.error("验证微信签名失败", e);
             return false;
         }
+    }
+
+    /**
+     * 解密 echostr
+     */
+    public String decryptEchostr(OfficialChannelConfig config, String echostr) {
+        Map<String, Object> configData = channelService.parseConfigJson(config);
+        String encodingAesKey = (String) configData.get("encodingAESKey");
+        
+        if (encodingAesKey == null || encodingAesKey.isBlank()) {
+            log.warn("未配置 encodingAESKey，无法解密 echostr");
+            return echostr; // 如果未配置，原样返回（兼容非加密模式）
+        }
+        
+        return aesUtil.decryptEchostr(encodingAesKey, echostr);
+    }
+
+    /**
+     * 从 XML Body 中提取 Encrypt 字段
+     */
+    public String extractEncrypt(String body) {
+        try {
+            int start = body.indexOf("<Encrypt><![CDATA[");
+            if (start == -1) {
+                // 尝试不带 CDATA 的格式
+                start = body.indexOf("<Encrypt>");
+                if (start == -1) return null;
+                start += 9;
+                int end = body.indexOf("</Encrypt>", start);
+                if (end == -1) return null;
+                return body.substring(start, end);
+            }
+            
+            start += 18; // length of "<Encrypt><![CDATA["
+            int end = body.indexOf("]]></Encrypt>", start);
+            if (end == -1) return null;
+            return body.substring(start, end);
+        } catch (Exception e) {
+            log.warn("提取 Encrypt 字段失败", e);
+            return null;
+        }
+    }
+
+    /**
+     * 解密消息
+     */
+    public String decryptMessage(OfficialChannelConfig config, String encrypt) {
+        Map<String, Object> configData = channelService.parseConfigJson(config);
+        String encodingAesKey = (String) configData.get("encodingAESKey");
+        
+        if (encodingAesKey == null || encodingAesKey.isBlank()) {
+            throw new RuntimeException("未配置 encodingAESKey，无法解密消息");
+        }
+        
+        return aesUtil.decrypt(encodingAesKey, encrypt);
     }
 
     /**
@@ -184,6 +400,49 @@ public class WechatOfficialAdapter {
                 null,    // language
                 wechatMessage // metadata
         );
+    }
+
+    /**
+     * 发送消息到微信客服（企业微信）
+     */
+    public void sendKfMessage(OfficialChannelConfig config, String openKfId, String externalUserId, 
+                              String content, List<Attachment> attachments) {
+        String accessToken = getAccessToken(config);
+        String url = "https://qyapi.weixin.qq.com/cgi-bin/kf/send_msg?access_token=" + accessToken;
+        
+        // 构造消息体
+        Map<String, Object> messageMap = new java.util.HashMap<>();
+        messageMap.put("touser", externalUserId);
+        messageMap.put("open_kfid", openKfId);
+        messageMap.put("msgid", java.util.UUID.randomUUID().toString()); // 唯一标识，防重
+        
+        if (attachments != null && !attachments.isEmpty()) {
+             // 暂时只处理第一个附件，或者根据类型判断
+             // 微信客服支持 image, voice, video, file, miniprogram, msgmenu, location
+             // 这里简单处理，如果有附件且是图片，发送图片，否则发送文本
+             Attachment att = attachments.get(0);
+             // TODO: 需要上传素材获取 media_id
+             // 暂时降级为发送文本链接
+             messageMap.put("msgtype", "text");
+             messageMap.put("text", Map.of("content", content + "\n[附件]: " + att.getUrl()));
+        } else {
+            messageMap.put("msgtype", "text");
+            messageMap.put("text", Map.of("content", content));
+        }
+        
+        try {
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(messageMap);
+            String response = restTemplate.postForObject(url, entity, String.class);
+            
+            Map<String, Object> result = objectMapper.readValue(response, Map.class);
+            if ((Integer) result.getOrDefault("errcode", 0) != 0) {
+                log.error("发送客服消息失败: {}", response);
+                throw new RuntimeException("发送客服消息失败: " + result.get("errmsg"));
+            }
+        } catch (Exception e) {
+            log.error("发送客服消息异常", e);
+            throw new RuntimeException("发送客服消息异常", e);
+        }
     }
 
     /**

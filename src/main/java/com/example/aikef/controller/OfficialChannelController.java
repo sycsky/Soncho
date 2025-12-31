@@ -126,7 +126,15 @@ public class OfficialChannelController {
                 new ChannelTypeInfo("WECHAT_OFFICIAL", "微信服务号"),
                 new ChannelTypeInfo("WECHAT_KF", "微信客服"),
                 new ChannelTypeInfo("LINE_OFFICIAL", "Line官方账号"),
-                new ChannelTypeInfo("WHATSAPP_OFFICIAL", "WhatsApp Business")
+                new ChannelTypeInfo("WHATSAPP_OFFICIAL", "WhatsApp Business"),
+                new ChannelTypeInfo("FACEBOOK_MESSENGER", "Facebook Messenger"),
+                new ChannelTypeInfo("INSTAGRAM", "Instagram Direct"),
+                new ChannelTypeInfo("TELEGRAM", "Telegram"),
+                new ChannelTypeInfo("TWITTER", "X (Twitter)"),
+                new ChannelTypeInfo("DOUYIN", "抖音"),
+                new ChannelTypeInfo("RED_BOOK", "小红书"),
+                new ChannelTypeInfo("WEIBO", "微博"),
+                new ChannelTypeInfo("EMAIL", "邮件")
         );
     }
 

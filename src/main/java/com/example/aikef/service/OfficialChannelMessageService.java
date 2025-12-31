@@ -10,9 +10,18 @@ import com.example.aikef.repository.OfficialChannelConfigRepository;
 import com.example.aikef.service.channel.wechat.WechatOfficialAdapter;
 import com.example.aikef.service.channel.line.LineOfficialAdapter;
 import com.example.aikef.service.channel.whatsapp.WhatsappOfficialAdapter;
+import com.example.aikef.service.channel.facebook.FacebookAdapter;
+import com.example.aikef.service.channel.telegram.TelegramAdapter;
+import com.example.aikef.service.channel.twitter.TwitterAdapter;
+import com.example.aikef.service.channel.douyin.DouyinAdapter;
+import com.example.aikef.service.channel.redbook.RedBookAdapter;
+import com.example.aikef.service.channel.weibo.WeiboAdapter;
+import com.example.aikef.service.channel.email.EmailAdapter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +49,16 @@ public class OfficialChannelMessageService {
     private final WechatOfficialAdapter wechatAdapter;
     private final LineOfficialAdapter lineAdapter;
     private final WhatsappOfficialAdapter whatsappAdapter;
+    private final FacebookAdapter facebookAdapter;
+    private final TelegramAdapter telegramAdapter;
+    private final TwitterAdapter twitterAdapter;
+    private final DouyinAdapter douyinAdapter;
+    private final RedBookAdapter redBookAdapter;
+    private final WeiboAdapter weiboAdapter;
+    private final EmailAdapter emailAdapter;
+
+    @Autowired
+    private final StringRedisTemplate redisTemplate;
 
     /**
      * 验证微信Webhook（GET请求）
@@ -267,6 +286,22 @@ public class OfficialChannelMessageService {
             channelType = OfficialChannelConfig.ChannelType.LINE_OFFICIAL;
         } else if ("whatsapp_official".equals(platformName)) {
             channelType = OfficialChannelConfig.ChannelType.WHATSAPP_OFFICIAL;
+        } else if ("facebook_messenger".equals(platformName)) {
+            channelType = OfficialChannelConfig.ChannelType.FACEBOOK_MESSENGER;
+        } else if ("instagram".equals(platformName)) {
+            channelType = OfficialChannelConfig.ChannelType.INSTAGRAM;
+        } else if ("telegram".equals(platformName)) {
+            channelType = OfficialChannelConfig.ChannelType.TELEGRAM;
+        } else if ("twitter".equals(platformName)) {
+            channelType = OfficialChannelConfig.ChannelType.TWITTER;
+        } else if ("douyin".equals(platformName)) {
+            channelType = OfficialChannelConfig.ChannelType.DOUYIN;
+        } else if ("red_book".equals(platformName)) {
+            channelType = OfficialChannelConfig.ChannelType.RED_BOOK;
+        } else if ("weibo".equals(platformName)) {
+            channelType = OfficialChannelConfig.ChannelType.WEIBO;
+        } else if ("email".equals(platformName)) {
+            channelType = OfficialChannelConfig.ChannelType.EMAIL;
         }
         
         if (channelType == null) {
@@ -289,8 +324,22 @@ public class OfficialChannelMessageService {
             switch (channelType) {
                 case WECHAT_OFFICIAL -> 
                     wechatAdapter.sendMessage(config, externalUserId, content, attachments);
-                case WECHAT_KF ->
-                    wechatAdapter.sendMessage(config, externalUserId, content, attachments);
+                case WECHAT_KF -> {
+                    String openKfId = null;
+                    if (mapping.getMetadata() != null) {
+                        try {
+                            Map<String, Object> meta = objectMapper.readValue(mapping.getMetadata(), Map.class);
+                            openKfId = (String) meta.get("open_kfid");
+                        } catch (Exception e) {
+                            log.error("解析元数据失败: sessionId={}", sessionId, e);
+                        }
+                    }
+                    if (openKfId == null) {
+                        log.error("微信客服消息发送失败: 缺少open_kfid, sessionId={}", sessionId);
+                        return false;
+                    }
+                    wechatAdapter.sendKfMessage(config, openKfId, externalUserId, content, attachments);
+                }
                 case LINE_OFFICIAL -> 
                     lineAdapter.sendMessage(config, externalThreadId != null ? externalThreadId : externalUserId, content, attachments);
                 case WHATSAPP_OFFICIAL -> 
@@ -327,14 +376,36 @@ public class OfficialChannelMessageService {
 
         ensureExternalPlatformExists(platformName, config);
 
-        boolean isValid = wechatAdapter.verifySignature(config, signature, timestamp, nonce);
+        // 微信客服（企业微信）验证逻辑：
+        // 1. 签名验证包含 echostr
+        // 2. 验证成功后需要解密 echostr 返回明文
+        boolean isValid;
+        if (channelType == OfficialChannelConfig.ChannelType.WECHAT_KF) {
+            isValid = wechatAdapter.verifySignature(config, signature, timestamp, nonce, echostr);
+        } else {
+            isValid = wechatAdapter.verifySignature(config, signature, timestamp, nonce);
+        }
+
         if (!isValid) {
-            log.warn("微信Webhook验证失败: channelType={}", channelType);
+            log.warn("微信Webhook验证失败: channelType={}, signature={}, timestamp={}, nonce={}, echostr={}", 
+                    channelType, signature, timestamp, nonce, echostr);
             return ResponseEntity.badRequest().body("验证失败");
         }
 
+        String responseStr = echostr;
+        // 微信客服需要返回解密后的明文
+        if (channelType == OfficialChannelConfig.ChannelType.WECHAT_KF) {
+            try {
+                responseStr = wechatAdapter.decryptEchostr(config, echostr);
+                log.info("微信客服 echostr 解密成功: {}", responseStr);
+            } catch (Exception e) {
+                log.error("微信客服 echostr 解密失败", e);
+                return ResponseEntity.badRequest().body("解密失败");
+            }
+        }
+
         log.info("微信Webhook验证成功: channelType={}", channelType);
-        return ResponseEntity.ok(echostr);
+        return ResponseEntity.ok(responseStr);
     }
 
     private ResponseEntity<String> handleWechatMessageInternal(
@@ -357,11 +428,78 @@ public class OfficialChannelMessageService {
         ensureExternalPlatformExists(platformName, config);
 
         try {
-            if (!wechatAdapter.verifySignature(config, signature, timestamp, nonce)) {
-                return ResponseEntity.badRequest().body("签名验证失败");
+            // 微信客服（企业微信）POST请求验证逻辑：
+            // 1. 需要从 body 中提取 Encrypt 字段
+            // 2. 将 Encrypt 字段参与签名计算
+            // 3. 验证成功后解密消息
+            String messageBody = body;
+            
+            if (channelType == OfficialChannelConfig.ChannelType.WECHAT_KF) {
+                String encrypt = wechatAdapter.extractEncrypt(body);
+                if (encrypt != null) {
+                    // 如果存在加密字段，使用加密字段进行签名验证
+                    if (!wechatAdapter.verifySignature(config, signature, timestamp, nonce, encrypt)) {
+                        log.warn("微信客服签名验证失败: signature={}, encrypt={}", signature, encrypt);
+                        return ResponseEntity.badRequest().body("签名验证失败");
+                    }
+                    // 解密消息
+                    try {
+                        messageBody = wechatAdapter.decryptMessage(config, encrypt);
+                        log.debug("微信客服消息解密成功");
+                    } catch (Exception e) {
+                        log.error("微信客服消息解密失败", e);
+                        return ResponseEntity.badRequest().body("解密失败");
+                    }
+                } else {
+                    // 如果没有加密字段，尝试普通验证（可能是不加密模式或异常情况）
+                    if (!wechatAdapter.verifySignature(config, signature, timestamp, nonce)) {
+                        return ResponseEntity.badRequest().body("签名验证失败");
+                    }
+                }
+            } else {
+                // 普通微信服务号验证
+                if (!wechatAdapter.verifySignature(config, signature, timestamp, nonce)) {
+                    return ResponseEntity.badRequest().body("签名验证失败");
+                }
             }
 
-            Map<String, Object> wechatMessage = wechatAdapter.parseMessage(body, config);
+            Map<String, Object> wechatMessage = wechatAdapter.parseMessage(messageBody, config);
+            
+            // 处理微信客服的同步消息事件
+            if (channelType == OfficialChannelConfig.ChannelType.WECHAT_KF) {
+                String msgType = (String) wechatMessage.get("MsgType");
+                String event = (String) wechatMessage.get("Event");
+                if ("event".equals(msgType) && "kf_msg_or_event".equals(event)) {
+                    String token = (String) wechatMessage.get("Token");
+                    if (token != null) {
+                        log.info("收到微信客服消息事件，开始同步消息: token={}", token);
+                        
+                        // 获取上次同步的 cursor
+                        // 从 Redis 获取 cursor，key: wechat:kf:cursor:{appId}
+                        String cursorKey = "wechat:kf:cursor:" + config.getId();
+                        String cursor = redisTemplate.opsForValue().get(cursorKey);
+                        if (cursor == null) {
+                            cursor = "";
+                        }
+                        
+                        // 同步消息
+                        WechatOfficialAdapter.SyncResult result = wechatAdapter.syncMessages(config, token, cursor);
+                        
+                        for (WebhookMessageRequest req : result.messages()) {
+                            externalPlatformService.handleWebhookMessage(platformName, req);
+                        }
+                        
+                        // 更新 cursor 到 Redis
+                        if (result.nextCursor() != null && !result.nextCursor().equals(cursor)) {
+                            redisTemplate.opsForValue().set(cursorKey, result.nextCursor());
+                            log.info("更新微信客服 cursor (Redis): key={}, cursor={}", cursorKey, result.nextCursor());
+                        }
+                        
+                        return ResponseEntity.ok("success");
+                    }
+                }
+            }
+
             WebhookMessageRequest request = wechatAdapter.toWebhookRequest(wechatMessage);
             if (request == null) {
                 return ResponseEntity.ok("success");
@@ -408,9 +546,122 @@ public class OfficialChannelMessageService {
             case WECHAT_OFFICIAL, WECHAT_KF -> ExternalPlatform.PlatformType.WECHAT;
             case LINE_OFFICIAL -> ExternalPlatform.PlatformType.LINE;
             case WHATSAPP_OFFICIAL -> ExternalPlatform.PlatformType.WHATSAPP;
+            case FACEBOOK_MESSENGER, INSTAGRAM -> ExternalPlatform.PlatformType.FACEBOOK;
+            case TELEGRAM -> ExternalPlatform.PlatformType.TELEGRAM;
+            case TWITTER -> ExternalPlatform.PlatformType.TWITTER;
+            case EMAIL -> ExternalPlatform.PlatformType.EMAIL;
+            default -> ExternalPlatform.PlatformType.OTHER;
         });
         platform.setEnabled(true);
         platform.setWebhookSecret(config.getWebhookSecret());
         platformRepository.save(platform);
+    }
+
+    // ==================== Facebook / Instagram ====================
+
+    public ResponseEntity<String> verifyFacebookWebhook(OfficialChannelConfig.ChannelType channelType, String mode, String token, String challenge) {
+        OfficialChannelConfig config = configRepository
+                .findByChannelTypeAndEnabledTrue(channelType)
+                .orElse(null);
+
+        if (config == null) {
+            return ResponseEntity.status(403).body("Config not found");
+        }
+
+        if (facebookAdapter.verifyWebhook(config, mode, token, challenge)) {
+            return ResponseEntity.ok(challenge);
+        }
+        return ResponseEntity.status(403).body("Verification failed");
+    }
+
+    @Transactional
+    public ResponseEntity<String> handleFacebookMessage(OfficialChannelConfig.ChannelType channelType, String body, String signature) {
+        OfficialChannelConfig config = configRepository
+                .findByChannelTypeAndEnabledTrue(channelType)
+                .orElse(null);
+
+        if (config == null) return ResponseEntity.badRequest().body("Config not found");
+        
+        // TODO: Validate signature (X-Hub-Signature-256)
+
+        Map<String, Object> message = facebookAdapter.parseMessage(body);
+        WebhookMessageRequest request = facebookAdapter.toWebhookRequest(message);
+        
+        if (request != null) {
+            String platformName = channelType == OfficialChannelConfig.ChannelType.INSTAGRAM ? "instagram" : "facebook_messenger";
+            ensureExternalPlatformExists(platformName, config);
+            externalPlatformService.handleWebhookMessage(platformName, request);
+        }
+        
+        return ResponseEntity.ok("EVENT_RECEIVED");
+    }
+
+    // ==================== Telegram ====================
+
+    @Transactional
+    public ResponseEntity<String> handleTelegramMessage(String body) {
+        OfficialChannelConfig config = configRepository
+                .findByChannelTypeAndEnabledTrue(OfficialChannelConfig.ChannelType.TELEGRAM)
+                .orElse(null);
+
+        if (config == null) return ResponseEntity.badRequest().body("Config not found");
+
+        Map<String, Object> message = telegramAdapter.parseMessage(body);
+        WebhookMessageRequest request = telegramAdapter.toWebhookRequest(message);
+
+        if (request != null) {
+            ensureExternalPlatformExists("telegram", config);
+            externalPlatformService.handleWebhookMessage("telegram", request);
+        }
+
+        return ResponseEntity.ok("OK");
+    }
+
+    // ==================== Twitter ====================
+
+    public ResponseEntity<Map<String, String>> verifyTwitterCrc(String crcToken) {
+        OfficialChannelConfig config = configRepository
+                .findByChannelTypeAndEnabledTrue(OfficialChannelConfig.ChannelType.TWITTER)
+                .orElse(null);
+
+        if (config == null) return ResponseEntity.badRequest().build();
+
+        String response = twitterAdapter.generateCrcResponse(config, crcToken);
+        if (response != null) {
+            return ResponseEntity.ok(Map.of("response_token", response));
+        }
+        return ResponseEntity.badRequest().build();
+    }
+
+    @Transactional
+    public ResponseEntity<String> handleTwitterMessage(String body) {
+        // Implement logic
+        return ResponseEntity.ok("OK");
+    }
+    
+    // ==================== Douyin, RedBook, Weibo, Email ====================
+    
+    @Transactional
+    public ResponseEntity<String> handleDouyinMessage(String body, String signature) {
+        // Implement logic
+        return ResponseEntity.ok("OK");
+    }
+
+    @Transactional
+    public ResponseEntity<String> handleRedBookMessage(String body, String signature) {
+        // Implement logic
+        return ResponseEntity.ok("OK");
+    }
+
+    @Transactional
+    public ResponseEntity<String> handleWeiboMessage(String body, String signature) {
+        // Implement logic
+        return ResponseEntity.ok("OK");
+    }
+    
+    @Transactional
+    public ResponseEntity<String> handleEmailMessage(String body) {
+        // Implement logic
+        return ResponseEntity.ok("OK");
     }
 }

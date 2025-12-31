@@ -642,11 +642,11 @@ public class LangChainChatService {
                 : (config.getDefaultMaxTokens() != null ? config.getDefaultMaxTokens() : 2000);
 
         return switch (LlmProvider.valueOf(provider)) {
-            case OPENAI, CUSTOM, DASHSCOPE, MOONSHOT, DEEPSEEK, HUGGINGFACE -> createOpenAiCompatibleModel(config, temp, tokens, timeoutSeconds);
+            case OPENAI, CUSTOM, DASHSCOPE, MOONSHOT, DEEPSEEK, HUGGINGFACE,GEMINI -> createOpenAiCompatibleModel(config, temp, tokens, timeoutSeconds);
             case AZURE_OPENAI -> createAzureOpenAiModel(config, temp, tokens, timeoutSeconds);
             case OLLAMA -> createOllamaModel(config, temp, tokens, timeoutSeconds);
             case ZHIPU -> createZhipuModel(config, temp, tokens, timeoutSeconds);
-            case GEMINI -> throw new UnsupportedOperationException("暂不支持的提供商: " + provider);
+//            case GEMINI -> throw new UnsupportedOperationException("暂不支持的提供商: " + provider);
         };
     }
 

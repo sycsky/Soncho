@@ -2,6 +2,7 @@ package com.example.aikef.service;
 
 import com.example.aikef.dto.AgentDto;
 import com.example.aikef.dto.request.CreateAgentRequest;
+import com.example.aikef.dto.request.CreateTenantAdminRequest;
 import com.example.aikef.dto.request.UpdateAgentRequest;
 import com.example.aikef.mapper.EntityMapper;
 import com.example.aikef.model.Agent;
@@ -86,6 +87,15 @@ public class AgentService {
         if (request.language() != null && !request.language().isBlank()) {
             agent.setLanguage(request.language());
         }
+        
+        // 如果开启了 SAAS 且当前没有租户上下文（例如管理员创建租户管理员），需要手动设置 TenantId
+        // 这里假设 CreateAgentRequest 中可能会传入 tenantId，或者在注册流程中处理
+        // 如果是在 SAAS 模式下，普通 Agent 创建应该由 TenantEntityListener 自动填充当前租户 ID
+        // 如果是创建新租户的第一个 Agent，则需要显式设置
+        if (request instanceof CreateTenantAdminRequest) {
+             agent.setTenantId(((CreateTenantAdminRequest) request).getTenantId());
+        }
+
         Agent saved = agentRepository.save(agent);
         return entityMapper.toAgentDto(saved);
     }

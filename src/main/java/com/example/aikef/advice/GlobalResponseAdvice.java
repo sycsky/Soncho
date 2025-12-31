@@ -1,5 +1,6 @@
 package com.example.aikef.advice;
 
+import com.example.aikef.controller.OfficialChannelWebhookController;
 import com.example.aikef.dto.Result;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +45,11 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
 
     @Override
     public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
+        // Exclude Webhook controller
+        if (returnType.getDeclaringClass().equals(OfficialChannelWebhookController.class)) {
+            return false;
+        }
+
         // Do not wrap if the return type is already Result
         if (returnType.getParameterType().equals(Result.class)) {
             return false;

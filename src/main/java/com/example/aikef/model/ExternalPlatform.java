@@ -86,8 +86,11 @@ public class ExternalPlatform extends AuditableEntity {
         WECHAT,     // 微信
         TELEGRAM,   // Telegram
         FACEBOOK,   // Facebook Messenger
+        TWITTER,    // X (Twitter)
+        EMAIL,      // 邮件
         WEB,
-        CUSTOM      // 自定义平台
+        CUSTOM,     // 自定义平台
+        OTHER       // 其他
     }
 
     /**

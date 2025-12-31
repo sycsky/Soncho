@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -144,7 +145,7 @@ public class WebhookController {
      */
     @GetMapping("/platform-types")
     public List<PlatformTypeInfo> getPlatformTypes() {
-        return java.util.Arrays.stream(ExternalPlatform.PlatformType.values())
+        return Arrays.stream(ExternalPlatform.PlatformType.values())
                 .map(type -> new PlatformTypeInfo(type.name(), getDisplayName(type)))
                 .toList();
     }
@@ -154,7 +155,7 @@ public class WebhookController {
      */
     @GetMapping("/auth-types")
     public List<AuthTypeInfo> getAuthTypes() {
-        return java.util.Arrays.stream(ExternalPlatform.AuthType.values())
+        return Arrays.stream(ExternalPlatform.AuthType.values())
                 .map(type -> new AuthTypeInfo(type.name(), getAuthTypeDescription(type)))
                 .toList();
     }
@@ -166,8 +167,11 @@ public class WebhookController {
             case WECHAT -> "微信";
             case TELEGRAM -> "Telegram";
             case FACEBOOK -> "Facebook Messenger";
+            case TWITTER -> "Twitter";
+            case EMAIL -> "Email";
             case WEB -> "网页";
-            case CUSTOM -> "自定义平台";
+            case CUSTOM -> "CUSTOM";
+            case OTHER -> "OTHER";
         };
     }
 

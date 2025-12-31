@@ -151,6 +151,14 @@ public class OfficialChannelService {
             case WECHAT_KF -> "微信客服";
             case LINE_OFFICIAL -> "Line官方账号";
             case WHATSAPP_OFFICIAL -> "WhatsApp Business";
+            case FACEBOOK_MESSENGER -> "Facebook Messenger";
+            case INSTAGRAM -> "Instagram Direct";
+            case TELEGRAM -> "Telegram";
+            case TWITTER -> "X (Twitter)";
+            case DOUYIN -> "抖音";
+            case RED_BOOK -> "小红书";
+            case WEIBO -> "微博";
+            case EMAIL -> "邮件";
         };
     }
 }

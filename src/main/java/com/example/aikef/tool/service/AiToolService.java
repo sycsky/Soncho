@@ -442,7 +442,7 @@ public class AiToolService {
                 lastException = e;
 
                 // 判断是否是网络问题（可重试）
-                if (isNetworkException(e) && retryCount < maxRetries) {
+                if (retryCount < maxRetries) {
                     log.warn("API 工具执行网络异常，准备重试: tool={}, retry={}/{}, error={}",
                             tool.getName(), retryCount + 1, maxRetries, e.getMessage());
                     retryCount++;

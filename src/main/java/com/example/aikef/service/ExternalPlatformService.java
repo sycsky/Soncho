@@ -15,10 +15,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.*;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestTemplate;
 
 import com.example.aikef.model.Attachment;
@@ -46,6 +49,10 @@ public class ExternalPlatformService {
     private final AgentAssignmentStrategy agentAssignmentStrategy;
     private final EntityMapper entityMapper;
     private final TranslationService translationService;
+
+    @Lazy
+    @Autowired
+    private OfficialChannelMessageService officialChannelMessageService;
 
     /**
      * 处理来自第三方平台的 Webhook 消息
@@ -79,8 +86,8 @@ public class ExternalPlatformService {
             // 6. 触发 AI 工作流（事务提交后异步执行，确保数据可见）
             final UUID sessionId = session.getId();
             final String messageContent = request.content();
-            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
-                    new org.springframework.transaction.support.TransactionSynchronization() {
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
                         @Override
                         public void afterCommit() {
                             triggerAiWorkflowIfNeeded(sessionId, messageContent,message.getId());
@@ -149,9 +156,33 @@ public class ExternalPlatformService {
 
         if (existingMapping.isPresent()) {
             ExternalSessionMapping mapping = existingMapping.get();
+            boolean changed = false;
             // 更新用户信息（如果有新的）
             if (request.userName() != null && !request.userName().equals(mapping.getExternalUserName())) {
                 mapping.setExternalUserName(request.userName());
+                changed = true;
+            }
+            // 更新元数据（如果有新的）
+            if (request.metadata() != null && !request.metadata().isEmpty()) {
+                try {
+                    Map<String, Object> currentMeta = new HashMap<>();
+                    if (mapping.getMetadata() != null) {
+                        currentMeta = objectMapper.readValue(mapping.getMetadata(), Map.class);
+                    }
+                    // 合并元数据
+                    currentMeta.putAll(request.metadata());
+                    String newMetaJson = objectMapper.writeValueAsString(currentMeta);
+                    if (!newMetaJson.equals(mapping.getMetadata())) {
+                        mapping.setMetadata(newMetaJson);
+                        changed = true;
+                    }
+                } catch (Exception e) {
+                    log.warn("更新元数据失败", e);
+                }
+            }
+            
+            if (changed) {
+                return mappingRepository.save(mapping);
             }
             return mapping;
         }
@@ -190,6 +221,7 @@ public class ExternalPlatformService {
      * 查找或创建客户
      */
     private Customer findOrCreateCustomer(ExternalPlatform platform, WebhookMessageRequest request) {
+
         // 根据平台类型和 externalUserId 查找现有客户
         if (request.externalUserId() != null) {
             Optional<Customer> existing = findCustomerByPlatform(platform.getPlatformType(), request.externalUserId());
@@ -241,7 +273,9 @@ public class ExternalPlatformService {
             case WHATSAPP -> customerRepository.findByWhatsappId(externalUserId);
             case TELEGRAM -> customerRepository.findByTelegramId(externalUserId);
             case FACEBOOK -> customerRepository.findByFacebookId(externalUserId);
-            case WEB, CUSTOM -> Optional.empty(); // WEB 和 CUSTOM 没有特定的 ID 字段
+            case TWITTER -> Optional.empty();
+            case EMAIL -> Optional.empty();
+            case WEB, CUSTOM, OTHER -> Optional.empty(); // WEB 和 CUSTOM 没有特定的 ID 字段
         };
     }
 
@@ -256,7 +290,8 @@ public class ExternalPlatformService {
             case WHATSAPP -> customer.setWhatsappId(externalUserId);
             case TELEGRAM -> customer.setTelegramId(externalUserId);
             case FACEBOOK -> customer.setFacebookId(externalUserId);
-            case WEB, CUSTOM -> {} // WEB 和 CUSTOM 平台存储在 mapping 的 metadata 中
+            case EMAIL -> customer.setEmail(externalUserId);
+            case TWITTER, WEB, CUSTOM, OTHER -> {} // TWITTER 暂无专属ID字段，其他存储在 mapping metadata
         }
     }
 
@@ -458,7 +493,7 @@ public class ExternalPlatformService {
      */
     @Async
     public void forwardMessageToExternalPlatform(UUID sessionId, String content, SenderType senderType,
-                                                 java.util.List<Attachment> attachments) {
+                                                 List<Attachment> attachments) {
         try {
             // 查找会话的外部平台映射
             Optional<ExternalSessionMapping> mappingOpt = mappingRepository.findBySessionId(sessionId);
@@ -504,7 +539,7 @@ public class ExternalPlatformService {
             // 添加附件信息（如果有）
             if (attachments != null && !attachments.isEmpty()) {
                 List<Map<String, Object>> attachmentList = new ArrayList<>();
-                for (com.example.aikef.model.Attachment attachment : attachments) {
+                for (Attachment attachment : attachments) {
                     Map<String, Object> attMap = new HashMap<>();
                     attMap.put("type", attachment.getType());
                     attMap.put("url", attachment.getUrl());
@@ -606,8 +641,10 @@ public class ExternalPlatformService {
             case WHATSAPP -> Channel.WHATSAPP;
             case TELEGRAM -> Channel.TELEGRAM;
             case FACEBOOK -> Channel.FACEBOOK;
+            case TWITTER -> Channel.TWITTER;
+            case EMAIL -> Channel.EMAIL;
             case WEB -> Channel.WEB;
-            case CUSTOM -> Channel.CUSTOM;
+            case CUSTOM, OTHER -> Channel.CUSTOM;
         };
     }
 

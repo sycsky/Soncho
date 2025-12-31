@@ -13,6 +13,7 @@ public class AgentPrincipal implements UserDetails {
     private final String email;
     private final String password;
     private final String name;
+    private final String tenantId;
     private final Collection<? extends GrantedAuthority> authorities;
 
     public AgentPrincipal(Agent agent, Collection<? extends GrantedAuthority> authorities) {
@@ -20,11 +21,16 @@ public class AgentPrincipal implements UserDetails {
         this.email = agent.getEmail();
         this.password = agent.getPasswordHash();
         this.name = agent.getName();
+        this.tenantId = agent.getTenantId();
         this.authorities = authorities == null ? Collections.emptyList() : authorities;
     }
 
     public UUID getId() {
         return id;
+    }
+    
+    public String getTenantId() {
+        return tenantId;
     }
 
     public String getName() {

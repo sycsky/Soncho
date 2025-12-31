@@ -8,6 +8,11 @@ public enum Channel {
     TELEGRAM,   // Telegram
     FACEBOOK,   // Facebook Messenger
     EMAIL,      // 邮件
+    TWITTER,    // X (Twitter)
+    INSTAGRAM,  // Instagram
+    DOUYIN,     // 抖音
+    REDBOOK,    // 小红书
+    WEIBO,      // 微博
     SMS,        // 短信
     PHONE,      // 电话
     APP,        // 移动应用
