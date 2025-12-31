@@ -2,7 +2,6 @@ package com.example.aikef.model;
 
 import com.example.aikef.model.base.AuditableEntity;
 import jakarta.persistence.*;
-import lombok.Data;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -10,7 +9,6 @@ import java.util.*;
 
 @Entity
 @Table(name = "customers")
-@Data
 public class Customer extends AuditableEntity {
 
     @Column(nullable = false)
@@ -69,4 +67,140 @@ public class Customer extends AuditableEntity {
     @CollectionTable(name = "user_ai_tags", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "tag")
     private List<String> aiTags = new ArrayList<>();
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public Channel getPrimaryChannel() {
+        return primaryChannel;
+    }
+
+    public void setPrimaryChannel(Channel primaryChannel) {
+        this.primaryChannel = primaryChannel;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getWechatOpenId() {
+        return wechatOpenId;
+    }
+
+    public void setWechatOpenId(String wechatOpenId) {
+        this.wechatOpenId = wechatOpenId;
+    }
+
+    public String getWhatsappId() {
+        return whatsappId;
+    }
+
+    public void setWhatsappId(String whatsappId) {
+        this.whatsappId = whatsappId;
+    }
+
+    public String getLineId() {
+        return lineId;
+    }
+
+    public void setLineId(String lineId) {
+        this.lineId = lineId;
+    }
+
+    public String getTelegramId() {
+        return telegramId;
+    }
+
+    public void setTelegramId(String telegramId) {
+        this.telegramId = telegramId;
+    }
+
+    public String getFacebookId() {
+        return facebookId;
+    }
+
+    public void setFacebookId(String facebookId) {
+        this.facebookId = facebookId;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
+
+    public String getLocation() {
+        return location;
+    }
+
+    public void setLocation(String location) {
+        this.location = location;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
+    public void setNotes(String notes) {
+        this.notes = notes;
+    }
+
+    public Map<String, Object> getCustomFields() {
+        return customFields;
+    }
+
+    public void setCustomFields(Map<String, Object> customFields) {
+        this.customFields = customFields;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
+    public java.time.Instant getLastInteractionAt() {
+        return lastInteractionAt;
+    }
+
+    public void setLastInteractionAt(java.time.Instant lastInteractionAt) {
+        this.lastInteractionAt = lastInteractionAt;
+    }
+
+    public List<String> getTags() {
+        return tags;
+    }
+
+    public void setTags(List<String> tags) {
+        this.tags = tags;
+    }
+
+    public List<String> getAiTags() {
+        return aiTags;
+    }
+
+    public void setAiTags(List<String> aiTags) {
+        this.aiTags = aiTags;
+    }
 }
