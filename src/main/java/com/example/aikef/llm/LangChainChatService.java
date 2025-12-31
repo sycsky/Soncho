@@ -819,18 +819,39 @@ public class LangChainChatService {
                                                      List<ChatHistoryMessage> messageList) {
         List<ChatMessage> messages = new ArrayList<>();
 
+        String normalizedSystemPrompt = systemPrompt == null ? "" : systemPrompt.trim();
+        boolean alreadyHasSameSystemPrompt = false;
+        if (!normalizedSystemPrompt.isEmpty() && messageList != null) {
+            for (ChatHistoryMessage msg : messageList) {
+                if ("system".equals(msg.role())) {
+                    String normalizedExisting = msg.content() == null ? "" : msg.content().trim();
+                    if (normalizedSystemPrompt.equals(normalizedExisting)) {
+                        alreadyHasSameSystemPrompt = true;
+                        break;
+                    }
+                }
+            }
+        }
 
-        messages.add(SystemMessage.from(systemPrompt));
+        if (!normalizedSystemPrompt.isEmpty() && !alreadyHasSameSystemPrompt) {
+            messages.add(SystemMessage.from(normalizedSystemPrompt));
+        }
 
         // 消息列表
         if (messageList != null) {
+            String lastSystemContent = null;
             for (ChatHistoryMessage msg : messageList) {
                 if ("user".equals(msg.role())) {
                     messages.add(UserMessage.from(msg.content()));
                 } else if ("assistant".equals(msg.role())) {
                     messages.add(AiMessage.from(msg.content()));
                 } else if ("system".equals(msg.role())) {
+                    String normalized = msg.content() == null ? "" : msg.content().trim();
+                    if (!normalized.isEmpty() && normalized.equals(lastSystemContent)) {
+                        continue;
+                    }
                     messages.add(SystemMessage.from(msg.content()));
+                    lastSystemContent = normalized;
                 }
             }
         }
