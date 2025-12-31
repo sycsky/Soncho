@@ -1,6 +1,7 @@
 package com.example.aikef.tool.model;
 
 import com.example.aikef.extraction.model.ExtractionSchema;
+import com.example.aikef.model.base.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
@@ -21,7 +22,7 @@ import java.util.UUID;
         @Index(name = "idx_ai_tool_type", columnList = "tool_type"),
         @Index(name = "idx_ai_tool_enabled", columnList = "enabled")
 })
-public class AiTool {
+public class AiTool extends AuditableEntity {
 
     @Id
     private UUID id;

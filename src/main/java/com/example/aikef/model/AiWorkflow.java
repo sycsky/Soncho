@@ -1,6 +1,8 @@
 package com.example.aikef.model;
 
+import com.example.aikef.model.base.AuditableEntity;
 import jakarta.persistence.*;
+import lombok.Data;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -11,16 +13,13 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "ai_workflows")
-public class AiWorkflow {
+@Data
+public class AiWorkflow extends AuditableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(columnDefinition = "CHAR(36)")
     private UUID id;
-
-    /**
-     * 工作流名称
-     */
     @Column(nullable = false)
     private String name;
 
@@ -103,151 +102,9 @@ public class AiWorkflow {
     @Column(name = "trigger_config", columnDefinition = "TEXT")
     private String triggerConfig;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @Column(name = "updated_at")
-    private Instant updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = Instant.now();
-        updatedAt = Instant.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = Instant.now();
-    }
-
     // Getters and Setters
 
-    public UUID getId() {
-        return id;
-    }
 
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public String getNodesJson() {
-        return nodesJson;
-    }
-
-    public void setNodesJson(String nodesJson) {
-        this.nodesJson = nodesJson;
-    }
-
-    public String getEdgesJson() {
-        return edgesJson;
-    }
-
-    public void setEdgesJson(String edgesJson) {
-        this.edgesJson = edgesJson;
-    }
-
-    public String getLiteflowEl() {
-        return liteflowEl;
-    }
-
-    public void setLiteflowEl(String liteflowEl) {
-        this.liteflowEl = liteflowEl;
-    }
-
-    public String getSubChainsJson() {
-        return subChainsJson;
-    }
-
-    public void setSubChainsJson(String subChainsJson) {
-        this.subChainsJson = subChainsJson;
-    }
-
-    public String getLlmNodeIds() {
-        return llmNodeIds;
-    }
-
-    public void setLlmNodeIds(String llmNodeIds) {
-        this.llmNodeIds = llmNodeIds;
-    }
-
-    public Integer getVersion() {
-        return version;
-    }
-
-    public void setVersion(Integer version) {
-        this.version = version;
-    }
-
-    public Boolean getEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(Boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    public Boolean getIsDefault() {
-        return isDefault;
-    }
-
-    public void setIsDefault(Boolean isDefault) {
-        this.isDefault = isDefault;
-    }
-
-    public Agent getCreatedByAgent() {
-        return createdByAgent;
-    }
-
-    public void setCreatedByAgent(Agent createdByAgent) {
-        this.createdByAgent = createdByAgent;
-    }
-
-    public String getTriggerType() {
-        return triggerType;
-    }
-
-    public void setTriggerType(String triggerType) {
-        this.triggerType = triggerType;
-    }
-
-    public String getTriggerConfig() {
-        return triggerConfig;
-    }
-
-    public void setTriggerConfig(String triggerConfig) {
-        this.triggerConfig = triggerConfig;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(Instant createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(Instant updatedAt) {
-        this.updatedAt = updatedAt;
-    }
 }
+
 
