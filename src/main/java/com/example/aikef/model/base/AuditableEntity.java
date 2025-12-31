@@ -8,12 +8,10 @@ import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.EntityListeners;
-import com.example.aikef.saas.listener.TenantEntityListener;
 import java.time.Instant;
 import java.util.UUID;
 
 @MappedSuperclass
-@EntityListeners(TenantEntityListener.class)
 public abstract class AuditableEntity {
 
     @Id

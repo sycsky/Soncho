@@ -73,19 +73,19 @@ public class AgentService {
     @Transactional
     public AgentDto createAgent(CreateAgentRequest request) {
         // 校验邮箱唯一性
-        if (agentRepository.findByEmail(request.email()).isPresent()) {
+        if (agentRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new IllegalArgumentException("该邮箱已被使用");
         }
         
-        Role role = roleRepository.findById(request.roleId())
+        Role role = roleRepository.findById(request.getRoleId())
                 .orElseThrow(() -> new EntityNotFoundException("角色不存在"));
         Agent agent = new Agent();
-        agent.setName(request.name());
-        agent.setEmail(request.email());
-        agent.setPasswordHash(passwordEncoder.encode(request.password()));
+        agent.setName(request.getName());
+        agent.setEmail(request.getEmail());
+        agent.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         agent.setRole(role);
-        if (request.language() != null && !request.language().isBlank()) {
-            agent.setLanguage(request.language());
+        if (request.getLanguage() != null && !request.getLanguage().isBlank()) {
+            agent.setLanguage(request.getLanguage());
         }
         
         // 如果开启了 SAAS 且当前没有租户上下文（例如管理员创建租户管理员），需要手动设置 TenantId
