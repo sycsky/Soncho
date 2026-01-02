@@ -1,0 +1,297 @@
+package com.example.aikef.shopify.service;
+
+import com.example.aikef.saas.context.TenantContext;
+import com.example.aikef.model.Agent;
+import com.example.aikef.model.Role;
+import com.example.aikef.model.enums.AgentStatus;
+import com.example.aikef.repository.AgentRepository;
+import com.example.aikef.repository.RoleRepository;
+import com.example.aikef.shopify.model.ShopifyStore;
+import com.example.aikef.shopify.repository.ShopifyStoreRepository;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.TreeMap;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
+@Service
+public class ShopifyAuthService {
+
+    private static final Duration STATE_TTL = Duration.ofMinutes(10);
+    private static final Duration TOKEN_CACHE_TTL = Duration.ofDays(30);
+    private static final String STATE_KEY_PREFIX = "shopify:oauth:state:";
+    private static final String TOKEN_KEY_PREFIX = "shopify:access_token:";
+
+    private final StringRedisTemplate redisTemplate;
+    private final RestTemplate restTemplate;
+    private final ShopifyStoreRepository storeRepository;
+    private final ShopifyWebhookRegistrationService webhookRegistrationService;
+    private final AgentRepository agentRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    private final SecureRandom secureRandom = new SecureRandom();
+
+    @Value("${shopify.api-key:}")
+    private String apiKey;
+
+    @Value("${shopify.api-secret:}")
+    private String apiSecret;
+
+    @Value("${shopify.scopes:read_orders,read_customers,read_products}")
+    private String scopes;
+
+    @Value("${shopify.app-url:http://localhost:8080}")
+    private String appUrl;
+
+    public ShopifyAuthService(StringRedisTemplate redisTemplate,
+                             RestTemplate restTemplate,
+                             ShopifyStoreRepository storeRepository,
+                             ShopifyWebhookRegistrationService webhookRegistrationService,
+                             AgentRepository agentRepository,
+                             RoleRepository roleRepository,
+                             PasswordEncoder passwordEncoder) {
+        this.redisTemplate = redisTemplate;
+        this.restTemplate = restTemplate;
+        this.storeRepository = storeRepository;
+        this.webhookRegistrationService = webhookRegistrationService;
+        this.agentRepository = agentRepository;
+        this.roleRepository = roleRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    public URI buildInstallRedirect(String shopDomain) {
+        String state = generateState();
+        redisTemplate.opsForValue().set(STATE_KEY_PREFIX + state, shopDomain, STATE_TTL);
+
+        String redirectUri = appUrl + "/api/v1/shopify/oauth/callback";
+
+        String url = "https://" + shopDomain + "/admin/oauth/authorize"
+                + "?client_id=" + urlEncode(apiKey)
+                + "&scope=" + urlEncode(scopes)
+                + "&redirect_uri=" + urlEncode(redirectUri)
+                + "&state=" + urlEncode(state);
+
+        return URI.create(url);
+    }
+
+    public OAuthCallbackResult handleCallback(String queryString, String shop, String code, String state, String hmac) {
+        validateShopDomain(shop);
+        String stateKey = STATE_KEY_PREFIX + state;
+        String expectedShop = redisTemplate.opsForValue().get(stateKey);
+        if (expectedShop == null || !expectedShop.equals(shop)) {
+            throw new IllegalArgumentException("Invalid state");
+        }
+        redisTemplate.delete(stateKey);
+
+        if (!verifyHmac(queryString, hmac)) {
+            throw new IllegalArgumentException("Invalid hmac");
+        }
+
+        TokenResponse tokenResponse = exchangeAccessToken(shop, code);
+        ShopifyStore store = upsertStore(shop, tokenResponse.access_token(), tokenResponse.scope());
+        redisTemplate.opsForValue().set(TOKEN_KEY_PREFIX + shop, store.getAccessToken(), TOKEN_CACHE_TTL);
+        webhookRegistrationService.registerAll(shop, store.getAccessToken());
+
+        return new OAuthCallbackResult(store.getShopDomain(), store.getTenantId());
+    }
+
+    public Optional<String> getAccessToken(String shopDomain) {
+        String cached = redisTemplate.opsForValue().get(TOKEN_KEY_PREFIX + shopDomain);
+        if (cached != null && !cached.isBlank()) {
+            return Optional.of(cached);
+        }
+        return storeRepository.findByShopDomain(shopDomain)
+                .map(ShopifyStore::getAccessToken)
+                .filter(v -> v != null && !v.isBlank())
+                .map(token -> {
+                    redisTemplate.opsForValue().set(TOKEN_KEY_PREFIX + shopDomain, token, TOKEN_CACHE_TTL);
+                    return token;
+                });
+    }
+
+    public static String generateTenantId(String shopDomain) {
+        if (shopDomain == null) {
+            return null;
+        }
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(shopDomain.getBytes(StandardCharsets.UTF_8));
+            return "shp_" + HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("MD5 not supported", e);
+        }
+    }
+
+    private ShopifyStore upsertStore(String shopDomain, String accessToken, String scope) {
+        String tenantId = generateTenantId(shopDomain);
+        TenantContext.setTenantId(tenantId);
+        try {
+            ShopifyStore store = storeRepository.findByShopDomain(shopDomain).orElseGet(ShopifyStore::new);
+            store.setShopDomain(shopDomain);
+            store.setAccessToken(accessToken);
+            store.setScopes(scope);
+            store.setActive(true);
+            store.setInstalledAt(Instant.now());
+            store.setUninstalledAt(null);
+            store.setTenantId(tenantId);
+            ShopifyStore saved = storeRepository.save(store);
+            ensureShopAdminAgent(shopDomain, tenantId);
+            return saved;
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    private Agent ensureShopAdminAgent(String shopDomain, String tenantId) {
+        String email = "shopify-admin@" + shopDomain;
+        Optional<Agent> existing = agentRepository.findByEmailIgnoreCase(email);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        Role adminRole = roleRepository.findByName("Administrator").orElseGet(() -> {
+            Role role = new Role();
+            role.setName("Administrator");
+            role.setDescription("System-wide administrator with all permissions.");
+            return roleRepository.save(role);
+        });
+
+        byte[] passwordBytes = new byte[24];
+        secureRandom.nextBytes(passwordBytes);
+        String password = HexFormat.of().formatHex(passwordBytes);
+
+        Agent agent = new Agent();
+        agent.setTenantId(tenantId);
+        agent.setName("Shopify Admin (" + shopDomain + ")");
+        agent.setEmail(email);
+        agent.setPasswordHash(passwordEncoder.encode(password));
+        agent.setStatus(AgentStatus.OFFLINE);
+        agent.setRole(adminRole);
+        agent.setLanguage("zh-CN");
+        return agentRepository.save(agent);
+    }
+
+    private TokenResponse exchangeAccessToken(String shopDomain, String code) {
+        String url = "https://" + shopDomain + "/admin/oauth/access_token";
+        Map<String, String> body = new LinkedHashMap<>();
+        body.put("client_id", apiKey);
+        body.put("client_secret", apiSecret);
+        body.put("code", code);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, String>> entity = new HttpEntity<>(body, headers);
+        ResponseEntity<TokenResponse> response = restTemplate.postForEntity(url, entity, TokenResponse.class);
+        TokenResponse tokenResponse = response.getBody();
+        if (tokenResponse == null || tokenResponse.access_token() == null || tokenResponse.access_token().isBlank()) {
+            throw new IllegalStateException("Token exchange failed");
+        }
+        return tokenResponse;
+    }
+
+    private boolean verifyHmac(String queryString, String providedHmac) {
+        if (providedHmac == null || providedHmac.isBlank()) {
+            return false;
+        }
+        if (apiSecret == null || apiSecret.isBlank()) {
+            throw new IllegalStateException("Missing shopify.api-secret");
+        }
+        String message = canonicalizeQueryString(queryString);
+        String expected = hmacSha256Hex(apiSecret, message);
+        return constantTimeEquals(expected, providedHmac.toLowerCase());
+    }
+
+    private String canonicalizeQueryString(String queryString) {
+        if (queryString == null) {
+            return "";
+        }
+        Map<String, String> params = new TreeMap<>();
+        for (String pair : queryString.split("&")) {
+            int idx = pair.indexOf('=');
+            String key = idx >= 0 ? pair.substring(0, idx) : pair;
+            String value = idx >= 0 ? pair.substring(idx + 1) : "";
+            if ("hmac".equals(key) || "signature".equals(key)) {
+                continue;
+            }
+            params.put(key, value);
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (Map.Entry<String, String> e : params.entrySet()) {
+            if (!first) {
+                sb.append('&');
+            }
+            first = false;
+            sb.append(e.getKey()).append('=').append(e.getValue());
+        }
+        return sb.toString();
+    }
+
+    private String hmacSha256Hex(String secret, String message) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            byte[] digest = mac.doFinal(message.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (Exception e) {
+            throw new IllegalStateException("HMAC calculation failed", e);
+        }
+    }
+
+    private boolean constantTimeEquals(String a, String b) {
+        byte[] aBytes = a.getBytes(StandardCharsets.UTF_8);
+        byte[] bBytes = b.getBytes(StandardCharsets.UTF_8);
+        if (aBytes.length != bBytes.length) {
+            return false;
+        }
+        int result = 0;
+        for (int i = 0; i < aBytes.length; i++) {
+            result |= aBytes[i] ^ bBytes[i];
+        }
+        return result == 0;
+    }
+
+    private String generateState() {
+        byte[] bytes = new byte[16];
+        secureRandom.nextBytes(bytes);
+        return HexFormat.of().formatHex(bytes);
+    }
+
+    private String urlEncode(String v) {
+        return URLEncoder.encode(v, StandardCharsets.UTF_8);
+    }
+
+    public void validateShopDomain(String shopDomain) {
+        if (shopDomain == null || shopDomain.isBlank()) {
+            throw new IllegalArgumentException("Missing shop");
+        }
+        if (!shopDomain.matches("^[a-zA-Z0-9][a-zA-Z0-9\\-]*\\.myshopify\\.com$")) {
+            throw new IllegalArgumentException("Invalid shop");
+        }
+    }
+
+    public record OAuthCallbackResult(String shopDomain, String tenantId) {}
+
+    public record TokenResponse(String access_token, String scope) {}
+}
