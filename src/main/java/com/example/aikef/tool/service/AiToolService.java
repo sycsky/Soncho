@@ -46,6 +46,7 @@ public class AiToolService {
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
     private final com.example.aikef.service.ChatSessionService chatSessionService;
+    private final com.example.aikef.tool.internal.InternalToolRegistry internalToolRegistry;
 
     // ==================== 工具 CRUD ====================
 
@@ -254,12 +255,13 @@ public class AiToolService {
     public AiTool createOrReplaceToolByName(CreateToolRequest request, UUID createdBy) {
         UUID reuseId = null;
         String oldApiBodyTemplate = null; // 保存旧的 apiBodyTemplate
-
+        String oldApiUrl = null; // 保存旧的 apiUrl
         AiTool existing = toolRepository.findByNameWithSchema(request.name()).orElse(null);
         if (existing != null) {
             reuseId = existing.getId();
             // 保存旧的 apiBodyTemplate
             oldApiBodyTemplate = existing.getApiBodyTemplate();
+            oldApiUrl = existing.getApiUrl();
             // 先删执行记录（外键）
             executionRepository.deleteByTool_Id(reuseId);
             // 再删工具（Schema 会 orphanRemoval 级联删除）
@@ -270,8 +272,11 @@ public class AiToolService {
             // 兜底：防止并发或未 fetch 到的情况
             AiTool existing2 = toolRepository.findByName(request.name()).orElse(null);
             if (existing2 != null) {
+                existing =  existing2;;
                 reuseId = existing2.getId();
                 // 保存旧的 apiBodyTemplate
+                // 保存旧的 apiUrl
+                oldApiUrl = existing2.getApiUrl();
                 oldApiBodyTemplate = existing2.getApiBodyTemplate();
                 executionRepository.deleteByTool_Id(reuseId);
                 toolRepository.delete(existing2);
@@ -296,15 +301,15 @@ public class AiToolService {
         // API 配置
         if (request.toolType() == AiTool.ToolType.API) {
             tool.setApiMethod(request.apiMethod());
-            tool.setApiUrl(request.apiUrl());
             tool.setApiHeaders(request.apiHeaders());
-            // 如果有旧的 apiBodyTemplate 且新请求的为空，则继承旧的
-            String apiBodyTemplate = request.apiBodyTemplate();
-            if ((apiBodyTemplate == null || apiBodyTemplate.trim().isEmpty()) && oldApiBodyTemplate != null) {
-                apiBodyTemplate = oldApiBodyTemplate;
-                log.info("继承旧的 apiBodyTemplate: toolName={}", request.name());
+            // 如果有旧的 tool ，则继承旧的 apiBodyTemplate, apiUrl
+            if(existing!=null) {
+                tool.setApiUrl(existing.getApiUrl());
+                tool.setApiBodyTemplate(existing.getApiBodyTemplate());
             }
-            tool.setApiBodyTemplate(apiBodyTemplate);
+
+
+
             tool.setApiResponsePath(request.apiResponsePath());
             tool.setApiTimeout(request.apiTimeout() != null ? request.apiTimeout() : 30);
         }
@@ -372,6 +377,8 @@ public class AiToolService {
                 result = executeApiTool(tool, params, sessionId);
             } else if (tool.getToolType() == AiTool.ToolType.MCP) {
                 result = executeMcpTool(tool, params);
+            } else if (tool.getToolType() == AiTool.ToolType.INTERNAL) {
+                result = executeInternalTool(tool, params);
             } else {
                 throw new IllegalArgumentException("不支持的工具类型: " + tool.getToolType());
             }
@@ -513,6 +520,37 @@ public class AiToolService {
                 null,
                 null
         );
+    }
+
+    /**
+     * 执行内部工具
+     */
+    private ToolExecutionResult executeInternalTool(AiTool tool, Map<String, Object> params) {
+        try {
+            Object result = internalToolRegistry.execute(tool.getName(), params);
+            String output = result != null ? result.toString() : "null";
+            
+            // 如果结果是复杂对象，尝试转为 JSON
+            if (result != null && !(result instanceof String) && !(result instanceof Number) && !(result instanceof Boolean)) {
+                try {
+                    output = objectMapper.writeValueAsString(result);
+                } catch (JsonProcessingException e) {
+                    // 忽略序列化错误，使用 toString
+                }
+            }
+
+            return new ToolExecutionResult(
+                    true,
+                    output,
+                    null,
+                    200,
+                    null,
+                    null
+            );
+        } catch (Exception e) {
+            log.error("内部工具执行失败: tool={}", tool.getName(), e);
+            return new ToolExecutionResult(false, null, e.getMessage(), 500, null, null);
+        }
     }
 
     /**

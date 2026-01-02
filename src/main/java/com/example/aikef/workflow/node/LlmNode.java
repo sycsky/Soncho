@@ -449,7 +449,13 @@ public class LlmNode extends BaseWorkflowNode {
                             finalReply += String.format("  %s=>%s\n", item.getStr("key"), item.getStr("description"));
                         }
                     }
-                    finalReply += String.format("工具 %s 执行结果: %s\n", toolName, new JSONObject(resultBody).toJSONString(2));
+                    try {
+                        JSONObject rp = new JSONObject(resultBody);
+                        finalReply += String.format("工具 %s 执行结果: %s\n", toolName, new JSONObject(resultBody).toJSONString(2));
+                    }catch (Exception e){
+                        finalReply += String.format("工具 %s 执行结果: %s\n", toolName, resultBody);
+                    }
+
                     finalReply += "==================================================\n";
                 }else {
                     finalReply += String.format("执行结果: %s\n", resultBody);

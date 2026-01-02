@@ -217,7 +217,8 @@ public class AiTool {
      */
     public enum ToolType {
         API,        // HTTP API 接口
-        MCP         // MCP 服务
+        MCP,        // MCP 服务
+        INTERNAL    // 内部本地工具
     }
 
     /**
