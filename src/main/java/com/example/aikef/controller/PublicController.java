@@ -1,7 +1,7 @@
 package com.example.aikef.controller;
 
 
-import com.example.aikef.dto.request.CreateAgentRequest;
+import com.example.aikef.dto.request.CreateTenantAdminRequest;
 import com.example.aikef.service.AgentService;
 import com.example.aikef.service.RoleService;
 import com.example.aikef.dto.AgentDto;
@@ -71,14 +71,14 @@ public class PublicController {
         Role adminRole = roleRepository.findByName("Administrator")
                 .orElseThrow(() -> new EntityNotFoundException("Role ADMIN not found"));
         
-        CreateAgentRequest request = new CreateAgentRequest(
+        CreateTenantAdminRequest request = new CreateTenantAdminRequest(
                 name,
                 email,
                 password,
                 adminRole.getId(),
-                "zh"
+                "zh",
+                tenantId
         );
-        request.setTenantId(tenantId);
         
         AgentDto agent = agentService.createAgent(request);
         

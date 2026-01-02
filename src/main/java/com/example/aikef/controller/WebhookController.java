@@ -170,6 +170,7 @@ public class WebhookController {
             case TWITTER -> "Twitter";
             case EMAIL -> "Email";
             case WEB -> "网页";
+            case SHOPIFY -> "Shopify";
             case CUSTOM -> "CUSTOM";
             case OTHER -> "OTHER";
         };

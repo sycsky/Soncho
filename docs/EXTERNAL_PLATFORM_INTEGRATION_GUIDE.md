@@ -597,3 +597,272 @@ Content-Type: application/json
 
 如有问题，请联系技术支持或查阅完整 API 文档。
 
+---
+
+# Shopify 接入指南（内嵌应用 + OAuth + Webhooks）
+
+本节描述如何将本项目作为 Shopify Embedded App 接入并在测试商店中完成安装、回调、Webhook 验证与数据落库。
+
+## 1. 关键概念
+
+- **App URL**：Shopify Admin 内打开应用时 iframe 加载的地址（对你来说是公网可访问的前端或后端地址）。
+- **Allowed redirection URL(s)**：OAuth 授权完成后，Shopify 回调到你后端的地址（必须精确匹配）。
+- **Embedded App**：应用 UI 被嵌入到 Shopify Admin 中显示；外观看起来像 `admin.shopify.com/.../apps/...`，但内容实际来自你的 App URL。
+
+## 2. 后端能力概览
+
+- OAuth 安装与回调：
+  - `GET /api/v1/shopify/oauth/install?shop={shop}.myshopify.com`（发起授权）
+  - `GET /api/v1/shopify/oauth/callback`（处理回调、换 token、写库、注册 webhooks）
+  - 代码参考：[ShopifyAuthController](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/controller/ShopifyAuthController.java)、[ShopifyAuthService](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/service/ShopifyAuthService.java)
+
+- Webhooks 接收与校验（HMAC-SHA256）：
+  - `POST /api/v1/shopify/webhooks/*`
+  - 代码参考：[ShopifyWebhookController](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/controller/ShopifyWebhookController.java)、[ShopifyWebhookVerifier](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/service/ShopifyWebhookVerifier.java)
+
+- GDPR Webhooks（已实现接收与校验）：
+  - `POST /api/v1/shopify/gdpr/*`
+  - 代码参考：[ShopifyGdprController](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/controller/ShopifyGdprController.java)
+
+## 3. Shopify 后台配置（Dev Dashboard / Partner）
+
+在你的 Shopify App 配置中设置：
+
+- **App URL**（两种方式二选一）
+  - 方式 A：直接指向后端安装入口（最适合纯后端阶段）
+    - `https://<公网域名>/api/v1/shopify/oauth/install`
+  - 方式 B：指向前端首页（前端再跳转到 `/oauth/install`）
+    - `https://<公网域名>/`
+
+- **Allowed redirection URL(s)**（必须）
+  - `https://<公网域名>/api/v1/shopify/oauth/callback`
+
+- **Preferences URL**（可选）
+  - 可填 `https://<公网域名>/` 或留空
+
+## 4. 本地配置（Spring Boot）
+
+配置项位于：
+- [application-dev.yml](file:///d:/ai_agent_work/ai_kef/src/main/resources/application-dev.yml)
+- [application-local.yml](file:///d:/ai_agent_work/ai_kef/src/main/resources/application-local.yml)（本地覆盖，不提交）
+
+最小配置示例：
+
+```yaml
+shopify:
+  api-key: ${SHOPIFY_API_KEY:your_shopify_api_key}
+  api-secret: ${SHOPIFY_API_SECRET:your_shopify_api_secret}
+  app-url: ${SHOPIFY_APP_URL:https://<公网域名>}
+  ui-url: ${SHOPIFY_UI_URL:https://<前端域名>}   # 可选
+  embedded: true                                 # 默认 true
+```
+
+说明：
+- `shopify.app-url` 必须是 Shopify 可以访问到的公网 HTTPS 域名（通常来自 cloudflared/ngrok）。
+- `shopify.ui-url` 仅用于 callback 跳转到你自定义的前端面板（没有前端时可不配）。
+
+## 5. 安装流程（推荐走 Shopify Admin 内嵌体验）
+
+1) 在 Shopify Admin 中打开 App（或点击 Install）
+- Shopify 会打开你的 App URL，并带上 `shop`、`host` 等参数（由 Shopify 注入）。
+
+2) 发起 OAuth 授权
+- 如果 App URL 直接指向 `/oauth/install`：后端会立刻 302 跳到 Shopify 授权页
+- 如果 App URL 指向前端：前端拿到 `shop` 后跳转到：
+  - `/api/v1/shopify/oauth/install?shop={shop}.myshopify.com`
+  - 代码参考：[ShopifyAuthController.install](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/controller/ShopifyAuthController.java#L40-L48)
+
+3) OAuth 回调与跳转
+- 本项目 callback 默认会 302 跳转（不再返回 JSON）
+- 如果参数里存在 `host` 且 `shopify.embedded=true`，会优先跳回 Shopify Admin 的 apps 页面
+  - 代码参考：[ShopifyAuthController.callback](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/controller/ShopifyAuthController.java#L50-L105)
+
+调试：在 callback URL 上加 `&format=json` 可以强制返回 JSON。
+
+## 6. 数据库准备
+
+当前 Shopify 安装信息会写入 `shopify_stores` 表：
+- SQL 文件：[create_shopify_stores.sql](file:///d:/ai_agent_work/ai_kef/db/create_shopify_stores.sql)
+
+本项目采用 `tenant_id VARCHAR(50)`，Shopify 的租户 ID 使用短格式（`shp_{md5}`）以避免长度问题：
+- 生成逻辑参考：[ShopifyAuthService.generateTenantId](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/service/ShopifyAuthService.java#L116-L131)
+
+## 7. Webhook 注册与限制（Protected Customer Data）
+
+安装完成后，后端会自动尝试注册 Webhooks：
+- 代码参考：[ShopifyWebhookRegistrationService](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/service/ShopifyWebhookRegistrationService.java)
+
+其中卸载事件使用 `app/uninstalled`：
+
+- Topic：`app/uninstalled`
+- 接收地址：`POST /api/v1/shopify/webhooks/app/uninstalled`
+- 行为：
+  - 将 `shopify_stores.active` 置为 `false`，写入 `uninstalled_at`
+  - 清理该店铺的 Redis access token 缓存，并将数据库中的 `access_token`/`scopes` 置空
+  - 代码参考：[ShopifySyncService.upsertFromWebhook](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/service/ShopifySyncService.java#L26-L46)
+
+注意：Shopify 对包含敏感客户数据的主题（如 `orders/create`、`customers/*`）需要额外权限申请，否则会返回 403。
+因此当前实现会跳过以下主题的自动注册：
+- `orders/create`
+- `customers/create`
+- `customers/update`
+- `customers/data_request`
+- `customers/redact`
+- `shop/redact`
+
+## 8. iframe 嵌入安全头（必需）
+
+为保证 Shopify Admin 能 iframe 加载你的页面，本项目已放开 `frame-ancestors`：
+- 配置参考：[SecurityConfig](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/config/SecurityConfig.java#L56-L78)
+
+## 9. 测试清单（Test Store）
+
+- 启动后端（确保 8080 未被占用）并保持公网隧道 URL 可用
+- 安装/授权成功后，检查数据库：
+
+```sql
+SELECT id, shop_domain, active, tenant_id, created_at
+FROM shopify_stores
+ORDER BY created_at DESC
+LIMIT 5;
+```
+
+- 触发一个可用 Webhook（例如修改商品标题并保存），检查是否成功接收（日志/落库取决于你的实现）
+
+## 10. 常见问题排查
+
+- callback 报 redirect_uri 不在白名单：检查 Shopify 后台 Allowed redirection URL(s) 与实际回调地址是否完全一致（含路径、https）。
+- 403 无权限创建某些 Webhook：需要申请 Protected Customer Data 权限；开发阶段可先跳过敏感主题。
+- 页面无法被 Shopify Admin 内嵌：检查响应头是否包含允许 iframe 的 `Content-Security-Policy frame-ancestors ...`（见 SecurityConfig）。
+- 卸载后仍可调用 Shopify Admin API：检查 `app/uninstalled` webhook 是否创建成功，以及卸载事件是否到达本服务（可查 `shopify_webhook_events` 与 `shopify_stores.active/uninstalled_at`）。
+
+## 11. 前端接入（App URL 指向前端）
+
+适用场景：你在 Shopify Partner Dashboard 中把 **App URL** 配置为前端域名（例如 `https://<前端域名>/`），而 OAuth 安装与回调仍由后端完成。
+
+说明：本仓库当前未包含可直接运行的前端工程脚手架；以下内容描述的是前端需要实现的接入行为与与后端的接口契约。
+
+### 11.1 Shopify 后台配置要点
+
+- **App URL**：
+  - `https://<前端域名>/`
+- **Allowed redirection URL(s)**：
+  - `https://<后端域名>/api/v1/shopify/oauth/callback`
+- 后端配置：
+  - `shopify.app-url` 配为后端公网域名（用于生成 OAuth redirect_uri）
+  - `shopify.ui-url` 配为前端公网域名（用于非 embedded/缺 host 的回跳兜底）
+
+### 11.2 前端启动页：拿参数并触发安装
+
+Shopify Admin 打开 App 时，会把关键参数拼在 App URL 上，常见为：
+
+- `shop`：形如 `xxx.myshopify.com`
+- `host`：Shopify 的 host 参数（用于 embedded 场景下的 App Bridge 初始化）
+
+前端需要在首次渲染时做两件事：
+
+1) 解析 `shop`（必要）与 `host`（建议保留）
+2) 如果尚未完成安装/授权，则跳转到后端安装入口：
+   - `GET /api/v1/shopify/oauth/install?shop={shop}`
+
+示例（框架无关，浏览器原生）：
+
+```js
+const params = new URLSearchParams(window.location.search);
+const shop = params.get('shop');
+const host = params.get('host');
+
+if (shop) {
+  sessionStorage.setItem('shop', shop);
+}
+if (host) {
+  sessionStorage.setItem('host', host);
+}
+
+if (shop && !sessionStorage.getItem('shopifyInstalled')) {
+  window.location.href = `/api/v1/shopify/oauth/install?shop=${encodeURIComponent(shop)}`;
+}
+```
+
+安装成功后标记一次（避免循环）：
+
+```js
+sessionStorage.setItem('shopifyInstalled', '1');
+```
+
+### 11.3 OAuth 回调后：前端如何回到应用页面
+
+后端回调处理完成后会 302 跳转：
+
+- embedded 场景（`shopify.embedded=true` 且存在 `host`）：优先跳回 Shopify Admin 的 apps 页面，由 Shopify 重新加载你的 App URL
+  - 代码参考：[ShopifyAuthController.callback](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/controller/ShopifyAuthController.java#L50-L105)
+- 非 embedded 或缺少 `host`：会跳回 `shopify.ui-url`（若配置）或 `shopify.app-url`，并附带 `shop`、`tenantId`、`host`（若有）
+
+前端建议统一在启动时从 querystring 与 sessionStorage 兜底读取：
+
+```js
+const params = new URLSearchParams(window.location.search);
+const shop = params.get('shop') || sessionStorage.getItem('shop');
+const host = params.get('host') || sessionStorage.getItem('host');
+const tenantId = params.get('tenantId') || sessionStorage.getItem('tenantId');
+
+if (shop) sessionStorage.setItem('shop', shop);
+if (host) sessionStorage.setItem('host', host);
+if (tenantId) sessionStorage.setItem('tenantId', tenantId);
+```
+
+### 11.4 登录与登录态判断（本项目现状）
+
+本项目对前端受保护接口使用的是后端签发的坐席 Token（以及客户 Token）。在 Shopify Embedded App 场景下，推荐用 Shopify Session Token 换取后端坐席 Token（避免让商家再输入邮箱/密码）。
+
+- 换取后端 Token（推荐）：
+  - `POST /api/v1/shopify/auth/exchange`
+  - Header：`Authorization: Bearer <shopify_session_token>`
+  - 或使用 query：`?id_token=<jwt>&shop=<shop>.myshopify.com`（兼容从 URL 带 token 的场景）
+  - 返回：`{ success, shop, tenantId, token }`（其中 `token` 为后端坐席 Token）
+  - 代码参考：[ShopifyEmbeddedAuthController.exchange](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/shopify/controller/ShopifyEmbeddedAuthController.java#L52-L110)
+  - 说明：
+    - `shop` / `host` 等 URL 参数用于定位店铺与初始化 App Bridge，但不应直接作为“已登录”凭证
+    - Session Token（JWT）由 Shopify 签名；后端会校验签名与 `aud`（等于 `shopify.api-key`），并检查 `exp`
+
+- 登录：
+  - `POST /api/v1/auth/login`
+  - 返回：`{ token, agent }`
+  - 代码参考：[AuthController.login](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/controller/AuthController.java#L35-L42)、[LoginResponse](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/dto/response/LoginResponse.java)
+- 携带 Token 调用受保护接口：
+  - `Authorization: Bearer <token>`
+  - 代码参考：[UnifiedAuthenticationFilter](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/security/UnifiedAuthenticationFilter.java#L32-L73)
+- 判断登录态：
+  - `GET /api/v1/auth/me` 成功返回当前用户信息即为已登录
+  - 代码参考：[AuthController.me](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/controller/AuthController.java#L44-L47)
+
+前端通用请求封装示例：
+
+```js
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem('token');
+  const tenantId = sessionStorage.getItem('tenantId');
+  const headers = new Headers(options.headers || {});
+  headers.set('Content-Type', 'application/json');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (tenantId) headers.set('X-Tenant-ID', tenantId);
+  const resp = await fetch(path, { ...options, headers });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+```
+
+### 11.5 租户透传（SaaS 模式）
+
+当 `app.saas.enabled=true` 时，后端需要明确的租户上下文。当前实现支持三种来源（按优先级）：
+
+1) Token 中携带的 tenantId
+2) 请求头 `X-Tenant-ID`
+3) 查询参数 `tenantId`
+
+代码参考：[TenantInterceptor](file:///d:/ai_agent_work/ai_kef/src/main/java/com/example/aikef/saas/interceptor/TenantInterceptor.java#L20-L88)
+
+前端建议：
+
+- 如回跳 querystring 带有 `tenantId`，则持久化并在后续 API 请求中通过 `X-Tenant-ID` 传递
+- 如未带 `tenantId`，可在非 SaaS 模式下先跑通页面；SaaS 模式需要补齐 tenantId 的获取与持久化策略

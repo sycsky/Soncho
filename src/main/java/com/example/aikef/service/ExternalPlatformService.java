@@ -275,7 +275,7 @@ public class ExternalPlatformService {
             case FACEBOOK -> customerRepository.findByFacebookId(externalUserId);
             case TWITTER -> Optional.empty();
             case EMAIL -> Optional.empty();
-            case WEB, CUSTOM, OTHER -> Optional.empty(); // WEB 和 CUSTOM 没有特定的 ID 字段
+            case WEB, SHOPIFY, CUSTOM, OTHER -> Optional.empty();
         };
     }
 
@@ -291,7 +291,7 @@ public class ExternalPlatformService {
             case TELEGRAM -> customer.setTelegramId(externalUserId);
             case FACEBOOK -> customer.setFacebookId(externalUserId);
             case EMAIL -> customer.setEmail(externalUserId);
-            case TWITTER, WEB, CUSTOM, OTHER -> {} // TWITTER 暂无专属ID字段，其他存储在 mapping metadata
+            case TWITTER, WEB, SHOPIFY, CUSTOM, OTHER -> {}
         }
     }
 
@@ -644,6 +644,7 @@ public class ExternalPlatformService {
             case TWITTER -> Channel.TWITTER;
             case EMAIL -> Channel.EMAIL;
             case WEB -> Channel.WEB;
+            case SHOPIFY -> Channel.SHOPIFY;
             case CUSTOM, OTHER -> Channel.CUSTOM;
         };
     }

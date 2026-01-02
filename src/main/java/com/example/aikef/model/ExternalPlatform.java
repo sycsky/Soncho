@@ -89,6 +89,7 @@ public class ExternalPlatform extends AuditableEntity {
         TWITTER,    // X (Twitter)
         EMAIL,      // 邮件
         WEB,
+        SHOPIFY,
         CUSTOM,     // 自定义平台
         OTHER       // 其他
     }

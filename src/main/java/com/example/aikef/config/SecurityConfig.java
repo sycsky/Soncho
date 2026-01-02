@@ -59,6 +59,11 @@ public class SecurityConfig {
                                                    AgentAuthenticationProvider authenticationProvider) throws Exception {
         http.csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.disable())
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "frame-ancestors 'self' https://admin.shopify.com https://*.myshopify.com https://*.shopify.com"
+                        )))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider)
                 .authorizeHttpRequests(auth -> auth
@@ -68,6 +73,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/events/hook/**").permitAll()
                         .requestMatchers("/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/public/**").permitAll()
+                        .requestMatchers("/api/v1/shopify/**").permitAll()
                         .requestMatchers("/api/v1/files/image/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
 //                        .requestMatchers("/**").permitAll()
