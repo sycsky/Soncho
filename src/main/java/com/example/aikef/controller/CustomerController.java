@@ -22,9 +22,11 @@ import java.util.UUID;
 public class CustomerController {
 
     private final CustomerService customerService;
+    private final com.example.aikef.service.SpecialCustomerService specialCustomerService;
 
-    public CustomerController(CustomerService customerService) {
+    public CustomerController(CustomerService customerService, com.example.aikef.service.SpecialCustomerService specialCustomerService) {
         this.customerService = customerService;
+        this.specialCustomerService = specialCustomerService;
     }
 
     @GetMapping
@@ -72,5 +74,16 @@ public class CustomerController {
     public CustomerTokenResponse generateToken(@PathVariable UUID id) {
         CustomerTokenResponse tokenResponse = customerService.generateCustomerToken(id);
         return tokenResponse;
+    }
+
+    /**
+     * 为客户分配特殊角色
+     * @param id 客户ID
+     * @param roleCode 角色代码 (SUPPLIER, LOGISTICS, PROMOTER, WAREHOUSE)
+     */
+    @PostMapping("/{id}/role")
+    public CustomerDto assignRole(@PathVariable UUID id, @RequestParam String roleCode) {
+        specialCustomerService.assignRole(id, roleCode);
+        return customerService.getCustomer(id);
     }
 }
