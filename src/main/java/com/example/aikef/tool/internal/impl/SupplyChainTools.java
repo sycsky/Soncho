@@ -121,6 +121,7 @@ public class SupplyChainTools {
             purchaseOrderService.updateItemShipped(update.itemId(), update.quantity());
         }
         return "Updated shipped quantities.";
+
     }
 
     @Tool("Update received quantity for items (Initiator)")
