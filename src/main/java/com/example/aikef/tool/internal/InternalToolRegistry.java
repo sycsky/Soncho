@@ -157,105 +157,43 @@ public class InternalToolRegistry {
         toolRepository.save(tool);
     }
 
-    public Object execute(String toolName, Map<String, Object> params) throws Exception {
+    public Object execute(String toolName, Map<String, Object> params, String body) throws Exception {
         ToolMethod toolMethod = toolMethods.get(toolName);
         if (toolMethod == null) {
             throw new IllegalArgumentException("Internal tool not found in registry: " + toolName);
         }
         
-        // Check if there is a bodyTemplate in the AiTool definition
-        // Note: toolRepository access might be slow, but we need the latest configuration
-        // Or we could cache the tool definition too? For now, fetch it.
-        // Wait, executeInternalTool in AiToolService calls this.
-        // AiToolService already has the AiTool object!
-        // But the signature of this method is (String toolName, Map params).
-        // Maybe we should overload execute to accept AiTool?
-        // Or fetch it here.
-        
-        // Let's refactor: execute should be called with resolved arguments if possible.
-        // But `invokeMethod` does argument resolution.
-        
-        // Actually, requirement 2 says: "Internal tool if has bodyTemplate, use bodyTemplate as parameter, and can call template engine inject variables"
-        // This means we should pre-process params using bodyTemplate if it exists.
-        
-        // Fetch tool to get bodyTemplate
-        AiTool tool = toolRepository.findByName(toolName).orElse(null);
-        String bodyTemplate = (tool != null) ? tool.getApiBodyTemplate() : null; // Reusing apiBodyTemplate field for internal tool template
-        
-        if (bodyTemplate != null && !bodyTemplate.isBlank()) {
-             // Inject variables into template
-             // We need a helper to replace variables. `AiToolService` has one, but it's private.
-             // We should probably move `replaceVariables` to a shared utility or duplicate logic here.
-             // Let's implement a simple replacer here.
-             String processedBody = replaceVariables(bodyTemplate, params);
-             
-             // Now, how do we pass this processedBody to the method?
-             // Does the method expect a single String argument? Or a specific object?
-             // If the method has a single parameter, we pass the body string (or convert it).
-             // If the method has multiple parameters, this is ambiguous.
-             // Assumption: If bodyTemplate is used, the method likely expects the result of the template (e.g. a JSON string or a formatted text).
-             // However, `invokeMethod` maps parameters by name.
-             
-             // Let's assume the bodyTemplate result should be treated as a special parameter, 
-             // OR it replaces the entire params map?
-             // "use bodyTemplate as parameter" -> likely means the output of the template IS the argument.
-             // If the method has 1 argument, we pass it.
-             
+        // If body is provided (from bodyTemplate), use it to determine arguments
+        if (body != null && !body.isBlank()) {
+             // If method has exactly one parameter, try to convert the body to that parameter
              if (toolMethod.method.getParameterCount() == 1) {
-                 // Special case: Single parameter, pass the template result
-                 // We need to wrap it in a map? No, invokeMethod expects a map.
-                 // We should probably modify `invokeMethod` or just call method.invoke directly here.
-                 
-                 Object arg = processedBody;
+                 Object arg = body;
                  Class<?> paramType = toolMethod.method.getParameterTypes()[0];
+                 
+                 // If parameter is not String, try to parse JSON
                  if (paramType != String.class) {
-                     // Try to convert JSON string to object if param is not String
                      try {
-                        arg = objectMapper.readValue(processedBody, paramType);
+                        arg = objectMapper.readValue(body, paramType);
                      } catch (Exception e) {
-                         // If not JSON, pass as string (if compatible) or fail
-                         if (!String.class.isAssignableFrom(paramType)) {
-                             log.warn("Failed to convert body template output to {}: {}", paramType, e.getMessage());
-                         }
+                         // If not JSON or parse fails, warn but proceed (might fail at invoke if type mismatch)
+                         // But if it's a primitive/simple type, readValue might handle it if body is "123"
+                         log.warn("Failed to convert body to {}: {}", paramType.getSimpleName(), e.getMessage());
                      }
                  }
                  return toolMethod.method.invoke(toolMethod.bean, arg);
              } else {
-                 // If multiple params, we can't easily map a single string to them unless we parse it back to a map?
-                 // Or maybe the user means "use bodyTemplate to construct a specific parameter"?
-                 // Given the ambiguity, let's assume the common case: 
-                 // The template generates a JSON object, which we parse into the params map?
-                 // OR the template generates a String that matches a parameter named "body"?
-                 
-                 // Let's try to parse the template result as JSON and merge into params?
+                 // If method has multiple parameters, try to parse body as JSON Map and use it as params
                  try {
-                     Map<String, Object> templateParams = objectMapper.readValue(processedBody, new TypeReference<Map<String, Object>>(){});
-                     // Merge: template params override input params? Or vice versa?
-                     // Usually template is derived FROM params. 
-                     // Wait, if we use bodyTemplate, maybe we should JUST use the template result?
-                     // Let's stick to: If bodyTemplate exists, use it to construct the SINGLE argument if method has 1 param.
-                     // If method has multiple params, log warning and proceed with normal mapping?
-                     log.warn("Tool {} has bodyTemplate but method has {} parameters. Ignoring template for now.", toolName, toolMethod.method.getParameterCount());
+                     Map<String, Object> bodyParams = objectMapper.readValue(body, new TypeReference<Map<String, Object>>(){});
+                     // Use bodyParams as the effective params for invocation
+                     return invokeMethod(toolMethod.bean, toolMethod.method, bodyParams);
                  } catch (Exception e) {
-                     // Not a JSON map.
+                     log.warn("Tool {} has bodyTemplate but method has {} parameters, and body could not be parsed as JSON Map. Ignoring body.", toolName, toolMethod.method.getParameterCount());
                  }
              }
         }
         
         return invokeMethod(toolMethod.bean, toolMethod.method, params);
-    }
-
-    private String replaceVariables(String template, Map<String, Object> params) {
-        if (template == null) return null;
-        String result = template;
-        if (params == null) return result;
-        
-        for (Map.Entry<String, Object> entry : params.entrySet()) {
-            String key = entry.getKey();
-            String value = entry.getValue() != null ? entry.getValue().toString() : "";
-            result = result.replace("{{" + key + "}}", value);
-        }
-        return result;
     }
 
     private Object invokeMethod(Object bean, Method method, Map<String, Object> params) throws Exception {

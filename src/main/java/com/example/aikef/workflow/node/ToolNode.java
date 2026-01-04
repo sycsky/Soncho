@@ -137,7 +137,7 @@ public class ToolNode extends NodeSwitchComponent {
             AiToolService.ToolExecutionResult result = toolService.executeTool(
                     tool.getId(),
                     toolParams,
-                    ctx.getSessionId(),
+                    ctx,
                     null
             );
 

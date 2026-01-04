@@ -55,6 +55,18 @@ public class TemplateEngine {
      * @return 解析后的字符串
      */
     public static String render(String template, WorkflowContext ctx) {
+        return render(template, ctx, null);
+    }
+
+    /**
+     * 解析模板，替换变量（支持局部变量）
+     *
+     * @param template       模板字符串
+     * @param ctx            工作流上下文
+     * @param localVariables 局部变量（优先级高于上下文变量）
+     * @return 解析后的字符串
+     */
+    public static String render(String template, WorkflowContext ctx, Map<String, Object> localVariables) {
         if (template == null || template.isEmpty()) {
             return template;
         }
@@ -64,7 +76,7 @@ public class TemplateEngine {
 
         while (matcher.find()) {
             String expression = matcher.group(1).trim();
-            String replacement = resolveExpression(expression, ctx);
+            String replacement = resolveExpression(expression, ctx, localVariables);
             matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(result);
@@ -75,7 +87,7 @@ public class TemplateEngine {
     /**
      * 解析变量表达式
      */
-    private static String resolveExpression(String expression, WorkflowContext ctx) {
+    private static String resolveExpression(String expression, WorkflowContext ctx, Map<String, Object> localVariables) {
         try {
             // 解析 namespace.key 格式
             int dotIndex = expression.indexOf('.');
@@ -86,7 +98,7 @@ public class TemplateEngine {
             }
 
             // 没有命名空间，尝试按优先级查找
-            return resolveSimpleVariable(expression, ctx);
+            return resolveSimpleVariable(expression, ctx, localVariables);
 
         } catch (Exception e) {
             log.warn("解析变量表达式失败: {}", expression, e);
@@ -106,6 +118,7 @@ public class TemplateEngine {
             case "entity" -> resolveEntity(key, ctx);
             case "agent" -> resolveAgentVariable(key, ctx);
             case "event" -> resolveEventData(key, ctx);
+            case "meta" -> resolveSessionMetadata(key, ctx);
             default -> {
                 log.warn("未知的命名空间: {}", namespace);
                 yield "";
@@ -226,10 +239,29 @@ public class TemplateEngine {
     }
 
     /**
-     * 解析简单变量（无命名空间）
-     * 按优先级查找: 系统变量 > 自定义变量 > 实体 > 客户信息
+     * 解析会话元数据
      */
-    private static String resolveSimpleVariable(String key, WorkflowContext ctx) {
+    private static String resolveSessionMetadata(String key, WorkflowContext ctx) {
+        if (ctx.getSessionMetadata() == null) {
+            return "";
+        }
+        Object value = ctx.getSessionMetadata().get(key);
+        return value != null ? value.toString() : "";
+    }
+
+    /**
+     * 解析简单变量（无命名空间）
+     * 按优先级查找: 局部变量 > 系统变量 > 自定义变量 > 实体 > 客户信息
+     */
+    private static String resolveSimpleVariable(String key, WorkflowContext ctx, Map<String, Object> localVariables) {
+        // 0. 尝试局部变量
+        if (localVariables != null) {
+            Object localValue = localVariables.get(key);
+            if (localValue != null) {
+                return localValue.toString();
+            }
+        }
+
         // 1. 尝试系统变量
         String sysValue = tryResolveSystemVariable(key, ctx);
         if (sysValue != null) {
