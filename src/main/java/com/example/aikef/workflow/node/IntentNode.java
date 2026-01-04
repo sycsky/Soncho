@@ -103,9 +103,9 @@ public class IntentNode extends NodeSwitchComponent {
         }
         
         // 如果 useHistoryOnly 为 false，将当前用户消息添加到历史记录中
-        if (!useHistoryOnly) {
-            chatHistory.add(new LangChainChatService.ChatHistoryMessage("user", userMessage));
-        }
+//        if (!useHistoryOnly) {
+//            chatHistory.add(new LangChainChatService.ChatHistoryMessage("user", userMessage));
+//        }
         
         // 3. 识别意图，返回匹配的意图 id（即 sourceHandle）
         String recognitionType = BaseWorkflowNode.readConfigString(config, "recognitionType", "llm");
