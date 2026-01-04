@@ -32,7 +32,7 @@ public class SpecialCustomerService {
     public SpecialCustomer assignRole(UUID customerId, String roleCode) {
         Customer customer = customerRepository.findById(customerId)
                 .orElseThrow(() -> new EntityNotFoundException("Customer not found: " + customerId));
-        
+
         CustomerRole role = customerRoleRepository.findByCode(roleCode)
                 .orElseThrow(() -> new EntityNotFoundException("Role not found: " + roleCode));
 
@@ -50,7 +50,7 @@ public class SpecialCustomerService {
     }
 
     // Role Management
-    
+
     public List<CustomerRole> getAllRoles() {
         return customerRoleRepository.findAll();
     }
@@ -60,7 +60,7 @@ public class SpecialCustomerService {
         if (customerRoleRepository.findByCode(code).isPresent()) {
             throw new IllegalArgumentException("Role code already exists: " + code);
         }
-        
+
         CustomerRole role = new CustomerRole();
         role.setCode(code);
         role.setName(name);

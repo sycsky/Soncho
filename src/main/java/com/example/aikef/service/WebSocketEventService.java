@@ -5,6 +5,7 @@ import com.example.aikef.dto.AgentDto;
 import com.example.aikef.dto.request.SendMessageRequest;
 import com.example.aikef.dto.request.UpdateSessionStatusRequest;
 import com.example.aikef.dto.websocket.ServerEvent;
+import com.example.aikef.model.Attachment;
 import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.AgentStatus;
@@ -53,6 +54,10 @@ public class WebSocketEventService {
     @Autowired
     @Lazy
     private com.example.aikef.workflow.service.WorkflowExecutionScheduler workflowScheduler;
+
+    @Autowired
+    @Lazy
+    private OfficialChannelMessageService officialChannelMessageService;
 
     @Autowired
     public WebSocketEventService(ObjectMapper objectMapper,
@@ -126,7 +131,30 @@ public class WebSocketEventService {
         
         // 如果是客服发送的消息，检查是否需要转发到第三方平台
         if (agentId != null) {
-            externalPlatformService.forwardMessageToExternalPlatform(sessionId, request.text(), SenderType.AGENT);
+            // 构建附件列表
+            List<Attachment> attachments = null;
+            if (request.attachments() != null && !request.attachments().isEmpty()) {
+                attachments = request.attachments().stream()
+                        .map(attPayload -> {
+                            Attachment att = new Attachment();
+                            att.setType(attPayload.type());
+                            att.setUrl(attPayload.url());
+                            att.setName(attPayload.name());
+                            att.setSizeKb(attPayload.sizeKb());
+                            return att;
+                        })
+                        .collect(Collectors.toList());
+            }
+
+            // 先尝试官方渠道（通过SDK，支持附件）
+            boolean sentToOfficial = officialChannelMessageService.sendMessageToOfficialChannel(
+                    sessionId, request.text(), SenderType.AGENT, attachments);
+            
+            if (!sentToOfficial) {
+                // 如果不是官方渠道，使用原有的外部平台方式（支持附件）
+                externalPlatformService.forwardMessageToExternalPlatform(
+                        sessionId, request.text(), SenderType.AGENT, attachments);
+            }
         }
         
         return new ServerEvent("newMessage", Map.of(
