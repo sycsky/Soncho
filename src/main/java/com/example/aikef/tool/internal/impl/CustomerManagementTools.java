@@ -40,6 +40,7 @@ public class CustomerManagementTools {
             @P(value = "Current Session ID", required = true) String sessionId
     ) {
         try {
+
             ChatSession session = chatSessionService.findById(UUID.fromString(sessionId));
             Customer customer = session.getCustomer();
             if (customer == null) {
