@@ -23,6 +23,7 @@ import dev.langchain4j.data.message.*;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 
 import java.util.*;
 import java.util.Map;
@@ -440,7 +441,10 @@ public class LlmNode extends BaseWorkflowNode {
                 String resultBody = result.getResult();
                 if(tool != null){
 //                    finalReply += String.format("工具 %s 执行结果: %s\n", toolName, result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage());
-                    finalReply += String.format("工具 %s 执行结果描述: %s\n", toolName, resultDescription);
+                    if(StringUtils.hasText(resultDescription)){
+                        finalReply += String.format("工具 %s 执行结果描述: %s\n", toolName, resultDescription);
+                    }
+
                     if(resultMetadata != null){
                         JSONArray resultJson = new JSONArray(resultMetadata);
                         finalReply += String.format(" %s 执行结果ResponsePath=>:%s 字段元数据:\n", toolName,tool.getApiResponsePath());
