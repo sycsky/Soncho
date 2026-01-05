@@ -1,5 +1,6 @@
 package com.example.aikef.service;
 
+import com.example.aikef.dto.ChatSessionDto;
 import com.example.aikef.dto.MessageDto;
 import com.example.aikef.dto.AgentDto;
 import com.example.aikef.dto.request.SendMessageRequest;
@@ -7,6 +8,7 @@ import com.example.aikef.dto.request.UpdateSessionStatusRequest;
 import com.example.aikef.dto.websocket.ServerEvent;
 import com.example.aikef.model.Attachment;
 import com.example.aikef.model.ChatSession;
+import com.example.aikef.model.Customer;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.AgentStatus;
 import com.example.aikef.model.enums.SessionAction;
@@ -29,6 +31,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class WebSocketEventService {
@@ -43,7 +46,10 @@ public class WebSocketEventService {
     private final MessageRepository messageRepository;
     private final AiWorkflowService aiWorkflowService;
     private final SessionMessageGateway messageGateway;
-    
+
+    @Autowired
+    private  CustomerService customerService;
+
     @Autowired
     private ReadRecordService readRecordService;
     
@@ -196,14 +202,18 @@ public class WebSocketEventService {
         }
     }
 
-    private ServerEvent handleSessionStatus(JsonNode payload) throws JsonProcessingException {
+
+
+    public ServerEvent handleSessionStatus(JsonNode payload) throws JsonProcessingException {
         UpdateSessionStatusRequest request = objectMapper.treeToValue(payload, UpdateSessionStatusRequest.class);
         ChatSession session = conversationService.updateSessionStatus(request);
+        ChatSessionDto sessionDto = conversationService.getChatSessionDto(session.getId());
         return new ServerEvent("sessionUpdated", Map.of(
                 "session", Map.of(
+                        "customer",sessionDto.user(),
                         "id", session.getId(),
                         "status", session.getStatus(),
-                        "primaryAgentId", session.getPrimaryAgent() != null ? session.getPrimaryAgent().getId() : null)));
+                        "primaryAgentId", sessionDto.primaryAgentId() != null ? sessionDto.primaryAgentId() : null)));
     }
 
     

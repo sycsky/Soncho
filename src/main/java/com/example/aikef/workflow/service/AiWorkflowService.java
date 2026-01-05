@@ -113,7 +113,7 @@ public class AiWorkflowService {
         workflow.setNodesJson(request.nodesJson() != null ? request.nodesJson() : "[]");
         workflow.setEdgesJson(request.edgesJson() != null ? request.edgesJson() : "[]");
         workflow.setLiteflowEl(liteflowEl);
-        workflow.setEnabled(false);
+        workflow.setEnabled(true); // 默认启用
         workflow.setVersion(1);
         workflow.setTriggerType(request.triggerType() != null ? request.triggerType() : "ALL");
         workflow.setTriggerConfig(request.triggerConfig());
@@ -134,6 +134,42 @@ public class AiWorkflowService {
         return saved;
     }
     
+    /**
+     * 复制工作流
+     * 创建一个新的工作流，复制原工作流的所有配置（除了绑定的分类）
+     * 新工作流名称自动添加 "_copy" 后缀
+     */
+    @Transactional
+    public AiWorkflow copyWorkflow(UUID workflowId, UUID agentId) {
+        AiWorkflow original = getWorkflow(workflowId);
+        
+        AiWorkflow copy = new AiWorkflow();
+        // 生成唯一名称
+        String newName = original.getName() + "_copy";
+        while (workflowRepository.existsByName(newName)) {
+            newName += "_" + UUID.randomUUID().toString().substring(0, 4);
+        }
+        
+        copy.setName(newName);
+        copy.setDescription(original.getDescription());
+        copy.setNodesJson(original.getNodesJson());
+        copy.setEdgesJson(original.getEdgesJson());
+        copy.setLiteflowEl(original.getLiteflowEl());
+        copy.setSubChainsJson(original.getSubChainsJson());
+        copy.setEnabled(false); // 复制的工作流默认禁用
+        copy.setVersion(1);
+        copy.setTriggerType(original.getTriggerType());
+        copy.setTriggerConfig(original.getTriggerConfig());
+        copy.setIsDefault(false); // 复制的工作流不作为默认
+
+        if (agentId != null) {
+            Agent agent = agentService.findById(agentId);
+            copy.setCreatedByAgent(agent);
+        }
+
+        return workflowRepository.save(copy);
+    }
+
     /**
      * 检查是否为空工作流
      */
