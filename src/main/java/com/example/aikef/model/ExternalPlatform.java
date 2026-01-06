@@ -32,7 +32,7 @@ public class ExternalPlatform extends AuditableEntity {
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "platform_type", nullable = false, length = 20)
-    private PlatformType platformType;
+    private Channel platformType;
 
     /**
      * 消息回调 URL（用于将客服/AI 消息转发到第三方平台）
@@ -76,22 +76,6 @@ public class ExternalPlatform extends AuditableEntity {
      */
     @Column(name = "remark", columnDefinition = "TEXT")
     private String remark;
-
-    /**
-     * 平台类型枚举
-     */
-    public enum PlatformType {
-        LINE,       // Line
-        WHATSAPP,   // WhatsApp
-        WECHAT,     // 微信
-        TELEGRAM,   // Telegram
-        FACEBOOK,   // Facebook Messenger
-        TWITTER,    // X (Twitter)
-        EMAIL,      // 邮件
-        WEB,
-        CUSTOM,     // 自定义平台
-        OTHER       // 其他
-    }
 
     /**
      * 认证类型枚举

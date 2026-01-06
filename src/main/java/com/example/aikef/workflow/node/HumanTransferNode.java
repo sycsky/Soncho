@@ -1,12 +1,23 @@
 package com.example.aikef.workflow.node;
 
+import com.example.aikef.dto.ChatSessionDto;
+import com.example.aikef.dto.websocket.ServerEvent;
 import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.enums.SessionStatus;
 import com.example.aikef.repository.ChatSessionRepository;
+import com.example.aikef.service.ChatSessionService;
+import com.example.aikef.service.ConversationService;
+import com.example.aikef.service.CustomerService;
 import com.example.aikef.service.SessionMessageGateway;
+import com.example.aikef.websocket.WebSocketSessionManager;
 import com.example.aikef.workflow.context.WorkflowContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yomahub.liteflow.annotation.LiteflowComponent;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 转人工节点
@@ -21,7 +32,20 @@ public class HumanTransferNode extends BaseWorkflowNode {
     @Autowired
     private SessionMessageGateway messageGateway;
 
+    @Autowired
+    private WebSocketSessionManager sessionManager;
+
+    @Autowired
+    private CustomerService customerService;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Autowired
+    private ConversationService conversationService;
+
     @Override
+    @Transactional
     public void process() {
         long startTime = System.currentTimeMillis();
         WorkflowContext ctx = getWorkflowContext();
@@ -42,13 +66,32 @@ public class HumanTransferNode extends BaseWorkflowNode {
                     session.setStatus(SessionStatus.HUMAN_HANDLING);
                     chatSessionRepository.save(session);
                     log.info("会话状态已切换为人工处理: sessionId={}, reason={}", ctx.getSessionId(), reason);
-                    
-//                    // 发送系统消息通知
-//                    try {
-//                        messageGateway.sendSystemMessage(ctx.getSessionId(), message);
-//                    } catch (Exception e) {
-//                        log.warn("发送转人工系统消息失败: sessionId={}", ctx.getSessionId(), e);
-//                    }
+                    ChatSessionDto sessionDto = conversationService.getChatSessionDto(ctx.getSessionId());
+                    // 广播状态更新事件到 WebSocket
+                    try {
+                        ServerEvent updateEvent = new ServerEvent("sessionUpdated", Map.of(
+                                "session", Map.of(
+                                        "id", session.getId(),
+                                        "status", session.getStatus(),
+                                         "customer", sessionDto.user(),
+                                        "primaryAgentId", sessionDto.primaryAgentId() != null ? sessionDto.primaryAgentId() : null,
+                                        "reason", reason
+                                )));
+                        
+                        String jsonMessage = objectMapper.writeValueAsString(updateEvent);
+                        
+                        // 广播给会话的所有参与者
+                        sessionManager.broadcastToSession(
+                                session.getId(),
+                                session.getPrimaryAgent() != null ? session.getPrimaryAgent().getId() : null,
+                                session.getSupportAgentIds() != null ? session.getSupportAgentIds().stream().toList() : null,
+                                session.getCustomer() != null ? session.getCustomer().getId() : null,
+                                null, // senderId 为 null，表示系统发送，广播给所有人
+                                jsonMessage
+                        );
+                    } catch (Exception e) {
+                        log.warn("广播会话状态更新失败: sessionId={}", ctx.getSessionId(), e);
+                    }
                 } else {
                     log.warn("会话不存在，无法切换状态: sessionId={}", ctx.getSessionId());
                 }

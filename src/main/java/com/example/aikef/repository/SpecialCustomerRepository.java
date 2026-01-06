@@ -10,5 +10,6 @@ import java.util.UUID;
 @Repository
 public interface SpecialCustomerRepository extends JpaRepository<SpecialCustomer, UUID> {
     List<SpecialCustomer> findByRole_Code(String roleCode);
+    List<SpecialCustomer> findByRole_IdIn(List<UUID> roleIds);
     Optional<SpecialCustomer> findByCustomer_Id(UUID customerId);
 }

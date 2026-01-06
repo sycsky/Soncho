@@ -543,14 +543,18 @@ public class OfficialChannelMessageService {
         platform.setName(platformName);
         platform.setDisplayName(config.getDisplayName() != null ? config.getDisplayName() : platformName);
         platform.setPlatformType(switch (config.getChannelType()) {
-            case WECHAT_OFFICIAL, WECHAT_KF -> ExternalPlatform.PlatformType.WECHAT;
-            case LINE_OFFICIAL -> ExternalPlatform.PlatformType.LINE;
-            case WHATSAPP_OFFICIAL -> ExternalPlatform.PlatformType.WHATSAPP;
-            case FACEBOOK_MESSENGER, INSTAGRAM -> ExternalPlatform.PlatformType.FACEBOOK;
-            case TELEGRAM -> ExternalPlatform.PlatformType.TELEGRAM;
-            case TWITTER -> ExternalPlatform.PlatformType.TWITTER;
-            case EMAIL -> ExternalPlatform.PlatformType.EMAIL;
-            default -> ExternalPlatform.PlatformType.OTHER;
+            case WECHAT_OFFICIAL, WECHAT_KF -> com.example.aikef.model.Channel.WECHAT;
+            case LINE_OFFICIAL -> com.example.aikef.model.Channel.LINE;
+            case WHATSAPP_OFFICIAL -> com.example.aikef.model.Channel.WHATSAPP;
+            case FACEBOOK_MESSENGER -> com.example.aikef.model.Channel.FACEBOOK;
+            case INSTAGRAM -> com.example.aikef.model.Channel.INSTAGRAM;
+            case TELEGRAM -> com.example.aikef.model.Channel.TELEGRAM;
+            case TWITTER -> com.example.aikef.model.Channel.TWITTER;
+            case EMAIL -> com.example.aikef.model.Channel.EMAIL;
+            case DOUYIN -> com.example.aikef.model.Channel.DOUYIN;
+            case RED_BOOK -> com.example.aikef.model.Channel.REDBOOK;
+            case WEIBO -> com.example.aikef.model.Channel.WEIBO;
+            default -> com.example.aikef.model.Channel.OTHER;
         });
         platform.setEnabled(true);
         platform.setWebhookSecret(config.getWebhookSecret());

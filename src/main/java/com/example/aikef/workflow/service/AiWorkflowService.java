@@ -113,7 +113,7 @@ public class AiWorkflowService {
         workflow.setNodesJson(request.nodesJson() != null ? request.nodesJson() : "[]");
         workflow.setEdgesJson(request.edgesJson() != null ? request.edgesJson() : "[]");
         workflow.setLiteflowEl(liteflowEl);
-        workflow.setEnabled(false);
+        workflow.setEnabled(true); // 默认启用
         workflow.setVersion(1);
         workflow.setTriggerType(request.triggerType() != null ? request.triggerType() : "ALL");
         workflow.setTriggerConfig(request.triggerConfig());
@@ -134,6 +134,42 @@ public class AiWorkflowService {
         return saved;
     }
     
+    /**
+     * 复制工作流
+     * 创建一个新的工作流，复制原工作流的所有配置（除了绑定的分类）
+     * 新工作流名称自动添加 "_copy" 后缀
+     */
+    @Transactional
+    public AiWorkflow copyWorkflow(UUID workflowId, UUID agentId) {
+        AiWorkflow original = getWorkflow(workflowId);
+        
+        AiWorkflow copy = new AiWorkflow();
+        // 生成唯一名称
+        String newName = original.getName() + "_copy";
+        while (workflowRepository.existsByName(newName)) {
+            newName += "_" + UUID.randomUUID().toString().substring(0, 4);
+        }
+        
+        copy.setName(newName);
+        copy.setDescription(original.getDescription());
+        copy.setNodesJson(original.getNodesJson());
+        copy.setEdgesJson(original.getEdgesJson());
+        copy.setLiteflowEl(original.getLiteflowEl());
+        copy.setSubChainsJson(original.getSubChainsJson());
+        copy.setEnabled(false); // 复制的工作流默认禁用
+        copy.setVersion(1);
+        copy.setTriggerType(original.getTriggerType());
+        copy.setTriggerConfig(original.getTriggerConfig());
+        copy.setIsDefault(false); // 复制的工作流不作为默认
+
+        if (agentId != null) {
+            Agent agent = agentService.findById(agentId);
+            copy.setCreatedByAgent(agent);
+        }
+
+        return workflowRepository.save(copy);
+    }
+
     /**
      * 检查是否为空工作流
      */
@@ -722,6 +758,9 @@ public class AiWorkflowService {
             // 从边数据中提取工具节点路由映射
             extractToolRoutesFromEdges(workflow.getNodesJson(), workflow.getEdgesJson(), context);
 
+            // 从边数据中提取条件节点路由映射
+            extractConditionRoutesFromEdges(workflow.getNodesJson(), workflow.getEdgesJson(), context);
+
             // 设置恢复相关的上下文信息
             context.setVariable("_resumeFromPause", true);
             context.setVariable("_pausedStateId", pausedState.getId());
@@ -959,6 +998,9 @@ public class AiWorkflowService {
             // 从边数据中提取工具节点路由映射，注入到上下文
             extractToolRoutesFromEdges(workflow.getNodesJson(), workflow.getEdgesJson(), context);
 
+            // 从边数据中提取条件节点路由映射，注入到上下文
+            extractConditionRoutesFromEdges(workflow.getNodesJson(), workflow.getEdgesJson(), context);
+
             // 动态注册/更新 chain（使用 EL 表达式）
             String elExpression = workflow.getLiteflowEl();
             if (elExpression == null || elExpression.isBlank()) {
@@ -1163,6 +1205,59 @@ public class AiWorkflowService {
             
         } catch (Exception e) {
             log.warn("提取工具节点路由映射失败", e);
+        }
+    }
+
+    /**
+     * 从边数据中提取条件节点的路由映射
+     * 为每个 condition 节点构建路由映射：sourceHandle (条件ID) → 目标节点 ID
+     */
+    private void extractConditionRoutesFromEdges(String nodesJson, String edgesJson, WorkflowContext context) {
+        try {
+            // 解析节点，找出所有 condition 类型的节点
+            List<WorkflowNodeDto> nodes = objectMapper.readValue(
+                    nodesJson, new TypeReference<List<WorkflowNodeDto>>() {});
+            
+            Set<String> conditionNodeIds = nodes.stream()
+                    .filter(n -> "condition".equals(n.type()))
+                    .map(WorkflowNodeDto::id)
+                    .collect(java.util.stream.Collectors.toSet());
+            
+            if (conditionNodeIds.isEmpty()) {
+                return;
+            }
+            
+            // 解析边
+            List<WorkflowEdgeDto> edges = objectMapper.readValue(
+                    edgesJson, new TypeReference<List<WorkflowEdgeDto>>() {});
+            
+            // 为每个条件节点构建路由映射
+            // sourceHandle (条件ID) → 目标节点 ID
+            for (String conditionNodeId : conditionNodeIds) {
+                Map<String, String> routeMap = new HashMap<>();
+                
+                for (WorkflowEdgeDto edge : edges) {
+                    if (conditionNodeId.equals(edge.source())) {
+                        String sourceHandle = edge.sourceHandle();
+                        if (sourceHandle == null || sourceHandle.isEmpty()) {
+                            // 如果没有 sourceHandle，可能是 else 分支或默认连接
+                            sourceHandle = "else";
+                        }
+                        
+                        // 存储目标节点 ID
+                        routeMap.put(sourceHandle, edge.target());
+                    }
+                }
+                
+                if (!routeMap.isEmpty()) {
+                    String routesKey = "__condition_routes_" + conditionNodeId;
+                    context.setVariable(routesKey, routeMap);
+                    log.debug("提取条件节点路由映射: nodeId={}, routes={}", conditionNodeId, routeMap);
+                }
+            }
+            
+        } catch (Exception e) {
+            log.warn("提取条件节点路由映射失败", e);
         }
     }
 

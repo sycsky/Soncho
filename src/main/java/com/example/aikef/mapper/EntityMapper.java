@@ -70,6 +70,53 @@ public class EntityMapper {
     
 
     /**
+     * 转换为ChatSessionDto（通用版本，不包含特定客服的分组信息）
+     */
+    public ChatSessionDto toChatSessionDto(ChatSession session) {
+        if (session == null) {
+            return null;
+        }
+
+        // 转换客户信息
+        CustomerDto customerDto = null;
+        if (session.getCustomer() != null) {
+            customerDto = toCustomerDtoFromSession(session);
+        }
+
+        // 计算最后活跃时间戳（毫秒）
+        long lastActive = session.getLastActiveAt() != null ?
+                session.getLastActiveAt().toEpochMilli() : 0;
+
+        // 查询最后一条消息
+        Message lastMessage = messageRepository.findFirstBySession_IdOrderByCreatedAtDesc(session.getId());
+        SessionMessageDto lastMessageDto = lastMessage != null ? toSessionMessageDto(lastMessage) : null;
+
+        // 构建客服列表
+        List<SessionAgentDto> agents = buildSessionAgents(session);
+
+        // 获取主要客服ID
+        UUID primaryAgentId = session.getPrimaryAgent() != null ? session.getPrimaryAgent().getId() : null;
+
+        return new ChatSessionDto(
+                session.getId(),
+                session.getCustomer() != null ? session.getCustomer().getId() : null,
+                customerDto,
+                session.getStatus(),
+                lastActive,
+                0, // unreadCount
+                null, // sessionGroupId (通用视图无特定分组)
+                primaryAgentId,
+                agents,
+                lastMessageDto,
+                session.getNote(),
+                session.getCategory() != null ? session.getCategory().getId() : null,
+                session.getCategory() != null ? toSessionCategoryDto(session.getCategory()) : null,
+                parseMetadata(session.getMetadata()),
+                session.getCustomerLanguage()
+        );
+    }
+
+    /**
      * 转换为ChatSessionDto（包含指定客服的分组ID）
      * 
      * @param session 会话实体
