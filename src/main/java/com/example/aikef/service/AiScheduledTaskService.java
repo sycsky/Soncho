@@ -13,6 +13,7 @@ import jakarta.annotation.Resource;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Service;
@@ -51,6 +52,11 @@ public class AiScheduledTaskService {
 
     @Resource
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private SessionMessageGateway sessionMessageGateway;
+    @Autowired
+    private AiScheduledTaskService aiScheduledTaskService;
 
     @Transactional
     public ScheduledTaskDto createTask(SaveScheduledTaskRequest request) {
@@ -156,12 +162,27 @@ public class AiScheduledTaskService {
                     variables.put("taskName", task.getName());
                     
                     // 启动工作流
-                    workflowService.executeWorkflow(
+                    AiWorkflowService.WorkflowExecutionResult result = workflowService.executeWorkflow(
                         task.getWorkflow().getId(),
                         session.getId(),
                         task.getInitialInput() != null ? task.getInitialInput() : "Scheduled Task Trigger",
                         variables
                     );
+
+                    // 如果工作流执行成功且有回复，发送 AI 回复消息（类似用户对话工作流）
+                    if (result.success() && result.reply() != null && !result.reply().isBlank()) {
+                        try {
+                            sessionMessageGateway.sendAiMessage(session.getId(), result.reply());
+                            log.info("事件触发工作流执行成功，已发送 AI 回复: taskName={}, sessionId={}, replyLength={}",
+                                    task.getName(), session.getId(), result.reply().length());
+                        } catch (Exception e) {
+                            log.error("发送 AI 回复失败: taskName={}, sessionId={}", task.getName(), session.getId(), e);
+                            // 即使发送失败，也返回工作流执行结果
+                        }
+                    } else if (!result.success()) {
+                        log.warn("事件触发工作流执行失败: taskName={}, sessionId={}, error={}",
+                                task.getName(), session.getId(), result.errorMessage());
+                    }
                     
                 } catch (Exception e) {
                     log.error("为客户执行定时任务失败: customerId={}", customer.getId(), e);
