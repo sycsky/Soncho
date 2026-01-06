@@ -153,6 +153,28 @@ public class EventService {
     }
 
     /**
+     * 为指定客户触发事件（自动查找最近的活跃会话）
+     * 
+     * @param customerId 客户ID
+     * @param eventName 事件名称
+     * @param eventData 事件数据
+     * @return 工作流执行结果
+     */
+    @Transactional
+    public AiWorkflowService.WorkflowExecutionResult triggerEventForCustomer(UUID customerId, String eventName, Map<String, Object> eventData) {
+        // 查找客户最近的活跃会话
+        ChatSession session = chatSessionRepository.findFirstByCustomer_IdOrderByLastActiveAtDesc(customerId);
+        
+        if (session == null) {
+            log.warn("未找到客户的活跃会话，无法触发事件: customerId={}, eventName={}", customerId, eventName);
+            return new AiWorkflowService.WorkflowExecutionResult(
+                    false, null, "未找到客户的活跃会话", null, false);
+        }
+        
+        return triggerEvent(eventName, session.getId(), eventData);
+    }
+
+    /**
      * 触发事件
      * 根据事件名称查找配置，并执行绑定的工作流
      * 

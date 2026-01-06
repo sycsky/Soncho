@@ -37,31 +37,54 @@ public class SupplyChainTools {
                 .collect(Collectors.toList());
     }
 
-    @Tool("Create a purchase order")
-    public String createPurchaseOrder(
+    @Tool("Create purchase orders (supports multiple suppliers)")
+    public List<String> createPurchaseOrder(
             @P(value = "Initiator Customer ID", required = true) String initiatorId,
-            @P(value = "Supplier Customer ID", required = true) String supplierId,
-            @P(value = "List of items to purchase", required = true) List<OrderItemRequest> items
+            @P(value = "List of items to purchase (must include supplierId)", required = true) List<OrderItemRequest> items
     ) {
-        List<PurchaseOrderItem> orderItems = new ArrayList<>();
-        for (OrderItemRequest req : items) {
-            PurchaseOrderItem item = new PurchaseOrderItem();
-            item.setProductName(req.productName());
-            item.setShopifyVariantId(req.shopifyVariantId());
-            item.setQuantityRequested(req.quantity());
-            item.setQuantityShipped(0);
-            item.setQuantityReceived(0);
-            item.setUnitPrice(req.unitPrice() != null ? req.unitPrice() : BigDecimal.ZERO);
-            item.setTotalAmount(item.getUnitPrice().multiply(BigDecimal.valueOf(req.quantity())));
-            orderItems.add(item);
+        // Group items by supplierId
+        java.util.Map<String, List<OrderItemRequest>> itemsBySupplier = items.stream()
+                .collect(Collectors.groupingBy(OrderItemRequest::supplierId));
+        
+        List<String> createdOrderIds = new ArrayList<>();
+        
+        for (java.util.Map.Entry<String, List<OrderItemRequest>> entry : itemsBySupplier.entrySet()) {
+            String supplierId = entry.getKey();
+            List<OrderItemRequest> supplierItems = entry.getValue();
+            
+            if (supplierId == null || supplierId.isBlank()) {
+                log.warn("Skipping items with missing supplierId: {}", supplierItems);
+                continue;
+            }
+            
+            List<PurchaseOrderItem> orderItems = new ArrayList<>();
+            for (OrderItemRequest req : supplierItems) {
+                PurchaseOrderItem item = new PurchaseOrderItem();
+                item.setProductName(req.productName());
+                item.setShopifyVariantId(req.shopifyVariantId());
+                item.setQuantityRequested(req.quantity());
+                item.setQuantityShipped(0);
+                item.setQuantityReceived(0);
+                item.setUnitPrice(req.unitPrice() != null ? req.unitPrice() : BigDecimal.ZERO);
+                item.setTotalAmount(item.getUnitPrice().multiply(BigDecimal.valueOf(req.quantity())));
+                orderItems.add(item);
+            }
+            
+            try {
+                PurchaseOrder order = purchaseOrderService.createOrder(
+                        UUID.fromString(initiatorId),
+                        UUID.fromString(supplierId),
+                        orderItems
+                );
+                createdOrderIds.add(order.getId());
+                log.info("Created Purchase Order {} for Supplier {}", order.getId(), supplierId);
+            } catch (Exception e) {
+                log.error("Failed to create order for supplier {}: {}", supplierId, e.getMessage());
+                // Optionally throw or continue. Here we continue to try other suppliers.
+            }
         }
-
-        PurchaseOrder order = purchaseOrderService.createOrder(
-                UUID.fromString(initiatorId),
-                UUID.fromString(supplierId),
-                orderItems
-        );
-        return "Purchase Order created with ID: " + order.getId();
+        
+        return createdOrderIds;
     }
 
     @Tool("Get my purchase orders (as initiator) with optional status filter")
@@ -169,7 +192,7 @@ public class SupplyChainTools {
 
     // DTOs
     public record SupplierDto(String id, String name, String email) {}
-    public record OrderItemRequest(String productName, String shopifyVariantId, int quantity, BigDecimal unitPrice) {}
+    public record OrderItemRequest(String supplierId, String productName, String shopifyVariantId, int quantity, BigDecimal unitPrice) {}
     public record ItemUpdate(String itemId, int quantity) {}
     public record PurchaseOrderDto(String id, String status, BigDecimal totalAmount, String supplierName) {}
     

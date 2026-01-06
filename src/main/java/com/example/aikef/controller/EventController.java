@@ -129,6 +129,44 @@ public class EventController {
     }
 
     /**
+     * 为指定客户触发事件（测试接口）
+     */
+    @PostMapping("/trigger-for-customer")
+    public ResponseEntity<EventHookResponse> triggerEventForCustomer(@Valid @RequestBody TriggerEventForCustomerRequest request) {
+        try {
+            AiWorkflowService.WorkflowExecutionResult result = eventService.triggerEventForCustomer(
+                    request.customerId(),
+                    request.eventName(),
+                    request.eventData()
+            );
+
+            EventHookResponse response = new EventHookResponse(
+                    result.success(),
+                    result.success() ? "事件触发成功" : result.errorMessage(),
+                    result.success(),
+                    result.reply(),
+                    result.errorMessage()
+            );
+
+            if (result.success()) {
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.badRequest().body(response);
+            }
+
+        } catch (Exception e) {
+            EventHookResponse response = new EventHookResponse(
+                    false,
+                    "事件触发失败: " + e.getMessage(),
+                    false,
+                    null,
+                    e.getMessage()
+            );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    /**
      * 转换为DTO
      */
     private EventDto toDto(Event event) {
@@ -167,6 +205,15 @@ public class EventController {
      */
     public record EventHookRequest(
             @NotNull UUID sessionId,
+            Map<String, Object> eventData
+    ) {}
+
+    /**
+     * 客户事件触发请求
+     */
+    public record TriggerEventForCustomerRequest(
+            @NotNull UUID customerId,
+            @NotBlank String eventName,
             Map<String, Object> eventData
     ) {}
 

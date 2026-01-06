@@ -219,7 +219,7 @@ public class PurchaseOrderService {
         }
     }
 
-    private void triggerEventForCustomer(UUID customerId, String eventName, Map<String, Object> data) {
+    public void triggerEventForCustomer(UUID customerId, String eventName, Map<String, Object> data) {
         try {
             ChatSession session = chatSessionRepository.findFirstByCustomer_IdOrderByLastActiveAtDesc(customerId);
             if (session != null) {
