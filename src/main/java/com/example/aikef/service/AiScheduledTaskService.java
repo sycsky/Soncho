@@ -55,8 +55,7 @@ public class AiScheduledTaskService {
 
     @Autowired
     private SessionMessageGateway sessionMessageGateway;
-    @Autowired
-    private AiScheduledTaskService aiScheduledTaskService;
+
 
     @Transactional
     public ScheduledTaskDto createTask(SaveScheduledTaskRequest request) {

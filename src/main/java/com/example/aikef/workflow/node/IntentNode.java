@@ -75,7 +75,7 @@ public class IntentNode extends NodeSwitchComponent {
         JsonNode config = ctx.getNodeConfig(actualNodeId);
         
         String userMessage = ctx.getQuery();
-        
+        ctx.setOutput(this.getTag(),ctx.getLastOutput());
         // 1. 获取意图配置列表
         JsonNode intentsConfig = config != null ? config.get("Intents") : null;
         if (intentsConfig == null) {

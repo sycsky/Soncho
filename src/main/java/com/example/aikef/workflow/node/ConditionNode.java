@@ -31,6 +31,7 @@ public class ConditionNode extends NodeSwitchComponent {
         String matchedConditionDetail = "else";
         String lastSourceValue = "";
 
+        ctx.setOutput(this.getTag(),ctx.getLastOutput());
         // 获取条件列表
         JsonNode conditions = config.get("conditions");
         if (conditions != null && conditions.isArray()) {

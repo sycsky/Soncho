@@ -434,11 +434,14 @@ public class LlmNode extends BaseWorkflowNode {
                         result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage()
                 );
 
+
+
+                ctx.setVariable(result.getToolName()+"_ex", 1);
                 AiTool tool = aiToolService.getTool(toolState.getToolId()).orElse(null);
                 String toolName = result.getToolName();
                 String resultDescription = tool.getResultDescription();
                 String resultMetadata = tool.getResultMetadata();
-                String resultBody = result.getResult();
+                String resultBody = result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage();
                 if(tool != null){
 //                    finalReply += String.format("工具 %s 执行结果: %s\n", toolName, result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage());
                     if(StringUtils.hasText(resultDescription)){
