@@ -50,7 +50,7 @@ public class TranslationNode extends BaseWorkflowNode {
             // 1. 获取配置
             JsonNode config = getNodeConfig();
             String modelIdStr = getConfigString("modelId", null);
-            String additionalPrompt = getConfigString("prompt", "");
+            String additionalPrompt = getConfigString("systemPrompt", "");
             String targetText = getConfigString("targetText", "");
             int historyCount = getConfigInt("historyCount", 10);
             String outputVar = getConfigString("outputVar", "translationResult");
