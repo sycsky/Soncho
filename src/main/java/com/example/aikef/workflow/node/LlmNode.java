@@ -23,6 +23,7 @@ import dev.langchain4j.data.message.*;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 
 import java.util.*;
 import java.util.Map;
@@ -433,14 +434,20 @@ public class LlmNode extends BaseWorkflowNode {
                         result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage()
                 );
 
+
+
+                ctx.setVariable(result.getToolName()+"_ex", 1);
                 AiTool tool = aiToolService.getTool(toolState.getToolId()).orElse(null);
                 String toolName = result.getToolName();
                 String resultDescription = tool.getResultDescription();
                 String resultMetadata = tool.getResultMetadata();
-                String resultBody = result.getResult();
+                String resultBody = result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage();
                 if(tool != null){
 //                    finalReply += String.format("工具 %s 执行结果: %s\n", toolName, result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage());
-                    finalReply += String.format("工具 %s 执行结果描述: %s\n", toolName, resultDescription);
+                    if(StringUtils.hasText(resultDescription)){
+                        finalReply += String.format("工具 %s 执行结果描述: %s\n", toolName, resultDescription);
+                    }
+
                     if(resultMetadata != null){
                         JSONArray resultJson = new JSONArray(resultMetadata);
                         finalReply += String.format(" %s 执行结果ResponsePath=>:%s 字段元数据:\n", toolName,tool.getApiResponsePath());
@@ -449,7 +456,13 @@ public class LlmNode extends BaseWorkflowNode {
                             finalReply += String.format("  %s=>%s\n", item.getStr("key"), item.getStr("description"));
                         }
                     }
-                    finalReply += String.format("工具 %s 执行结果: %s\n", toolName, new JSONObject(resultBody).toJSONString(2));
+                    try {
+                        JSONObject rp = new JSONObject(resultBody);
+                        finalReply += String.format("工具 %s 执行结果: %s\n", toolName, new JSONObject(resultBody).toJSONString(2));
+                    }catch (Exception e){
+                        finalReply += String.format("工具 %s 执行结果: %s\n", toolName, resultBody);
+                    }
+
                     finalReply += "==================================================\n";
                 }else {
                     finalReply += String.format("执行结果: %s\n", resultBody);

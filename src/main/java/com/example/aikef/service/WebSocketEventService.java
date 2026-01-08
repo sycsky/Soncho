@@ -1,11 +1,14 @@
 package com.example.aikef.service;
 
+import com.example.aikef.dto.ChatSessionDto;
 import com.example.aikef.dto.MessageDto;
 import com.example.aikef.dto.AgentDto;
 import com.example.aikef.dto.request.SendMessageRequest;
 import com.example.aikef.dto.request.UpdateSessionStatusRequest;
 import com.example.aikef.dto.websocket.ServerEvent;
+import com.example.aikef.model.Attachment;
 import com.example.aikef.model.ChatSession;
+import com.example.aikef.model.Customer;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.AgentStatus;
 import com.example.aikef.model.enums.SessionAction;
@@ -28,6 +31,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class WebSocketEventService {
@@ -42,7 +46,10 @@ public class WebSocketEventService {
     private final MessageRepository messageRepository;
     private final AiWorkflowService aiWorkflowService;
     private final SessionMessageGateway messageGateway;
-    
+
+    @Autowired
+    private  CustomerService customerService;
+
     @Autowired
     private ReadRecordService readRecordService;
     
@@ -53,6 +60,10 @@ public class WebSocketEventService {
     @Autowired
     @Lazy
     private com.example.aikef.workflow.service.WorkflowExecutionScheduler workflowScheduler;
+
+    @Autowired
+    @Lazy
+    private OfficialChannelMessageService officialChannelMessageService;
 
     @Autowired
     public WebSocketEventService(ObjectMapper objectMapper,
@@ -126,7 +137,30 @@ public class WebSocketEventService {
         
         // 如果是客服发送的消息，检查是否需要转发到第三方平台
         if (agentId != null) {
-            externalPlatformService.forwardMessageToExternalPlatform(sessionId, request.text(), SenderType.AGENT);
+            // 构建附件列表
+            List<Attachment> attachments = null;
+            if (request.attachments() != null && !request.attachments().isEmpty()) {
+                attachments = request.attachments().stream()
+                        .map(attPayload -> {
+                            Attachment att = new Attachment();
+                            att.setType(attPayload.type());
+                            att.setUrl(attPayload.url());
+                            att.setName(attPayload.name());
+                            att.setSizeKb(attPayload.sizeKb());
+                            return att;
+                        })
+                        .collect(Collectors.toList());
+            }
+
+            // 先尝试官方渠道（通过SDK，支持附件）
+            boolean sentToOfficial = officialChannelMessageService.sendMessageToOfficialChannel(
+                    sessionId, request.text(), SenderType.AGENT, attachments);
+            
+            if (!sentToOfficial) {
+                // 如果不是官方渠道，使用原有的外部平台方式（支持附件）
+                externalPlatformService.forwardMessageToExternalPlatform(
+                        sessionId, request.text(), SenderType.AGENT, attachments);
+            }
         }
         
         return new ServerEvent("newMessage", Map.of(
@@ -168,14 +202,18 @@ public class WebSocketEventService {
         }
     }
 
-    private ServerEvent handleSessionStatus(JsonNode payload) throws JsonProcessingException {
+
+
+    public ServerEvent handleSessionStatus(JsonNode payload) throws JsonProcessingException {
         UpdateSessionStatusRequest request = objectMapper.treeToValue(payload, UpdateSessionStatusRequest.class);
         ChatSession session = conversationService.updateSessionStatus(request);
+        ChatSessionDto sessionDto = conversationService.getChatSessionDto(session.getId());
         return new ServerEvent("sessionUpdated", Map.of(
                 "session", Map.of(
+                        "customer",sessionDto.user(),
                         "id", session.getId(),
                         "status", session.getStatus(),
-                        "primaryAgentId", session.getPrimaryAgent() != null ? session.getPrimaryAgent().getId() : null)));
+                        "primaryAgentId", sessionDto.primaryAgentId() != null ? sessionDto.primaryAgentId() : null)));
     }
 
     

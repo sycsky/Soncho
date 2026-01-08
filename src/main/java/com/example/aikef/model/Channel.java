@@ -17,5 +17,6 @@ public enum Channel {
     SMS,        // 短信
     PHONE,      // 电话
     APP,        // 移动应用
-    CUSTOM      // 自定义渠道
+    CUSTOM,     // 自定义渠道
+    OTHER       // 其他
 }

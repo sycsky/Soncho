@@ -27,6 +27,8 @@ public record CustomerDto(
         Instant lastInteractionAt,
         Instant createdAt,
         List<String> tags,      // 手动添加的标签
-        List<String> aiTags     // AI生成的标签
+        List<String> aiTags,     // AI生成的标签
+        String roleCode,        // 客户角色代码 (SUPPLIER, LOGISTICS, etc.)
+        String roleName         // 客户角色名称 (供货商, 物流人员, etc.)
 ) {
 }

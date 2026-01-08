@@ -14,6 +14,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.*;
@@ -230,8 +231,11 @@ public class ExternalPlatformService {
             }
         }
 
+        Customer customer = new Customer();
+
         // 通过邮箱或手机查找
-        if (request.email() != null) {
+        if (StringUtils.isNotBlank(request.email())) {
+            customer.setEmail(request.email());
             Optional<Customer> byEmail = customerRepository.findByEmail(request.email());
             if (byEmail.isPresent()) {
                 // 更新平台 ID
@@ -239,7 +243,8 @@ public class ExternalPlatformService {
                 return byEmail.get();
             }
         }
-        if (request.phone() != null) {
+        if (StringUtils.isNotBlank(request.phone())) {
+            customer.setPhone(request.phone());
             Optional<Customer> byPhone = customerRepository.findByPhone(request.phone());
             if (byPhone.isPresent()) {
                 updateCustomerPlatformId(byPhone.get(), platform.getPlatformType(), request.externalUserId());
@@ -248,11 +253,8 @@ public class ExternalPlatformService {
         }
 
         // 创建新客户
-        Customer customer = new Customer();
+        customer.setPrimaryChannel(platform.getPlatformType());
         customer.setName(request.getUserNameOrDefault());
-        customer.setEmail(request.email());
-        customer.setPhone(request.phone());
-        customer.setPrimaryChannel(mapPlatformToChannel(platform.getPlatformType()));
         
         // 设置平台特定 ID
         setCustomerPlatformId(customer, platform.getPlatformType(), request.externalUserId());
@@ -263,7 +265,7 @@ public class ExternalPlatformService {
     /**
      * 根据平台类型查找客户
      */
-    private Optional<Customer> findCustomerByPlatform(ExternalPlatform.PlatformType platformType, String externalUserId) {
+    private Optional<Customer> findCustomerByPlatform(Channel platformType, String externalUserId) {
         if (externalUserId == null) {
             return Optional.empty();
         }
@@ -275,14 +277,14 @@ public class ExternalPlatformService {
             case FACEBOOK -> customerRepository.findByFacebookId(externalUserId);
             case TWITTER -> Optional.empty();
             case EMAIL -> Optional.empty();
-            case WEB, SHOPIFY, CUSTOM, OTHER -> Optional.empty();
+            default -> Optional.empty();
         };
     }
 
     /**
      * 设置客户平台 ID
      */
-    private void setCustomerPlatformId(Customer customer, ExternalPlatform.PlatformType platformType, String externalUserId) {
+    private void setCustomerPlatformId(Customer customer, Channel platformType, String externalUserId) {
         if (externalUserId == null) return;
         switch (platformType) {
             case WECHAT -> customer.setWechatOpenId(externalUserId);
@@ -291,14 +293,14 @@ public class ExternalPlatformService {
             case TELEGRAM -> customer.setTelegramId(externalUserId);
             case FACEBOOK -> customer.setFacebookId(externalUserId);
             case EMAIL -> customer.setEmail(externalUserId);
-            case TWITTER, WEB, SHOPIFY, CUSTOM, OTHER -> {}
+            default -> {}
         }
     }
 
     /**
      * 更新客户平台 ID
      */
-    private void updateCustomerPlatformId(Customer customer, ExternalPlatform.PlatformType platformType, String externalUserId) {
+    private void updateCustomerPlatformId(Customer customer, Channel platformType, String externalUserId) {
         setCustomerPlatformId(customer, platformType, externalUserId);
         customerRepository.save(customer);
     }
@@ -631,23 +633,7 @@ public class ExternalPlatformService {
         }
     }
 
-    /**
-     * 平台类型映射到渠道
-     */
-    private Channel mapPlatformToChannel(ExternalPlatform.PlatformType platformType) {
-        return switch (platformType) {
-            case WECHAT -> Channel.WECHAT;
-            case LINE -> Channel.LINE;
-            case WHATSAPP -> Channel.WHATSAPP;
-            case TELEGRAM -> Channel.TELEGRAM;
-            case FACEBOOK -> Channel.FACEBOOK;
-            case TWITTER -> Channel.TWITTER;
-            case EMAIL -> Channel.EMAIL;
-            case WEB -> Channel.WEB;
-            case SHOPIFY -> Channel.SHOPIFY;
-            case CUSTOM, OTHER -> Channel.CUSTOM;
-        };
-    }
+
 
     // ==================== 平台管理接口 ====================
 

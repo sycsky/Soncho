@@ -100,6 +100,11 @@ public class WorkflowContext {
     private Map<String, Object> variables = new HashMap<>();
 
     /**
+     * 会话元数据（从 ChatSession 加载）
+     */
+    private Map<String, Object> sessionMetadata = new HashMap<>();
+
+    /**
      * 对话历史（最近N条）
      */
     private List<ChatHistoryItem> chatHistory = new ArrayList<>();
@@ -466,6 +471,14 @@ public class WorkflowContext {
      */
     public Map<String, Object> getToolParams(String toolName) {
         return toolsParams.get(toolName);
+    }
+
+    public Map<String, Object> getSessionMetadata() {
+        return sessionMetadata;
+    }
+
+    public void setSessionMetadata(Map<String, Object> sessionMetadata) {
+        this.sessionMetadata = sessionMetadata;
     }
 
     // ========== 内部类 ==========

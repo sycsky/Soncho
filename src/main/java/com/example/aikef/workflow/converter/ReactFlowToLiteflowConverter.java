@@ -148,16 +148,12 @@ public class ReactFlowToLiteflowConverter {
         List<EdgeInfo> nextEdges = outEdges.getOrDefault(nodeId, Collections.emptyList());
         String nodeType = node.type();
         
-        // 条件节点特殊处理 (IF)
-        if ("condition".equals(nodeType)) {
-            return generateConditionEl(nodeId, nodeMap, outEdges, inEdges, nextEdges, visited, indentLevel);
-        }
-        
         // Switch 节点特殊处理 (SWITCH)
-        // 支持 intent、intent_router、tool、parameter_extraction 类型
-        // 注意：这些节点是 NodeSwitchComponent，必须使用 SWITCH 语法，即使只有一个出边
-        if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
-            "tool".equals(nodeType) || "parameter_extraction".equals(nodeType)) {
+        // 支持 condition, intent, intent_router, tool, parameter_extraction 类型
+        // 注意：这些节点是 NodeSwitchComponent，必须使用 SWITCH 语法
+        if ("condition".equals(nodeType) || "intent".equals(nodeType) || 
+            "intent_router".equals(nodeType) || "tool".equals(nodeType) || 
+            "parameter_extraction".equals(nodeType)) {
             return generateSwitchEl(nodeId, nodeMap, outEdges, inEdges, nextEdges, visited, indentLevel);
         }
         
@@ -319,6 +315,9 @@ public class ReactFlowToLiteflowConverter {
                 if ("intent".equals(nodeType)) {
                     // intent 节点返回 "tag:" + targetNodeId，所以使用 targetId
                     branchTag = targetId;
+                } else if ("condition".equals(nodeType)) {
+                    // condition 节点返回 "tag:" + targetNodeId，所以使用 targetId
+                    branchTag = targetId;
                 } else {
                     // tool 节点也使用 targetId 作为 tag
                     // 这样目标节点执行时 getTag() 返回的是实际节点ID，而不是状态值
@@ -359,56 +358,6 @@ public class ReactFlowToLiteflowConverter {
         branchEls = branchEls.stream().distinct().toList();
         
         el.append(String.join(",\n", branchEls));
-        el.append("\n").append(indent(indentLevel)).append(")");
-        
-        return el.toString();
-    }
-
-    /**
-     * 生成条件节点的 EL 表达式
-     */
-    private String generateConditionEl(String nodeId,
-                                        Map<String, WorkflowNodeDto> nodeMap,
-                                        Map<String, List<EdgeInfo>> outEdges,
-                                        Map<String, List<String>> inEdges,
-                                        List<EdgeInfo> nextEdges,
-                                        Set<String> visited,
-                                        int indentLevel) {
-        WorkflowNodeDto node = nodeMap.get(nodeId);
-        String nodeType = node != null ? node.type() : "condition";
-        String nodeRef = formatNodeRef(nodeType, nodeId);
-        
-        // IF(condition, trueBranch, falseBranch)
-        String trueBranch = "";
-        String falseBranch = "";
-        
-        for (EdgeInfo edge : nextEdges) {
-            String branchEl = generateEl(edge.targetId, nodeMap, outEdges, inEdges, new HashSet<>(visited), indentLevel + 1);
-            if ("true".equals(edge.sourceHandle) || "yes".equals(edge.sourceHandle)) {
-                trueBranch = branchEl;
-            } else if ("false".equals(edge.sourceHandle) || "no".equals(edge.sourceHandle)) {
-                falseBranch = branchEl;
-            } else if (trueBranch.isEmpty()) {
-                trueBranch = branchEl;
-            } else {
-                falseBranch = branchEl;
-            }
-        }
-        
-        StringBuilder el = new StringBuilder();
-        el.append("IF(\n");
-        el.append(indent(indentLevel + 1)).append(nodeRef).append(",\n");
-        el.append(indent(indentLevel + 1)).append("THEN(\n");
-        el.append(indent(indentLevel + 2)).append(trueBranch.replace("\n", "\n" + indent(1))).append("\n");
-        el.append(indent(indentLevel + 1)).append(")");
-        
-        if (!falseBranch.isEmpty()) {
-            el.append(",\n");
-            el.append(indent(indentLevel + 1)).append("THEN(\n");
-            el.append(indent(indentLevel + 2)).append(falseBranch.replace("\n", "\n" + indent(1))).append("\n");
-            el.append(indent(indentLevel + 1)).append(")");
-        }
-        
         el.append("\n").append(indent(indentLevel)).append(")");
         
         return el.toString();
@@ -513,11 +462,8 @@ public class ReactFlowToLiteflowConverter {
         String nodeType = node.type();
         
         // 如果是特殊节点类型，使用对应的生成方法
-        if ("condition".equals(nodeType)) {
-            return generateConditionEl(nodeId, nodeMap, outEdges, inEdges, nextEdges, visited, indentLevel);
-        }
-        
-        if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
+        // condition 节点现在也是 Switch 类型
+        if ("condition".equals(nodeType) || "intent".equals(nodeType) || "intent_router".equals(nodeType) || 
             "tool".equals(nodeType) || "parameter_extraction".equals(nodeType)) {
             return generateSwitchEl(nodeId, nodeMap, outEdges, inEdges, nextEdges, visited, indentLevel);
         }
@@ -887,13 +833,8 @@ public class ReactFlowToLiteflowConverter {
         String nodeType = node.type();
         List<EdgeInfo> nextEdges = outEdges.getOrDefault(nodeId, Collections.emptyList());
         
-        // 条件节点
-        if ("condition".equals(nodeType)) {
-            return generateConditionElForSubChain(nodeId, nodeMap, outEdges, allLlmNodeIds, workflowId, nextEdges, visited, indentLevel);
-        }
-        
-        // 意图节点
-        if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
+        // Switch 类型节点 (包括 condition)
+        if ("condition".equals(nodeType) || "intent".equals(nodeType) || "intent_router".equals(nodeType) || 
             "tool".equals(nodeType)) {
             return generateSwitchElForSubChain(nodeId, nodeMap, outEdges, allLlmNodeIds, workflowId, nextEdges, visited, indentLevel);
         }
@@ -945,64 +886,6 @@ public class ReactFlowToLiteflowConverter {
     }
 
     /**
-     * 生成子链中条件节点的 EL
-     */
-    private String generateConditionElForSubChain(String nodeId,
-                                                   Map<String, WorkflowNodeDto> nodeMap,
-                                                   Map<String, List<EdgeInfo>> outEdges,
-                                                   Set<String> allLlmNodeIds,
-                                                   String workflowId,
-                                                   List<EdgeInfo> nextEdges,
-                                                   Set<String> visited,
-                                                   int indentLevel) {
-        WorkflowNodeDto node = nodeMap.get(nodeId);
-        String nodeType = node != null ? node.type() : "condition";
-        String nodeRef = formatNodeRef(nodeType, nodeId);
-        
-        String trueBranch = "";
-        String falseBranch = "";
-        
-        for (EdgeInfo edge : nextEdges) {
-            String nextNodeId = edge.targetId();
-            String branchEl;
-            if (allLlmNodeIds.contains(nextNodeId)) {
-                // 直接使用子链 ID，不需要 .tag()
-                branchEl = String.format("subchain_%s_%s", workflowId, nextNodeId);
-            } else {
-                branchEl = generateSubChainEl(nextNodeId, nodeMap, outEdges, allLlmNodeIds, workflowId, new HashSet<>(visited), indentLevel + 1);
-            }
-            
-            if ("true".equals(edge.sourceHandle()) || "yes".equals(edge.sourceHandle())) {
-                trueBranch = branchEl;
-            } else if ("false".equals(edge.sourceHandle()) || "no".equals(edge.sourceHandle())) {
-                falseBranch = branchEl;
-            } else if (trueBranch.isEmpty()) {
-                trueBranch = branchEl;
-            } else {
-                falseBranch = branchEl;
-            }
-        }
-        
-        StringBuilder el = new StringBuilder();
-        el.append("IF(\n");
-        el.append(indent(indentLevel + 1)).append(nodeRef).append(",\n");
-        el.append(indent(indentLevel + 1)).append("THEN(\n");
-        el.append(indent(indentLevel + 2)).append(trueBranch.replace("\n", "\n" + indent(1))).append("\n");
-        el.append(indent(indentLevel + 1)).append(")");
-        
-        if (!falseBranch.isEmpty()) {
-            el.append(",\n");
-            el.append(indent(indentLevel + 1)).append("THEN(\n");
-            el.append(indent(indentLevel + 2)).append(falseBranch.replace("\n", "\n" + indent(1))).append("\n");
-            el.append(indent(indentLevel + 1)).append(")");
-        }
-        
-        el.append("\n").append(indent(indentLevel)).append(")");
-        
-        return el.toString();
-    }
-
-    /**
      * 生成子链中 Switch 节点的 EL
      */
     private String generateSwitchElForSubChain(String nodeId,
@@ -1038,10 +921,8 @@ public class ReactFlowToLiteflowConverter {
             if (!branchEl.isEmpty()) {
                 String targetId = edge.targetId();
                 // 对于 switch 节点，根据节点类型决定使用哪个作为 tag：
-                // - intent 节点返回 "tag:" + targetNodeId，所以使用 targetId 作为 tag
-                // - tool 节点也使用 targetId 作为 tag，以便目标节点能获取到正确的配置
                 String branchTag;
-                if ("intent".equals(nodeType)) {
+                if ("intent".equals(nodeType) || "condition".equals(nodeType)) {
                     branchTag = targetId;
                 } else {
                     // tool 节点也使用 targetId 作为 tag
@@ -1062,9 +943,12 @@ public class ReactFlowToLiteflowConverter {
                     branchEl = branchEl + ".tag(\"" + branchTag + "\")";
                 } else {
                     // 单节点分支：需要替换或添加 tag
+                    // 如果已经有 tag，替换它；如果没有，添加它
                     if (branchEl.contains(".tag(")) {
+                        // 替换现有的 tag
                         branchEl = branchEl.replaceAll("\\.tag\\(\"[^\"]+\"\\)", ".tag(\"" + branchTag + "\")");
                     } else {
+                        // 添加新的 tag
                         branchEl = branchEl + ".tag(\"" + branchTag + "\")";
                     }
                 }
@@ -1138,13 +1022,8 @@ public class ReactFlowToLiteflowConverter {
             return String.format("%s.tag(\"%s\")", subChain.chainId(), nodeId);
         }
         
-        // 条件节点特殊处理
-        if ("condition".equals(nodeType)) {
-            return generateConditionElForMainChain(nodeId, nodeMap, outEdges, subChains, nextEdges, visited, indentLevel);
-        }
-        
-        // 意图节点特殊处理
-        if ("intent".equals(nodeType) || "intent_router".equals(nodeType) || 
+        // Switch 类型节点 (包括 condition)
+        if ("condition".equals(nodeType) || "intent".equals(nodeType) || "intent_router".equals(nodeType) || 
             "tool".equals(nodeType)) {
             return generateSwitchElForMainChain(nodeId, nodeMap, outEdges, subChains, nextEdges, visited, indentLevel);
         }
@@ -1181,55 +1060,6 @@ public class ReactFlowToLiteflowConverter {
     }
 
     /**
-     * 生成主链中的条件节点 EL
-     */
-    private String generateConditionElForMainChain(String nodeId,
-                                                    Map<String, WorkflowNodeDto> nodeMap,
-                                                    Map<String, List<EdgeInfo>> outEdges,
-                                                    Map<String, SubChainInfo> subChains,
-                                                    List<EdgeInfo> nextEdges,
-                                                    Set<String> visited,
-                                                    int indentLevel) {
-        WorkflowNodeDto node = nodeMap.get(nodeId);
-        String nodeType = node != null ? node.type() : "condition";
-        String nodeRef = formatNodeRef(nodeType, nodeId);
-        
-        String trueBranch = "";
-        String falseBranch = "";
-        
-        for (EdgeInfo edge : nextEdges) {
-            String branchEl = generateMainChainElRecursive(edge.targetId(), nodeMap, outEdges, subChains, new HashSet<>(visited), indentLevel + 1);
-            if ("true".equals(edge.sourceHandle) || "yes".equals(edge.sourceHandle)) {
-                trueBranch = branchEl;
-            } else if ("false".equals(edge.sourceHandle) || "no".equals(edge.sourceHandle)) {
-                falseBranch = branchEl;
-            } else if (trueBranch.isEmpty()) {
-                trueBranch = branchEl;
-            } else {
-                falseBranch = branchEl;
-            }
-        }
-        
-        StringBuilder el = new StringBuilder();
-        el.append("IF(\n");
-        el.append(indent(indentLevel + 1)).append(nodeRef).append(",\n");
-        el.append(indent(indentLevel + 1)).append("THEN(\n");
-        el.append(indent(indentLevel + 2)).append(trueBranch.replace("\n", "\n" + indent(1))).append("\n");
-        el.append(indent(indentLevel + 1)).append(")");
-        
-        if (!falseBranch.isEmpty()) {
-            el.append(",\n");
-            el.append(indent(indentLevel + 1)).append("THEN(\n");
-            el.append(indent(indentLevel + 2)).append(falseBranch.replace("\n", "\n" + indent(1))).append("\n");
-            el.append(indent(indentLevel + 1)).append(")");
-        }
-        
-        el.append("\n").append(indent(indentLevel)).append(")");
-        
-        return el.toString();
-    }
-
-    /**
      * 生成主链中的 Switch 节点 EL
      */
     private String generateSwitchElForMainChain(String nodeId,
@@ -1256,10 +1086,8 @@ public class ReactFlowToLiteflowConverter {
             if (!branchEl.isEmpty()) {
                 String targetId = edge.targetId();
                 // 对于 switch 节点，根据节点类型决定使用哪个作为 tag：
-                // - intent 节点返回 "tag:" + targetNodeId，所以使用 targetId 作为 tag
-                // - tool 节点也使用 targetId 作为 tag，以便目标节点能获取到正确的配置
                 String branchTag;
-                if ("intent".equals(nodeType)) {
+                if ("intent".equals(nodeType) || "condition".equals(nodeType)) {
                     branchTag = targetId;
                 } else {
                     // tool 节点也使用 targetId 作为 tag
@@ -1276,9 +1104,12 @@ public class ReactFlowToLiteflowConverter {
                     branchEl = branchEl + ".tag(\"" + branchTag + "\")";
                 } else {
                     // 单节点分支：需要替换或添加 tag
+                    // 如果已经有 tag，替换它；如果没有，添加它
                     if (branchEl.contains(".tag(")) {
+                        // 替换现有的 tag
                         branchEl = branchEl.replaceAll("\\.tag\\(\"[^\"]+\"\\)", ".tag(\"" + branchTag + "\")");
                     } else {
+                        // 添加新的 tag
                         branchEl = branchEl + ".tag(\"" + branchTag + "\")";
                     }
                 }
@@ -1299,5 +1130,3 @@ public class ReactFlowToLiteflowConverter {
         return el.toString();
     }
 }
-
-
