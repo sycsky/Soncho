@@ -18,4 +18,6 @@ public interface ChatSessionRepository extends JpaRepository<ChatSession, UUID> 
 
     @Query("SELECT s FROM ChatSession s WHERE s.primaryAgent.id = :agentId OR :agentId MEMBER OF s.supportAgentIds")
     List<ChatSession> findByPrimaryAgentIdOrSupportAgentIdsContaining(@Param("agentId") UUID agentId);
+
+    ChatSession findFirstByCustomer_IdOrderByLastActiveAtDesc(UUID customerId);
 }

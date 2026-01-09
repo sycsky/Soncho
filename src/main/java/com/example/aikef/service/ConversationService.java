@@ -1,6 +1,7 @@
 package com.example.aikef.service;
 
 import com.example.aikef.channel.ChannelRouter;
+import com.example.aikef.dto.ChatSessionDto;
 import com.example.aikef.model.Channel;
 import com.example.aikef.dto.ChannelMessage;
 import com.example.aikef.dto.MessageDto;
@@ -185,6 +186,7 @@ public class ConversationService {
             case AI_HANDLING -> session.setStatus(SessionStatus.AI_HANDLING);
             case HUMAN_HANDLING -> session.setStatus(SessionStatus.HUMAN_HANDLING);
         }
+
         return session;
     }
 
@@ -234,5 +236,11 @@ public class ConversationService {
                     return session;
                 })
                 .orElse(null);
+    }
+
+    public ChatSessionDto getChatSessionDto(UUID sessionId) {
+        ChatSession session = chatSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("会话不存在或已过期: " + sessionId));
+        return entityMapper.toChatSessionDto(session);
     }
 }

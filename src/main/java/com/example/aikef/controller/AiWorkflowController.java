@@ -78,6 +78,19 @@ public class AiWorkflowController {
     }
 
     /**
+     * 复制工作流
+     */
+    @PostMapping("/{workflowId}/copy")
+    @ResponseStatus(HttpStatus.CREATED)
+    public AiWorkflowDto copyWorkflow(
+            @PathVariable UUID workflowId,
+            Authentication authentication) {
+        UUID agentId = getAgentId(authentication);
+        AiWorkflow workflow = workflowService.copyWorkflow(workflowId, agentId);
+        return toDto(workflow);
+    }
+
+    /**
      * 更新工作流
      */
     @PutMapping("/{workflowId}")

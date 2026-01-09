@@ -22,15 +22,18 @@ public class EntityMapper {
     private final com.example.aikef.repository.MessageRepository messageRepository;
     private final AgentRepository agentRepository;
     private final ObjectMapper objectMapper;
+    private final com.example.aikef.repository.SpecialCustomerRepository specialCustomerRepository;
 
     public EntityMapper(SessionGroupMappingRepository sessionGroupMappingRepository,
                         com.example.aikef.repository.MessageRepository messageRepository,
                         AgentRepository agentRepository,
-                        ObjectMapper objectMapper) {
+                        ObjectMapper objectMapper,
+                        com.example.aikef.repository.SpecialCustomerRepository specialCustomerRepository) {
         this.sessionGroupMappingRepository = sessionGroupMappingRepository;
         this.messageRepository = messageRepository;
         this.agentRepository = agentRepository;
         this.objectMapper = objectMapper;
+        this.specialCustomerRepository = specialCustomerRepository;
     }
 
     public AgentDto toAgentDto(Agent agent) {
@@ -65,6 +68,53 @@ public class EntityMapper {
     
 
     
+
+    /**
+     * 转换为ChatSessionDto（通用版本，不包含特定客服的分组信息）
+     */
+    public ChatSessionDto toChatSessionDto(ChatSession session) {
+        if (session == null) {
+            return null;
+        }
+
+        // 转换客户信息
+        CustomerDto customerDto = null;
+        if (session.getCustomer() != null) {
+            customerDto = toCustomerDtoFromSession(session);
+        }
+
+        // 计算最后活跃时间戳（毫秒）
+        long lastActive = session.getLastActiveAt() != null ?
+                session.getLastActiveAt().toEpochMilli() : 0;
+
+        // 查询最后一条消息
+        Message lastMessage = messageRepository.findFirstBySession_IdOrderByCreatedAtDesc(session.getId());
+        SessionMessageDto lastMessageDto = lastMessage != null ? toSessionMessageDto(lastMessage) : null;
+
+        // 构建客服列表
+        List<SessionAgentDto> agents = buildSessionAgents(session);
+
+        // 获取主要客服ID
+        UUID primaryAgentId = session.getPrimaryAgent() != null ? session.getPrimaryAgent().getId() : null;
+
+        return new ChatSessionDto(
+                session.getId(),
+                session.getCustomer() != null ? session.getCustomer().getId() : null,
+                customerDto,
+                session.getStatus(),
+                lastActive,
+                0, // unreadCount
+                null, // sessionGroupId (通用视图无特定分组)
+                primaryAgentId,
+                agents,
+                lastMessageDto,
+                session.getNote(),
+                session.getCategory() != null ? session.getCategory().getId() : null,
+                session.getCategory() != null ? toSessionCategoryDto(session.getCategory()) : null,
+                parseMetadata(session.getMetadata()),
+                session.getCustomerLanguage()
+        );
+    }
 
     /**
      * 转换为ChatSessionDto（包含指定客服的分组ID）
@@ -196,6 +246,15 @@ public class EntityMapper {
         
         String notes = customer.getNotes();
         
+        // 查找特殊角色
+        SpecialCustomer specialCustomer = specialCustomerRepository.findByCustomer_Id(customer.getId()).orElse(null);
+        String roleCode = null;
+        String roleName = null;
+        if (specialCustomer != null) {
+            roleCode = specialCustomer.getRole().getCode();
+            roleName = specialCustomer.getRole().getName();
+        }
+        
         return new CustomerDto(
                 customer.getId(),
                 customer.getName(),
@@ -215,7 +274,9 @@ public class EntityMapper {
                 customer.getLastInteractionAt(),
                 customer.getCreatedAt(),
                 customer.getTags() != null ? List.copyOf(customer.getTags()) : List.of(), // 手动标签
-                customer.getAiTags() != null ? List.copyOf(customer.getAiTags()) : List.of() // AI标签
+                customer.getAiTags() != null ? List.copyOf(customer.getAiTags()) : List.of(), // AI标签
+                roleCode,
+                roleName
         );
     }
     
@@ -228,6 +289,16 @@ public class EntityMapper {
         if (customer == null) {
             return null;
         }
+        
+        // 查找特殊角色
+        SpecialCustomer specialCustomer = specialCustomerRepository.findByCustomer_Id(customer.getId()).orElse(null);
+        String roleCode = null;
+        String roleName = null;
+        if (specialCustomer != null) {
+            roleCode = specialCustomer.getRole().getCode();
+            roleName = specialCustomer.getRole().getName();
+        }
+        
         return new CustomerDto(
                 customer.getId(),
                 customer.getName(),
@@ -247,7 +318,9 @@ public class EntityMapper {
                 customer.getLastInteractionAt(),
                 customer.getCreatedAt(),
                 customer.getTags() != null ? List.copyOf(customer.getTags()) : List.of(),
-                customer.getAiTags() != null ? List.copyOf(customer.getAiTags()) : List.of()
+                customer.getAiTags() != null ? List.copyOf(customer.getAiTags()) : List.of(),
+                roleCode,
+                roleName
         );
     }
     
@@ -403,6 +476,16 @@ public class EntityMapper {
         if (customer == null) {
             return null;
         }
+        
+        // 查找特殊角色
+        SpecialCustomer specialCustomer = specialCustomerRepository.findByCustomer_Id(customer.getId()).orElse(null);
+        String roleCode = null;
+        String roleName = null;
+        if (specialCustomer != null) {
+            roleCode = specialCustomer.getRole().getCode();
+            roleName = specialCustomer.getRole().getName();
+        }
+        
         return new CustomerDto(
                 customer.getId(),
                 customer.getName(),
@@ -422,7 +505,9 @@ public class EntityMapper {
                 customer.getLastInteractionAt(),
                 customer.getCreatedAt(),
                 customer.getTags() != null ? List.copyOf(customer.getTags()) : List.of(), // 手动标签
-                customer.getAiTags() != null ? List.copyOf(customer.getAiTags()) : List.of() // AI标签
+                customer.getAiTags() != null ? List.copyOf(customer.getAiTags()) : List.of(), // AI标签
+                roleCode,
+                roleName
         );
     }
 }

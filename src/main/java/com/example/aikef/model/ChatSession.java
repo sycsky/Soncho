@@ -16,17 +16,21 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.Data;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "chat_sessions")
+@Data
 public class ChatSession extends AuditableEntity {
 
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id")
     private Customer customer;
+
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

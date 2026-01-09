@@ -22,6 +22,8 @@ public interface AiToolRepository extends JpaRepository<AiTool, UUID> {
     @Query("SELECT t FROM AiTool t LEFT JOIN FETCH t.schema WHERE t.enabled = true ORDER BY t.sortOrder ASC")
     List<AiTool> findByEnabledTrueOrderBySortOrderAsc();
 
+    List<AiTool> findByToolType(AiTool.ToolType toolType);
+
     List<AiTool> findByToolTypeAndEnabledTrue(AiTool.ToolType toolType);
 
     /**

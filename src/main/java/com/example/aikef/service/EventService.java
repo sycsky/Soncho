@@ -11,6 +11,7 @@ import jakarta.annotation.Resource;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -160,6 +161,14 @@ public class EventService {
      * @param eventData 事件数据（将作为变量传递给工作流）
      * @return 工作流执行结果
      */
+
+    @Transactional
+    @Async
+    public void triggerEventAsync(String eventName, UUID sessionId, Map<String, Object> eventData) {
+        this.triggerEvent(eventName, sessionId, eventData);
+    }
+
+
     @Transactional
     public AiWorkflowService.WorkflowExecutionResult triggerEvent(String eventName, UUID sessionId, Map<String, Object> eventData) {
         // 查找事件配置

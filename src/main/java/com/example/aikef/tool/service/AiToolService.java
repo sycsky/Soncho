@@ -7,6 +7,8 @@ import com.example.aikef.tool.model.AiTool;
 import com.example.aikef.tool.model.ToolExecution;
 import com.example.aikef.tool.repository.AiToolRepository;
 import com.example.aikef.tool.repository.ToolExecutionRepository;
+import com.example.aikef.workflow.context.WorkflowContext;
+import com.example.aikef.workflow.util.TemplateEngine;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -46,6 +48,7 @@ public class AiToolService {
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
     private final com.example.aikef.service.ChatSessionService chatSessionService;
+    private final com.example.aikef.tool.internal.InternalToolRegistry internalToolRegistry;
 
     // ==================== 工具 CRUD ====================
 
@@ -254,12 +257,13 @@ public class AiToolService {
     public AiTool createOrReplaceToolByName(CreateToolRequest request, UUID createdBy) {
         UUID reuseId = null;
         String oldApiBodyTemplate = null; // 保存旧的 apiBodyTemplate
-
+        String oldApiUrl = null; // 保存旧的 apiUrl
         AiTool existing = toolRepository.findByNameWithSchema(request.name()).orElse(null);
         if (existing != null) {
             reuseId = existing.getId();
             // 保存旧的 apiBodyTemplate
             oldApiBodyTemplate = existing.getApiBodyTemplate();
+            oldApiUrl = existing.getApiUrl();
             // 先删执行记录（外键）
             executionRepository.deleteByTool_Id(reuseId);
             // 再删工具（Schema 会 orphanRemoval 级联删除）
@@ -270,8 +274,11 @@ public class AiToolService {
             // 兜底：防止并发或未 fetch 到的情况
             AiTool existing2 = toolRepository.findByName(request.name()).orElse(null);
             if (existing2 != null) {
+                existing =  existing2;;
                 reuseId = existing2.getId();
                 // 保存旧的 apiBodyTemplate
+                // 保存旧的 apiUrl
+                oldApiUrl = existing2.getApiUrl();
                 oldApiBodyTemplate = existing2.getApiBodyTemplate();
                 executionRepository.deleteByTool_Id(reuseId);
                 toolRepository.delete(existing2);
@@ -296,15 +303,15 @@ public class AiToolService {
         // API 配置
         if (request.toolType() == AiTool.ToolType.API) {
             tool.setApiMethod(request.apiMethod());
-            tool.setApiUrl(request.apiUrl());
             tool.setApiHeaders(request.apiHeaders());
-            // 如果有旧的 apiBodyTemplate 且新请求的为空，则继承旧的
-            String apiBodyTemplate = request.apiBodyTemplate();
-            if ((apiBodyTemplate == null || apiBodyTemplate.trim().isEmpty()) && oldApiBodyTemplate != null) {
-                apiBodyTemplate = oldApiBodyTemplate;
-                log.info("继承旧的 apiBodyTemplate: toolName={}", request.name());
+            // 如果有旧的 tool ，则继承旧的 apiBodyTemplate, apiUrl
+            if(existing!=null) {
+                tool.setApiUrl(existing.getApiUrl());
+                tool.setApiBodyTemplate(existing.getApiBodyTemplate());
             }
-            tool.setApiBodyTemplate(apiBodyTemplate);
+
+
+
             tool.setApiResponsePath(request.apiResponsePath());
             tool.setApiTimeout(request.apiTimeout() != null ? request.apiTimeout() : 30);
         }
@@ -347,6 +354,16 @@ public class AiToolService {
      */
     @Transactional
     public ToolExecutionResult executeTool(UUID toolId, Map<String, Object> params, UUID sessionId, UUID executedBy) {
+        // 创建临时上下文（为了兼容旧 API，同时支持 TemplateEngine）
+        WorkflowContext ctx = createContext(sessionId, params);
+        return executeTool(toolId, params, ctx, executedBy);
+    }
+
+    /**
+     * 执行工具（支持传入 WorkflowContext）
+     */
+    @Transactional
+    public ToolExecutionResult executeTool(UUID toolId, Map<String, Object> params, WorkflowContext ctx, UUID executedBy) {
         AiTool tool = toolRepository.findById(toolId)
                 .orElseThrow(() -> new IllegalArgumentException("工具不存在: " + toolId));
 
@@ -357,7 +374,7 @@ public class AiToolService {
         // 创建执行记录
         ToolExecution execution = new ToolExecution();
         execution.setTool(tool);
-        execution.setSessionId(sessionId);
+        execution.setSessionId(ctx.getSessionId());
         execution.setStatus(ToolExecution.ExecutionStatus.RUNNING);
         execution.setInputParams(serializeParams(params));
         execution.setStartedAt(Instant.now());
@@ -369,9 +386,11 @@ public class AiToolService {
             ToolExecutionResult result;
 
             if (tool.getToolType() == AiTool.ToolType.API) {
-                result = executeApiTool(tool, params, sessionId);
+                result = executeApiTool(tool, params, ctx);
             } else if (tool.getToolType() == AiTool.ToolType.MCP) {
                 result = executeMcpTool(tool, params);
+            } else if (tool.getToolType() == AiTool.ToolType.INTERNAL) {
+                result = executeInternalTool(tool, params, ctx);
             } else {
                 throw new IllegalArgumentException("不支持的工具类型: " + tool.getToolType());
             }
@@ -411,6 +430,41 @@ public class AiToolService {
     }
 
     /**
+     * 创建临时上下文（兼容旧 API）
+     */
+    private WorkflowContext createContext(UUID sessionId, Map<String, Object> params) {
+        WorkflowContext ctx = new WorkflowContext();
+        ctx.setSessionId(sessionId);
+        
+        if (sessionId != null) {
+            try {
+                com.example.aikef.model.ChatSession session = chatSessionService.getSession(sessionId);
+                if (session != null) {
+                    if (session.getCustomer() != null) {
+                        ctx.setCustomerId(session.getCustomer().getId());
+                        ctx.getCustomerInfo().put("id", session.getCustomer().getId());
+                        ctx.getCustomerInfo().put("name", session.getCustomer().getName());
+                    }
+                    if (session.getMetadata() != null) {
+                        try {
+                            Map<String, Object> metadata = objectMapper.readValue(session.getMetadata(), new TypeReference<Map<String, Object>>() {});
+                            ctx.setSessionMetadata(metadata);
+                        } catch (Exception e) {
+                            log.warn("解析会话元数据失败", e);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("加载会话失败", e);
+            }
+        }
+        
+        // 注意：这里我们不将 params 设置为 ctx.variables，
+        // 因为 TemplateEngine.render(template, ctx, params) 会优先使用局部变量 params
+        return ctx;
+    }
+
+    /**
      * 异步执行工具
      */
     @Async
@@ -421,7 +475,7 @@ public class AiToolService {
     /**
      * 执行 API 工具（支持网络异常重试）
      */
-    private ToolExecutionResult executeApiTool(AiTool tool, Map<String, Object> params, UUID sessionId) {
+    private ToolExecutionResult executeApiTool(AiTool tool, Map<String, Object> params, WorkflowContext ctx) {
         int maxRetries = tool.getRetryCount() != null ? tool.getRetryCount() : 0;
         int retryCount = 0;
         Exception lastException = null;
@@ -436,7 +490,7 @@ public class AiToolService {
                     Thread.sleep(1000L * retryCount);
                 }
 
-                return executeApiToolInternal(tool, params, sessionId);
+                return executeApiToolInternal(tool, params, ctx);
 
             } catch (Exception e) {
                 lastException = e;
@@ -462,7 +516,7 @@ public class AiToolService {
     /**
      * 实际执行 API 工具调用
      */
-    private ToolExecutionResult executeApiToolInternal(AiTool tool, Map<String, Object> params, UUID sessionId)
+    private ToolExecutionResult executeApiToolInternal(AiTool tool, Map<String, Object> params, WorkflowContext ctx)
             throws Exception {
         // 构建请求头
         HttpHeaders headers = new HttpHeaders();
@@ -474,7 +528,7 @@ public class AiToolService {
                     });
             // 替换请求头中的变量（包括 metadata）
             customHeaders.forEach((key, value) -> {
-                String replacedValue = replaceVariables(value, params, sessionId);
+                String replacedValue = TemplateEngine.render(value, ctx, params);
                 headers.set(key, replacedValue);
             });
         }
@@ -483,12 +537,12 @@ public class AiToolService {
         applyAuthentication(headers, tool, params);
 
         // 构建请求 URL（替换变量，包括会话元数据）
-        String url = replaceVariables(tool.getApiUrl(), params, sessionId);
+        String url = TemplateEngine.render(tool.getApiUrl(), ctx, params);
 
         // 构建请求体
         String body = null;
         if (tool.getApiBodyTemplate() != null && !tool.getApiBodyTemplate().isEmpty()) {
-            body = replaceVariables(tool.getApiBodyTemplate(), params, sessionId);
+            body = TemplateEngine.render(tool.getApiBodyTemplate(), ctx, params);
         } else if (params != null && !params.isEmpty()) {
             body = objectMapper.writeValueAsString(params);
         }
@@ -513,6 +567,43 @@ public class AiToolService {
                 null,
                 null
         );
+    }
+
+    /**
+     * 执行内部工具
+     */
+    private ToolExecutionResult executeInternalTool(AiTool tool, Map<String, Object> params, WorkflowContext ctx) {
+        try {
+            // 处理 Body Template (如果存在)
+            String body = null;
+            if (tool.getApiBodyTemplate() != null && !tool.getApiBodyTemplate().isEmpty()) {
+                body = TemplateEngine.render(tool.getApiBodyTemplate(), ctx, params);
+            }
+
+            Object result = internalToolRegistry.execute(tool.getName(), params, body);
+            String output = result != null ? result.toString() : "null";
+
+            // 如果结果是复杂对象，尝试转为 JSON
+            if (result != null && !(result instanceof String) && !(result instanceof Number) && !(result instanceof Boolean)) {
+                try {
+                    output = objectMapper.writeValueAsString(result);
+                } catch (JsonProcessingException e) {
+                    // 忽略序列化错误，使用 toString
+                }
+            }
+
+            return new ToolExecutionResult(
+                    true,
+                    output,
+                    null,
+                    200,
+                    null,
+                    null
+            );
+        } catch (Exception e) {
+            log.error("内部工具执行失败: tool={}", tool.getName(), e);
+            return new ToolExecutionResult(false, null, e.getMessage(), 500, null, null);
+        }
     }
 
     /**
@@ -616,96 +707,6 @@ public class AiToolService {
         } catch (Exception e) {
             log.warn("应用认证失败: tool={}", tool.getName(), e);
         }
-    }
-
-    /**
-     * 替换变量
-     * 支持三种格式：
-     * - {{paramName}} - 从 params 中获取参数值
-     * - {{meta.key}} - 从会话 metadata 中获取元数据值
-     * - {{sessionId}} - 会话ID
-     */
-    private String replaceVariables(String template, Map<String, Object> params, UUID sessionId) {
-        if (template == null) {
-            return template;
-        }
-
-        String result = template;
-
-        // 匹配 {{xxx}} 或 {{meta.xxx}} 格式
-        // 支持字母、数字、下划线和点号
-        Pattern pattern = Pattern.compile("\\{\\{([\\w.]+)}}");
-        Matcher matcher = pattern.matcher(template);
-
-        while (matcher.find()) {
-            String varName = matcher.group(1);
-            String fullMatch = matcher.group(0); // 完整的 {{xxx}} 或 {{meta.xxx}}
-
-            // 检查是否是 meta.xxx 格式
-            if (varName.startsWith("meta.")) {
-                // 从会话 metadata 中获取
-                String metaKey = varName.substring(5); // 去掉 "meta." 前缀
-                String metaValue = getSessionMetadataValue(sessionId, metaKey);
-                if (metaValue != null) {
-                    result = result.replace(fullMatch, metaValue);
-                }
-            } else if ("sessionId".equalsIgnoreCase(varName)) {
-                // 支持 {{sessionId}} 变量
-                if (sessionId != null) {
-                    result = result.replace(fullMatch, sessionId.toString());
-                }
-            } else {
-                // 从 params 中获取
-                if (params != null) {
-                    Object value = params.get(varName);
-                    if (value != null) {
-                        result = result.replace(fullMatch, value.toString());
-                    }else {
-                        result = result.replace(fullMatch, "");
-                    }
-                }else  {
-                    result = result.replace(fullMatch, "");
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /**
-     * 从会话 metadata 中获取指定 key 的值
-     */
-    private String getSessionMetadataValue(UUID sessionId, String key) {
-        if (sessionId == null || key == null || key.isEmpty()) {
-            return null;
-        }
-
-        try {
-            com.example.aikef.model.ChatSession session = chatSessionService.getSession(sessionId);
-            String metadataJson = session.getMetadata();
-
-            if (metadataJson == null || metadataJson.isEmpty()) {
-                return null;
-            }
-
-            // 解析 JSON
-            JsonNode metadata = objectMapper.readTree(metadataJson);
-            JsonNode valueNode = metadata.get(key);
-
-            if (valueNode != null && !valueNode.isNull()) {
-                if (valueNode.isTextual()) {
-                    return valueNode.asText();
-                } else {
-                    // 非文本类型，转换为 JSON 字符串
-                    return valueNode.toString();
-                }
-            }
-
-        } catch (Exception e) {
-            log.warn("获取会话元数据失败: sessionId={}, key={}, error={}", sessionId, key, e.getMessage());
-        }
-
-        return null;
     }
 
     /**

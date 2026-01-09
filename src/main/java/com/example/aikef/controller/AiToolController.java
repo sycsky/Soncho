@@ -275,7 +275,7 @@ public class AiToolController {
     public ToolExecutionResult testTool(
             @PathVariable UUID toolId,
             @RequestBody ExecuteToolDto request) {
-        return toolService.executeTool(toolId, request.params(), null, null);
+        return toolService.executeTool(toolId, request.params(), (java.util.UUID) null, null);
     }
 
     // ==================== 执行记录 ====================

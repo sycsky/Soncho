@@ -75,7 +75,7 @@ public class IntentNode extends NodeSwitchComponent {
         JsonNode config = ctx.getNodeConfig(actualNodeId);
         
         String userMessage = ctx.getQuery();
-        
+        ctx.setOutput(this.getTag(),ctx.getLastOutput());
         // 1. 获取意图配置列表
         JsonNode intentsConfig = config != null ? config.get("Intents") : null;
         if (intentsConfig == null) {
@@ -103,9 +103,9 @@ public class IntentNode extends NodeSwitchComponent {
         }
         
         // 如果 useHistoryOnly 为 false，将当前用户消息添加到历史记录中
-        if (!useHistoryOnly) {
-            chatHistory.add(new LangChainChatService.ChatHistoryMessage("user", userMessage));
-        }
+//        if (!useHistoryOnly) {
+//            chatHistory.add(new LangChainChatService.ChatHistoryMessage("user", userMessage));
+//        }
         
         // 3. 识别意图，返回匹配的意图 id（即 sourceHandle）
         String recognitionType = BaseWorkflowNode.readConfigString(config, "recognitionType", "llm");
@@ -223,24 +223,26 @@ public class IntentNode extends NodeSwitchComponent {
             basePrompt = """
                 你是一个意图分类器。根据历史对话记录，从以下意图中选择最匹配的一个。
                 只返回意图名称，不要其他任何内容。如果无法匹配任何意图，返回 "unknown"。
-                
-                可选意图:
-                """ + intentDesc.toString();
+                """ ;
         } else if (!chatHistory.isEmpty()) {
             basePrompt = """
                 你是一个意图分类器。根据用户输入（包括历史对话记录和当前消息），从以下意图中选择最匹配的一个。
                 只返回意图名称，不要其他任何内容。如果无法匹配任何意图，返回 "unknown"。
-                
-                可选意图:
-                """ + intentDesc.toString();
+                """;
         } else {
             basePrompt = """
             你是一个意图分类器。根据用户输入，从以下意图中选择最匹配的一个。
             只返回意图名称，不要其他任何内容。如果无法匹配任何意图，返回 "unknown"。
-            
-            可选意图:
-            """ + intentDesc.toString();
+            """;
         }
+
+
+        String intentStr = """
+                    根据上面对话记录，判断当前意图是哪个,只回答我给你的意图名称,不要其他任何内容。如果无法匹配任何意图，返回 "unknown"。
+                    可选意图:
+                       """+ intentDesc.toString();
+        LangChainChatService.ChatHistoryMessage intentMessage = new LangChainChatService.ChatHistoryMessage("user", intentStr);
+        chatHistory.add(intentMessage);
         
         // 合并自定义提示（如果配置了）
         String customPrompt = BaseWorkflowNode.readConfigString(config, "customPrompt", null);
@@ -262,14 +264,14 @@ public class IntentNode extends NodeSwitchComponent {
             if (modelIdStr != null && !modelIdStr.isEmpty()) {
                 UUID modelId = BaseWorkflowNode.parseUuidValue(modelIdStr);
                 if (modelId != null) {
-                    response = langChainChatService.chatWithMessages(modelId, systemPrompt, chatHistory, 0.1, 100);
+                    response = langChainChatService.chatWithMessages(modelId, systemPrompt, chatHistory, 0.0, 1000);
                 } else {
-                    response = langChainChatService.chatWithMessages(null, systemPrompt, chatHistory, 0.1, 100);
+                    response = langChainChatService.chatWithMessages(null, systemPrompt, chatHistory, 0.0, 1000);
                 }
             } else if (modelCode != null && !modelCode.isEmpty()) {
-                response = langChainChatService.chatWithMessagesByCode(modelCode, systemPrompt, chatHistory, 0.1, 100);
+                response = langChainChatService.chatWithMessagesByCode(modelCode, systemPrompt, chatHistory, 0.0, 1000);
             } else {
-                response = langChainChatService.chatWithMessages(null, systemPrompt, chatHistory, 0.1, 100);
+                response = langChainChatService.chatWithMessages(null, systemPrompt, chatHistory, 0.0, 1000);
             }
 
             if (response.success()) {

@@ -7,10 +7,13 @@ import com.example.aikef.workflow.context.WorkflowContext;
 import com.yomahub.liteflow.annotation.LiteflowComponent;
 import jakarta.annotation.Resource;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.Map;
 
 /**
  * 知识库查询节点
@@ -121,8 +124,8 @@ public class KnowledgeNode extends BaseWorkflowNode {
             }
         }
         
-        // 多个知识库 ID
-        Object multiIds = getNodeConfig().get("knowledgeBaseIds");
+        // 多个知识库 ID (支持 List<String>, List<UUID>, List<Map>, JsonNode)
+        Object multiIds = getNodeConfig().get("selectedKnowledgeBases");
         if (multiIds instanceof List<?> idList) {
             for (Object item : idList) {
                 try {
@@ -130,11 +133,46 @@ public class KnowledgeNode extends BaseWorkflowNode {
                         ids.add(UUID.fromString(s));
                     } else if (item instanceof UUID u) {
                         ids.add(u);
+                    } else if (item instanceof Map<?, ?> m) {
+                        // 处理对象格式: {"id": "...", "name": "..."}
+                        Object idObj = m.get("id");
+                        if (idObj != null) {
+                            ids.add(UUID.fromString(idObj.toString()));
+                        }
                     }
                 } catch (Exception e) {
                     log.warn("无效的知识库 ID: {}", item);
                 }
             }
+        } else if (multiIds instanceof ArrayNode arrayNode) {
+            // 处理 Jackson ArrayNode
+            for (JsonNode item : arrayNode) {
+                try {
+                    if (item.isTextual()) {
+                        ids.add(UUID.fromString(item.asText()));
+                    } else if (item.isObject() && item.has("id")) {
+                        ids.add(UUID.fromString(item.get("id").asText()));
+                    }
+                } catch (Exception e) {
+                    log.warn("无效的知识库 ID (JsonNode): {}", item);
+                }
+            }
+        } else if (multiIds instanceof String jsonStr) {
+             // 尝试解析 JSON 字符串
+             try {
+                 JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(jsonStr);
+                 if (node.isArray()) {
+                     for (JsonNode item : node) {
+                        if (item.isTextual()) {
+                            ids.add(UUID.fromString(item.asText()));
+                        } else if (item.isObject() && item.has("id")) {
+                            ids.add(UUID.fromString(item.get("id").asText()));
+                        }
+                     }
+                 }
+             } catch (Exception e) {
+                 log.warn("解析知识库配置 JSON 失败: {}", jsonStr);
+             }
         }
         
         return ids;

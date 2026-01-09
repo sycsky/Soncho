@@ -2,6 +2,7 @@ package com.example.aikef.controller;
 
 import com.example.aikef.dto.WebhookMessageResponse;
 import com.example.aikef.dto.request.WebhookMessageRequest;
+import com.example.aikef.model.Channel;
 import com.example.aikef.model.ExternalPlatform;
 import com.example.aikef.service.ExternalPlatformService;
 import jakarta.validation.Valid;
@@ -145,7 +146,7 @@ public class WebhookController {
      */
     @GetMapping("/platform-types")
     public List<PlatformTypeInfo> getPlatformTypes() {
-        return Arrays.stream(ExternalPlatform.PlatformType.values())
+        return Arrays.stream(Channel.values())
                 .map(type -> new PlatformTypeInfo(type.name(), getDisplayName(type)))
                 .toList();
     }
@@ -160,7 +161,7 @@ public class WebhookController {
                 .toList();
     }
 
-    private String getDisplayName(ExternalPlatform.PlatformType type) {
+    private String getDisplayName(Channel type) {
         return switch (type) {
             case LINE -> "Line";
             case WHATSAPP -> "WhatsApp";
@@ -170,8 +171,15 @@ public class WebhookController {
             case TWITTER -> "Twitter";
             case EMAIL -> "Email";
             case WEB -> "网页";
-            case CUSTOM -> "CUSTOM";
-            case OTHER -> "OTHER";
+            case CUSTOM -> "自定义";
+            case OTHER -> "其他";
+            case INSTAGRAM -> "Instagram";
+            case DOUYIN -> "抖音";
+            case REDBOOK -> "小红书";
+            case WEIBO -> "微博";
+            case SMS -> "短信";
+            case PHONE -> "电话";
+            case APP -> "APP";
         };
     }
 
