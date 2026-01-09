@@ -4,7 +4,7 @@
 
 app:
   saas:
-    enabled: false
+    enabled: true
 shopify:
   api-key: ${SHOPIFY_API_KEY:your_shopify_api_key}
   api-secret: ${SHOPIFY_API_SECRET:your_shopify_api_secret}
