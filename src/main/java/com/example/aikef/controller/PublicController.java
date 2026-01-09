@@ -2,11 +2,13 @@ package com.example.aikef.controller;
 
 
 import com.example.aikef.dto.request.CreateTenantAdminRequest;
+import com.example.aikef.saas.context.TenantContext;
 import com.example.aikef.service.AgentService;
 import com.example.aikef.service.RoleService;
 import com.example.aikef.dto.AgentDto;
 import com.example.aikef.model.Role;
 import com.example.aikef.repository.RoleRepository;
+import com.example.aikef.shopify.service.ShopifyAuthService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -108,22 +110,32 @@ public class PublicController {
      */
     @PostMapping("/customer-token")
     public CustomerTokenResponse getCustomerToken(@Valid @RequestBody QuickCustomerRequest request) {
-        // 查找或创建客户
-        Customer customer = customerService.findOrCreateByChannel(
-                request.channel(),
-                request.name(),
-                request.email(),
-                request.phone(),
-                request.channelUserId()
-        );
-        
-        // 生成 Token 并创建会话（带 metadata）
-        CustomerTokenResponse response = customerService.generateCustomerToken(
-                customer.getId(), 
-                request.metadata()
-        );
-        
-        return response;
+        // 设置租户上下文
+        if (request.shop() != null && !request.shop().isBlank()) {
+            String tenantId = ShopifyAuthService.generateTenantId(request.shop());
+            TenantContext.setTenantId(tenantId);
+        }
+
+        try {
+            // 查找或创建客户
+            Customer customer = customerService.findOrCreateByChannel(
+                    request.channel(),
+                    request.name(),
+                    request.email(),
+                    request.phone(),
+                    request.channelUserId()
+            );
+
+            // 生成 Token 并创建会话（带 metadata）
+            CustomerTokenResponse response = customerService.generateCustomerToken(
+                    customer.getId(),
+                    request.metadata()
+            );
+
+            return response;
+        } finally {
+            TenantContext.clear();
+        }
     }
 
     /**

@@ -6,8 +6,16 @@ import com.example.aikef.model.Role;
 import com.example.aikef.model.enums.AgentStatus;
 import com.example.aikef.repository.AgentRepository;
 import com.example.aikef.repository.RoleRepository;
+import com.example.aikef.service.SessionGroupService;
 import com.example.aikef.shopify.model.ShopifyStore;
 import com.example.aikef.shopify.repository.ShopifyStoreRepository;
+import com.example.aikef.model.AiWorkflow;
+import com.example.aikef.model.SessionGroup;
+import com.example.aikef.repository.AiWorkflowRepository;
+import com.example.aikef.repository.SessionGroupRepository;
+import jakarta.persistence.EntityManager;
+import org.springframework.beans.BeanUtils;
+
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -21,6 +29,8 @@ import java.util.Optional;
 import java.util.TreeMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpEntity;
@@ -49,7 +59,12 @@ public class ShopifyAuthService {
     private final AgentRepository agentRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AiWorkflowRepository aiWorkflowRepository;
+    private final EntityManager entityManager;
 
+
+    @Autowired
+    private SessionGroupService sessionGroupService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Value("${shopify.api-key:}")
@@ -70,7 +85,9 @@ public class ShopifyAuthService {
                              ShopifyWebhookRegistrationService webhookRegistrationService,
                              AgentRepository agentRepository,
                              RoleRepository roleRepository,
-                             PasswordEncoder passwordEncoder) {
+                             PasswordEncoder passwordEncoder,
+                             AiWorkflowRepository aiWorkflowRepository,
+                             EntityManager entityManager) {
         this.redisTemplate = redisTemplate;
         this.restTemplate = restTemplate;
         this.storeRepository = storeRepository;
@@ -78,6 +95,8 @@ public class ShopifyAuthService {
         this.agentRepository = agentRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.aiWorkflowRepository = aiWorkflowRepository;
+        this.entityManager = entityManager;
     }
 
     public URI buildInstallRedirect(String shopDomain) {
@@ -156,10 +175,55 @@ public class ShopifyAuthService {
             store.setUninstalledAt(null);
             store.setTenantId(tenantId);
             ShopifyStore saved = storeRepository.save(store);
-            ensureShopAdminAgent(shopDomain, tenantId);
+            Agent adminAgent = ensureShopAdminAgent(shopDomain, tenantId);
+            initializeTenantData(adminAgent);
             return saved;
         } finally {
             TenantContext.clear();
+        }
+    }
+
+    private void initializeTenantData(Agent adminAgent) {
+        // 1. 确保默认会话分组存在
+        sessionGroupService.ensureDefaultGroups(adminAgent);
+        
+        // 2. 复制模板工作流
+        copyTemplateWorkflows(adminAgent);
+    }
+    
+    @SuppressWarnings("unchecked")
+    private void copyTemplateWorkflows(Agent adminAgent) {
+        // 使用 EntityManager 执行原生 SQL 查询模板工作流，绕过租户过滤器
+        // 注意：这里假设模板工作流的 is_template = true
+        // 为了避免复制已经存在的模板，可以先检查
+        
+        try {
+            // 查询所有模板工作流 (忽略租户过滤器)
+            String sql = "SELECT * FROM ai_workflows WHERE is_template = true";
+            var query = entityManager.createNativeQuery(sql, AiWorkflow.class);
+            var templates = (java.util.List<AiWorkflow>) query.getResultList();
+            
+            for (AiWorkflow template : templates) {
+                // 检查当前租户是否已经复制过该模板（通过名称判断，或者允许重复？）
+                // 简单起见，如果当前租户下没有同名工作流，则复制
+                boolean exists = aiWorkflowRepository.findByName(template.getName()).isPresent();
+                if (!exists) {
+                    AiWorkflow copy = new AiWorkflow();
+                    BeanUtils.copyProperties(template, copy, "id", "createdAt", "updatedAt", "version");
+                    
+                    // TenantEntityListener 会自动填充 tenantId (前提是 copy.getTenantId() == null)
+                    copy.setTenantId(null); 
+                    
+                    copy.setTemplate(false); // 复制后的不再是模板
+                    copy.setEnabled(true);
+                    copy.setCreatedByAgent(adminAgent); // 设置创建人为当前的管理员
+                    aiWorkflowRepository.save(copy);
+                }
+            }
+        } catch (Exception e) {
+            // 记录日志但不阻断流程
+            System.err.println("Failed to copy template workflows: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -183,7 +247,7 @@ public class ShopifyAuthService {
 
         Agent agent = new Agent();
         agent.setTenantId(tenantId);
-        agent.setName("Shopify Admin (" + shopDomain + ")");
+        agent.setName("Shopify Admin");
         agent.setEmail(email);
         agent.setPasswordHash(passwordEncoder.encode(password));
         agent.setStatus(AgentStatus.OFFLINE);

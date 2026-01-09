@@ -15,6 +15,7 @@ public record QuickCustomerRequest(
         String email,           // 可选，邮箱
         String phone,           // 可选，手机号
         String channelUserId,   // 可选，渠道用户ID（如微信 openId）
+        String shop,            // 可选，Shopify 店铺域名 (用于多租户)
         /**
          * 会话元数据（可选）
          * 可包含以下字段：

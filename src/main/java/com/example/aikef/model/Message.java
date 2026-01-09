@@ -18,11 +18,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "messages")
+@Filter(name = "tenantFilter", condition = "1=1")
 public class Message extends AuditableEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)

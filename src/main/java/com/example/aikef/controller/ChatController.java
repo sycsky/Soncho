@@ -84,7 +84,7 @@ public class ChatController {
             @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,
             Authentication authentication) {
         
-        AgentPrincipal agentPrincipal = null;
+            AgentPrincipal agentPrincipal = null;
         CustomerPrincipal customerPrincipal = null;
         
         if (authentication != null && authentication.getPrincipal() instanceof AgentPrincipal) {

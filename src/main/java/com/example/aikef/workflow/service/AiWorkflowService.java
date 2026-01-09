@@ -612,6 +612,7 @@ public class AiWorkflowService {
             }
         }
 
+
         // 2. 查找默认工作流
         return workflowRepository.findByIsDefaultTrueAndEnabledTrue().orElse(null);
     }
