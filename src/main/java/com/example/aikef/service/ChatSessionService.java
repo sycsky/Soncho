@@ -324,6 +324,7 @@ public class ChatSessionService {
 
     /**
      * 检查用户是否是会话成员
+     * 增加对管理员角色的支持：如果是管理员，默认有权访问所有会话
      */
     public boolean isSessionMember(UUID sessionId, UUID agentId, UUID customerId) {
         ChatSession session = getSession(sessionId);
@@ -334,15 +335,25 @@ public class ChatSessionService {
             return true;
         }
 
-        // 检查是否是主责客服
-        if (agentId != null && session.getPrimaryAgent() != null
-                && session.getPrimaryAgent().getId().equals(agentId)) {
-            return true;
-        }
+        if (agentId != null) {
+            // 1. 检查是否是主责客服
+            if (session.getPrimaryAgent() != null
+                    && session.getPrimaryAgent().getId().equals(agentId)) {
+                return true;
+            }
 
-        // 检查是否是支持客服
-        if (agentId != null && session.getSupportAgentIds().contains(agentId)) {
-            return true;
+            // 2. 检查是否是支持客服
+            if (session.getSupportAgentIds() != null && session.getSupportAgentIds().contains(agentId)) {
+                return true;
+            }
+            
+            // 3. 检查是否是管理员 (从数据库加载 Agent 并检查角色)
+            // 注意：频繁查询可能影响性能，最好从 SecurityContext 中获取角色信息
+            // 但这里 service 层通常不直接依赖 SecurityContext
+            // 我们可以简单查询一下 Agent 的 Role
+            return agentRepository.findByIdWithRole(agentId)
+                    .map(agent -> agent.getRole() != null && "Administrator".equalsIgnoreCase(agent.getRole().getName()))
+                    .orElse(false);
         }
 
         return false;

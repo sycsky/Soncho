@@ -13,6 +13,7 @@ import java.util.Arrays;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.Authentication;
 import com.example.aikef.security.AgentPrincipal;
+import com.example.aikef.security.CustomerPrincipal;
 import org.springframework.beans.factory.annotation.Value;
 
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,7 @@ public class TenantInterceptor implements HandlerInterceptor {
             "/api/v1/public/**",
             "/api/v1/shopify/auth/exchange",
             "/api/v1/shopify/**",
+            "/api/v1/chat/sessions/**",
             "/api/v1/files/image/**",
             "/actuator/**",
             "/ws/**"
@@ -48,13 +50,27 @@ public class TenantInterceptor implements HandlerInterceptor {
             return true;
         }
 
+        String requestUri = request.getRequestURI();
+        // Check whitelist - Only allow if no tenant ID is present but path is whitelisted
+        for (String pattern : WHITELIST_PATHS) {
+            if (pathMatcher.match(pattern, requestUri)) {
+                return true;
+            }
+        }
+
         // 1. Try to get Tenant ID from Security Context (Token)
         String tenantId = null;
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof AgentPrincipal) {
-            AgentPrincipal principal = (AgentPrincipal) authentication.getPrincipal();
-            tenantId = principal.getTenantId();
-            log.debug("Found Tenant ID from Token: {}", tenantId);
+        if (authentication != null) {
+            if (authentication.getPrincipal() instanceof AgentPrincipal) {
+                AgentPrincipal principal = (AgentPrincipal) authentication.getPrincipal();
+                tenantId = principal.getTenantId();
+                log.debug("Found Tenant ID from Agent Token: {}", tenantId);
+            } else if (authentication.getPrincipal() instanceof CustomerPrincipal) {
+                CustomerPrincipal principal = (CustomerPrincipal) authentication.getPrincipal();
+                tenantId = principal.getTenantId();
+                log.debug("Found Tenant ID from Customer Token: {}", tenantId);
+            }
         }
 
         // 2. Fallback to Header
@@ -74,13 +90,7 @@ public class TenantInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        String requestUri = request.getRequestURI();
-        // Check whitelist - Only allow if no tenant ID is present but path is whitelisted
-        for (String pattern : WHITELIST_PATHS) {
-            if (pathMatcher.match(pattern, requestUri)) {
-                return true;
-            }
-        }
+
 
         // If not in whitelist and no tenant ID provided, block request
         response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Missing Tenant ID (Token, X-Tenant-ID header or tenantId parameter is required)");
