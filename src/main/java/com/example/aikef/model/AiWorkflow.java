@@ -55,6 +55,9 @@ public class AiWorkflow extends AuditableEntity {
     @Column(name = "sub_chains_json", columnDefinition = "TEXT")
     private String subChainsJson;
 
+    @Column(name = "is_template", nullable = false)
+    private boolean isTemplate = false;
+
     /**
      * LLM 节点ID列表 (JSON)
      */

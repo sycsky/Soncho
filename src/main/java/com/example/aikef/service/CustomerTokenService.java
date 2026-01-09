@@ -51,7 +51,8 @@ public class CustomerTokenService {
                 .map(customer -> new CustomerPrincipal(
                         customer.getId(),
                         customer.getName(),
-                        customer.getPrimaryChannel().name()
+                        customer.getPrimaryChannel().name(),
+                        customer.getTenantId()
                 ));
     }
 

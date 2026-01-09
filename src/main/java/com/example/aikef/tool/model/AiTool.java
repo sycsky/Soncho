@@ -2,10 +2,13 @@ package com.example.aikef.tool.model;
 
 import com.example.aikef.extraction.model.ExtractionSchema;
 import com.example.aikef.model.base.AuditableEntity;
+import com.example.aikef.saas.context.TenantContext;
 import jakarta.persistence.*;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
 import lombok.Data;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.*;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -22,15 +25,25 @@ import java.util.UUID;
         @Index(name = "idx_ai_tool_type", columnList = "tool_type"),
         @Index(name = "idx_ai_tool_enabled", columnList = "enabled")
 })
-public class AiTool extends AuditableEntity {
+@Filter(name = "tenantFilter", condition = "(tenant_id = :tenantId OR tenant_id IS NULL)")
+public class AiTool {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(nullable = false, updatable = false, columnDefinition = "CHAR(36)")
     private UUID id;
+
+    /**
+     * 租户ID
+     * 系统工具的租户ID为 NULL
+     */
+    @Column(name = "tenant_id", length = 50)
+    private String tenantId;
 
     /**
      * 工具名称（唯一标识，用于 AI 调用）
      */
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, length = 100)
     private String name;
 
     /**
@@ -39,6 +52,7 @@ public class AiTool extends AuditableEntity {
     @Column(name = "display_name", length = 100)
     private String displayName;
 
+    
     /**
      * 工具描述（用于 AI 理解工具用途）
      */
@@ -212,6 +226,20 @@ public class AiTool extends AuditableEntity {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.tenantId == null) {
+            try {
+                String currentTenant = TenantContext.getTenantId();
+                if (currentTenant != null) {
+                    this.tenantId = currentTenant;
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+    }
 
     /**
      * 工具类型
