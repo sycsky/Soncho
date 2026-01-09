@@ -180,7 +180,6 @@ public class WebhookController {
             case PHONE -> "电话";
             case APP -> "APP";
             case SHOPIFY -> "Shopify";
-            case CUSTOM -> "CUSTOM";
             case OTHER -> "OTHER";
         };
     }

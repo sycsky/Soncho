@@ -31,10 +31,10 @@ public class ShopifyAuthController {
     @Value("${shopify.api-key:}")
     private String apiKey;
 
-    @Value("${shopify.ui-url:}")
+    @Value("${shopify.ui-url:https://son-cho.com}")
     private String uiUrl;
 
-    @Value("${shopify.app-url:http://localhost:8080}")
+    @Value("${shopify.app-url:https://admin.son-cho.com}")
     private String appUrl;
 
     public ShopifyAuthController(ShopifyAuthService authService) {

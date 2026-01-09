@@ -35,6 +35,7 @@ public class TenantInterceptor implements HandlerInterceptor {
             "/api/v1/events/hook/**",
             "/api/v1/auth/login",
             "/api/v1/public/**",
+            "/api/v1/shopify/auth/exchange",
             "/api/v1/shopify/**",
             "/api/v1/files/image/**",
             "/actuator/**",

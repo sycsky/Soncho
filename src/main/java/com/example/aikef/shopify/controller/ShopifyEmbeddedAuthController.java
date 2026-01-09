@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Optional;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+
+import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -71,15 +73,21 @@ public class ShopifyEmbeddedAuthController {
     @PostMapping("/exchange")
     public ResponseEntity<Map<String, Object>> exchange(
             @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestParam(value = "id_token", required = false) String idToken,
             @RequestParam(value = "shop", required = false) String shop
     ) {
-        String token = extractBearer(authorization);
-        if (token == null || token.isBlank()) {
-            token = idToken;
+        if (shop != null && !shop.isBlank() && StringUtils.isBlank(authorization)) {
+            Optional<ShopifyStore> storeOpt = storeRepository.findByShopDomain(shop);
+            if (storeOpt.isEmpty() || !storeOpt.get().isActive()) {
+                return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "Shop not installed"));
+            }else{
+                return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "installed"));
+            }
         }
+
+        String token = extractBearer(authorization);
+
         if (token == null || token.isBlank()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("success", false, "error", "Missing token"));
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("success", false, "error", "Shop not installed"));
         }
 
         VerifiedSession session;
@@ -99,7 +107,7 @@ public class ShopifyEmbeddedAuthController {
         try {
             Optional<ShopifyStore> storeOpt = storeRepository.findByShopDomain(shopDomain);
             if (storeOpt.isEmpty() || !storeOpt.get().isActive()) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("success", false, "error", "Shop not installed"));
+                return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "Shop not installed"));
             }
 
             Agent agent = ensureShopAdminAgent(shopDomain, tenantId);
