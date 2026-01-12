@@ -5,6 +5,7 @@ import com.example.aikef.dto.request.WebhookMessageRequest;
 import com.example.aikef.dto.websocket.ServerEvent;
 import com.example.aikef.mapper.EntityMapper;
 import com.example.aikef.model.*;
+import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.model.enums.SessionStatus;
 import com.example.aikef.repository.*;
@@ -481,7 +482,7 @@ public class ExternalPlatformService {
      */
     @Async
     public void forwardMessageToExternalPlatform(UUID sessionId, String content, SenderType senderType) {
-        forwardMessageToExternalPlatform(sessionId, content, senderType, null);
+        forwardMessageToExternalPlatform(sessionId, content, senderType, MessageType.TEXT, null);
     }
 
     /**
@@ -495,6 +496,23 @@ public class ExternalPlatformService {
      */
     @Async
     public void forwardMessageToExternalPlatform(UUID sessionId, String content, SenderType senderType,
+                                                 List<Attachment> attachments) {
+        forwardMessageToExternalPlatform(sessionId, content, senderType, MessageType.TEXT, attachments);
+    }
+
+    /**
+     * 转发消息到第三方平台（异步，支持附件和消息类型）
+     * 客服/AI发送的消息会根据客户语言进行翻译后转发
+     * 
+     * @param sessionId 会话ID
+     * @param content 消息内容
+     * @param senderType 发送者类型
+     * @param messageType 消息类型
+     * @param attachments 附件列表（可选）
+     */
+    @Async
+    public void forwardMessageToExternalPlatform(UUID sessionId, String content, SenderType senderType,
+                                                 MessageType messageType,
                                                  List<Attachment> attachments) {
         try {
             // 查找会话的外部平台映射
@@ -518,16 +536,66 @@ public class ExternalPlatformService {
             ChatSession session = sessionRepository.findById(sessionId).orElse(null);
             String customerLanguage = session != null ? session.getCustomerLanguage() : null;
             
-            if (translationService.isEnabled() && customerLanguage != null && !customerLanguage.isBlank()
+            // 处理卡片消息转换 (Fallback to text)
+            if (messageType != MessageType.TEXT && content != null) {
+                try {
+                    Object cardData = objectMapper.readValue(content, Object.class);
+                    StringBuilder sb = new StringBuilder();
+                    
+                    switch (messageType) {
+                        case CARD_PRODUCT -> {
+                            sb.append("🛍️ Product Recommendation\n");
+                            sb.append("----------------\n");
+                            if (cardData instanceof java.util.List) {
+                                java.util.List<Map<String, Object>> products = (java.util.List<Map<String, Object>>) cardData;
+                                for (int i = 0; i < products.size(); i++) {
+                                    Map<String, Object> p = products.get(i);
+                                    if (i > 0) sb.append("\n");
+                                    if (p.get("title") != null) sb.append(p.get("title")).append("\n");
+                                    if (p.get("price") != null) sb.append("Price: ").append(p.get("price")).append(" ").append(p.getOrDefault("currency", "")).append("\n");
+                                    if (p.get("url") != null) sb.append("Link: ").append(p.get("url")).append("\n");
+                                }
+                            } else {
+                                Map<String, Object> single = (Map<String, Object>) cardData;
+                                if (single.get("title") != null) sb.append(single.get("title")).append("\n");
+                                if (single.get("price") != null) sb.append("Price: ").append(single.get("price")).append(" ").append(single.getOrDefault("currency", "")).append("\n");
+                                if (single.get("url") != null) sb.append("Link: ").append(single.get("url")).append("\n");
+                            }
+                        }
+                        case CARD_GIFT -> {
+                            Map<String, Object> gift = (Map<String, Object>) cardData;
+                            sb.append("🎁 You received a Gift Card!\n");
+                            sb.append("----------------\n");
+                            if (gift.get("amount") != null) sb.append("Value: ").append(gift.get("amount")).append("\n");
+                            if (gift.get("code") != null) sb.append("Code: ").append(gift.get("code")).append("\n");
+                        }
+                        case CARD_DISCOUNT -> {
+                            Map<String, Object> discount = (Map<String, Object>) cardData;
+                            sb.append("🎟️ Special Discount For You\n");
+                            sb.append("----------------\n");
+                            if (discount.get("code") != null) sb.append("Code: ").append(discount.get("code")).append("\n");
+                            if (discount.get("value") != null) sb.append("Value: ").append(discount.get("value")).append("\n");
+                        }
+                    }
+                    
+                    if (sb.length() > 0) {
+                        translatedContent = sb.toString();
+                        // 对于卡片消息，不需要再进行机器翻译
+                        customerLanguage = null; 
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to parse card data for external platform, falling back to raw content", e);
+                }
+            } else if (translationService.isEnabled() && customerLanguage != null && !customerLanguage.isBlank()
                     && (senderType == SenderType.AGENT || senderType == SenderType.AI || senderType == SenderType.SYSTEM)) {
-                // 将客服/AI消息翻译为客户语言
+                // 将客服/AI文本消息翻译为客户语言
                 String systemLanguage = translationService.getDefaultSystemLanguage();
                 translatedContent = translationService.translate(content, systemLanguage, customerLanguage);
                 log.debug("消息已翻译为客户语言: {} -> {}", systemLanguage, customerLanguage);
             }
 
-            log.info("转发消息到第三方平台: platform={}, threadId={}, senderType={}", 
-                    platform.getName(), mapping.getExternalThreadId(), senderType);
+            log.info("转发消息到第三方平台: platform={}, threadId={}, senderType={}, type={}", 
+                    platform.getName(), mapping.getExternalThreadId(), senderType, messageType);
 
             // 构建请求体
             Map<String, Object> requestBody = new HashMap<>();
@@ -535,6 +603,7 @@ public class ExternalPlatformService {
             requestBody.put("content", translatedContent);
             requestBody.put("originalContent", content); // 保留原文
             requestBody.put("senderType", senderType.name());
+            requestBody.put("messageType", messageType != null ? messageType.name() : MessageType.TEXT.name()); // 传递消息类型
             requestBody.put("timestamp", System.currentTimeMillis());
             requestBody.put("externalUserId", mapping.getExternalUserId());
             

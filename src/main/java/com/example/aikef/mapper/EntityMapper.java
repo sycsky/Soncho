@@ -2,6 +2,7 @@ package com.example.aikef.mapper;
 
 import com.example.aikef.dto.*;
 import com.example.aikef.model.*;
+import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.repository.AgentRepository;
 import com.example.aikef.repository.SessionGroupMappingRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -408,10 +409,12 @@ public class EntityMapper {
                 : List.of();
         long timestamp = message.getCreatedAt() != null ? message.getCreatedAt().toEpochMilli() : 0L;
         String sender = message.getSenderType() != null ? message.getSenderType().name() : null;
+        String messageType = message.getMessageType() != null ? message.getMessageType().name() : MessageType.TEXT.name();
         return new SessionMessageDto(
                 message.getId(),
                 message.getText(),
                 sender,
+                messageType,
                 timestamp,
                 message.isInternal(),
                 attachments,
@@ -431,6 +434,7 @@ public class EntityMapper {
                 message.getId(),
                 message.getSession() != null ? message.getSession().getId() : null,
                 message.getSenderType(),
+                message.getMessageType() != null ? message.getMessageType() : MessageType.TEXT,
                 message.getAgent() != null ? message.getAgent().getId() : null,
                 message.getText(),
                 message.isInternal(),
@@ -508,6 +512,25 @@ public class EntityMapper {
                 customer.getAiTags() != null ? List.copyOf(customer.getAiTags()) : List.of(), // AI标签
                 roleCode,
                 roleName
+        );
+    }
+
+    public OrderCancellationPolicyDto toOrderCancellationPolicyDto(OrderCancellationPolicy policy) {
+        if (policy == null) {
+            return null;
+        }
+        return new OrderCancellationPolicyDto(
+                policy.getId(),
+                policy.getName(),
+                policy.getDescription(),
+                policy.getCancellableHours(),
+                policy.getPenaltyPercentage(),
+                policy.isEnabled(),
+                policy.isDefault(),
+                policy.getSortOrder(),
+                policy.getPolicyType(),
+                policy.getCreatedAt(),
+                policy.getUpdatedAt()
         );
     }
 }

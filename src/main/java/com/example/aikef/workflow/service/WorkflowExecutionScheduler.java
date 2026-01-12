@@ -213,6 +213,7 @@ public class WorkflowExecutionScheduler {
         // 异步执行工作流
         CompletableFuture.runAsync(() -> {
             try {
+
                 // 执行工作流
                 AiWorkflowService.WorkflowExecutionResult result = 
                         workflowService.executeForSession(sessionId, userMessage, messageId);

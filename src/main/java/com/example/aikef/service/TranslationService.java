@@ -8,9 +8,12 @@ import software.amazon.awssdk.services.translate.TranslateClient;
 import software.amazon.awssdk.services.translate.model.TranslateTextRequest;
 import software.amazon.awssdk.services.translate.model.TranslateTextResponse;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * 翻译服务
@@ -102,16 +105,18 @@ public class TranslationService {
 
     /**
      * 将文本翻译成所有配置的目标语言
+     * 使用并行调用优化性能
      *
      * @param text           要翻译的文本
      * @param sourceLanguage 源语言代码，可以为 null（自动检测）
      * @return 翻译结果 Map，key 为语言代码，value 为翻译后的文本
      */
     public Map<String, String> translateToAllTargetLanguages(String text, String sourceLanguage) {
-        Map<String, String> translations = new HashMap<>();
+        // 使用线程安全的 Map
+        Map<String, String> translations = Collections.synchronizedMap(new HashMap<>());
         
         if (!isEnabled() || text == null || text.isBlank()) {
-            return translations;
+            return new HashMap<>();
         }
 
         // 如果没有提供源语言，先检测
@@ -120,35 +125,41 @@ public class TranslationService {
             actualSourceLanguage = detectLanguage(text);
         }
 
-        // 保存原文
+        // 保存原文和源语言信息
         if (actualSourceLanguage != null) {
             translations.put("sourceLanguage", actualSourceLanguage);
         }
         translations.put("originalText", text);
 
-        // 翻译到所有目标语言
+        final String finalSourceLanguage = actualSourceLanguage;
         List<String> targetLanguages = translationConfig.getTargetLanguageCodes();
-        for (String targetLang : targetLanguages) {
-            // 跳过源语言
-//            if (actualSourceLanguage != null && isSameLanguage(actualSourceLanguage, targetLang)) {
-//                translations.put(targetLang, text);
-//                continue;
-//            }
-            
-            String translated = translate(text, actualSourceLanguage, targetLang);
-            translations.put(targetLang, translated);
-        }
+        
+        // 使用 CompletableFuture 并行执行翻译任务
+        List<CompletableFuture<Void>> futures = targetLanguages.stream()
+            .map(targetLang -> CompletableFuture.runAsync(() -> {
+                String translated = translate(text, finalSourceLanguage, targetLang);
+                translations.put(targetLang, translated);
+            }))
+            .collect(Collectors.toList());
 
         // 如果源语言不是系统默认语言，也翻译到系统默认语言
         String systemLang = translationConfig.getDefaultSystemLanguage();
-        if (systemLang != null && !translations.containsKey(systemLang) 
-                && !isSameLanguage(actualSourceLanguage, systemLang)) {
-            String translatedToSystem = translate(text, actualSourceLanguage, systemLang);
-            translations.put(systemLang, translatedToSystem);
+        if (systemLang != null && !targetLanguages.contains(systemLang)) {
+             futures.add(CompletableFuture.runAsync(() -> {
+                 // 再次检查是否同源，避免不必要的翻译调用
+                 if (!isSameLanguage(finalSourceLanguage, systemLang)) {
+                     String translatedToSystem = translate(text, finalSourceLanguage, systemLang);
+                     translations.put(systemLang, translatedToSystem);
+                 }
+             }));
         }
 
-        log.info("批量翻译完成: sourceLanguage={}, targetCount={}", actualSourceLanguage, translations.size());
-        return translations;
+        // 等待所有任务完成
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+        log.info("并行批量翻译完成: sourceLanguage={}, targetCount={}", actualSourceLanguage, translations.size() - (actualSourceLanguage != null ? 2 : 1));
+        // 返回普通 HashMap 以避免序列化问题（虽然 synchronizedMap 也是 Map，但为了保险）
+        return new HashMap<>(translations);
     }
 
     /**

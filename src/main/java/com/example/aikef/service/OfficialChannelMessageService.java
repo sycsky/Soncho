@@ -3,6 +3,7 @@ package com.example.aikef.service;
 import com.example.aikef.dto.request.WebhookMessageRequest;
 import com.example.aikef.model.ExternalPlatform;
 import com.example.aikef.model.OfficialChannelConfig;
+import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.repository.ExternalPlatformRepository;
 import com.example.aikef.repository.ExternalSessionMappingRepository;
@@ -267,6 +268,23 @@ public class OfficialChannelMessageService {
      */
     public boolean sendMessageToOfficialChannel(UUID sessionId, String content, SenderType senderType, 
                                                 java.util.List<com.example.aikef.model.Attachment> attachments) {
+        return sendMessageToOfficialChannel(sessionId, content, senderType, MessageType.TEXT, attachments);
+    }
+
+    /**
+     * 发送消息到官方渠道（通过官方SDK，支持附件和卡片消息）
+     * 当客服/AI发送消息时，转发到官方渠道
+     * 
+     * @param sessionId 会话ID
+     * @param content 消息内容
+     * @param senderType 发送者类型
+     * @param messageType 消息类型
+     * @param attachments 附件列表（可选）
+     * @return true 如果是官方渠道且发送成功，false 如果不是官方渠道
+     */
+    public boolean sendMessageToOfficialChannel(UUID sessionId, String content, SenderType senderType, 
+                                                MessageType messageType,
+                                                java.util.List<com.example.aikef.model.Attachment> attachments) {
         // 查找会话的外部平台映射（复用ExternalSessionMapping）
         var mappingOpt = mappingRepository.findBySessionId(sessionId);
         if (mappingOpt.isEmpty()) {
@@ -319,11 +337,67 @@ public class OfficialChannelMessageService {
         String externalUserId = mapping.getExternalUserId();
         String externalThreadId = mapping.getExternalThreadId();
         
+        // ==========================================
+        // 消息适配器逻辑：将卡片消息转换为文本回退
+        // ==========================================
+        String finalContent = content;
+        if (messageType != MessageType.TEXT && content != null) {
+            try {
+                Map<String, Object> cardData = objectMapper.readValue(content, Map.class);
+                StringBuilder sb = new StringBuilder();
+                
+                switch (messageType) {
+                    case CARD_PRODUCT -> {
+                        sb.append("🛍️ Product Recommendation\n");
+                        sb.append("----------------\n");
+                        
+                        // Check if it's a list (Combo Card) or single object
+                        if (cardData instanceof java.util.List) {
+                            java.util.List<Map<String, Object>> products = (java.util.List<Map<String, Object>>) cardData;
+                            for (int i = 0; i < products.size(); i++) {
+                                Map<String, Object> p = products.get(i);
+                                if (i > 0) sb.append("\n");
+                                if (p.get("title") != null) sb.append(p.get("title")).append("\n");
+                                if (p.get("price") != null) sb.append("Price: ").append(p.get("price")).append(" ").append(p.getOrDefault("currency", "")).append("\n");
+                                if (p.get("url") != null) sb.append("Link: ").append(p.get("url")).append("\n");
+                            }
+                        } else {
+                            // Single product (Legacy)
+                            Map<String, Object> single = (Map<String, Object>) cardData;
+                            if (single.get("title") != null) sb.append(single.get("title")).append("\n");
+                            if (single.get("price") != null) sb.append("Price: ").append(single.get("price")).append(" ").append(single.getOrDefault("currency", "")).append("\n");
+                            if (single.get("url") != null) sb.append("Link: ").append(single.get("url")).append("\n");
+                        }
+                    }
+                    case CARD_GIFT -> {
+                        Map<String, Object> gift = (Map<String, Object>) cardData;
+                        sb.append("🎁 You received a Gift Card!\n");
+                        sb.append("----------------\n");
+                        if (gift.get("amount") != null) sb.append("Value: ").append(gift.get("amount")).append("\n");
+                        if (gift.get("code") != null) sb.append("Code: ").append(gift.get("code")).append("\n");
+                    }
+                    case CARD_DISCOUNT -> {
+                        Map<String, Object> discount = (Map<String, Object>) cardData;
+                        sb.append("🎟️ Special Discount For You\n");
+                        sb.append("----------------\n");
+                        if (discount.get("code") != null) sb.append("Code: ").append(discount.get("code")).append("\n");
+                        if (discount.get("value") != null) sb.append("Value: ").append(discount.get("value")).append("\n");
+                    }
+                }
+                
+                if (sb.length() > 0) {
+                    finalContent = sb.toString();
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse card data for adapter, falling back to raw content", e);
+            }
+        }
+
         try {
             // 根据渠道类型调用对应的适配器发送消息（支持附件）
             switch (channelType) {
                 case WECHAT_OFFICIAL -> 
-                    wechatAdapter.sendMessage(config, externalUserId, content, attachments);
+                    wechatAdapter.sendMessage(config, externalUserId, finalContent, attachments);
                 case WECHAT_KF -> {
                     String openKfId = null;
                     if (mapping.getMetadata() != null) {
@@ -338,16 +412,16 @@ public class OfficialChannelMessageService {
                         log.error("微信客服消息发送失败: 缺少open_kfid, sessionId={}", sessionId);
                         return false;
                     }
-                    wechatAdapter.sendKfMessage(config, openKfId, externalUserId, content, attachments);
+                    wechatAdapter.sendKfMessage(config, openKfId, externalUserId, finalContent, attachments);
                 }
                 case LINE_OFFICIAL -> 
-                    lineAdapter.sendMessage(config, externalThreadId != null ? externalThreadId : externalUserId, content, attachments);
+                    lineAdapter.sendMessage(config, externalThreadId != null ? externalThreadId : externalUserId, finalContent, attachments);
                 case WHATSAPP_OFFICIAL -> 
-                    whatsappAdapter.sendMessage(config, externalUserId, content, attachments);
+                    whatsappAdapter.sendMessage(config, externalUserId, finalContent, attachments);
             }
             
-            log.info("消息已发送到官方渠道: channelType={}, externalUserId={}, attachments={}", 
-                    channelType, externalUserId, attachments != null ? attachments.size() : 0);
+            log.info("消息已发送到官方渠道: channelType={}, externalUserId={}, type={}", 
+                    channelType, externalUserId, messageType);
             return true;
             
         } catch (Exception e) {
@@ -355,6 +429,9 @@ public class OfficialChannelMessageService {
                     channelType, sessionId, e);
             return false;
         }
+    }
+
+    private void unused_placeholder() { // Helper to match the end of the replaced block cleanly if needed, but direct replacement is better.
     }
 
     private ResponseEntity<String> verifyWechatWebhookInternal(

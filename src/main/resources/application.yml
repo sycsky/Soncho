@@ -12,6 +12,9 @@ server:
   # 当ALB配置了HTTPS时，应用需要信任X-Forwarded-*头
   forward-headers-strategy: framework
 
+shopify:
+  api-version: 2025-01
+
 spring:
   application:
     name: nexus-support-ai
@@ -53,10 +56,44 @@ storage:
 # 翻译服务通用配置
 translation:
   target-languages:
+    - code: zh-CN
+      name: 中文简体
     - code: zh-TW
       name: 中文繁体
     - code: en
       name: English
     - code: ja
       name: 日本語
+    - code: de
+      name: Deutsch
+    - code: fr
+      name: Français
+    - code: es
+      name: Español
+    - code: ar
+      name: العربية
+    - code: pt
+      name: Português
+    - code: ko
+      name: 한국어
   default-system-language: zh-CN
+
+# Resend 邮件服务配置
+resend:
+  api:
+    key: ${RESEND_API_KEY:}  # 从环境变量获取 API Key
+  from:
+    email: ${RESEND_FROM_EMAIL:noreply@yourdomain.com}
+    name: ${RESEND_FROM_NAME:Customer Service}
+
+# 邮箱验证配置
+email:
+  verification:
+    code:
+      length: 6  # 验证码长度
+      expiry:
+        minutes: 10  # 验证码有效期（分钟）
+    max:
+      attempts:
+        per:
+          hour: 5  # 每小时最多发送次数

@@ -11,6 +11,7 @@ public record SessionMessageDto(
         UUID id,
         String text,
         String sender,
+        String messageType,
         long timestamp,
         @JsonProperty("isInternal") boolean internal,
         List<AttachmentDto> attachments,

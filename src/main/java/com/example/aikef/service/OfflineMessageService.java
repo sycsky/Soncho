@@ -4,6 +4,7 @@ import com.example.aikef.dto.AttachmentDto;
 import com.example.aikef.dto.ChatMessageDto;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.MessageDelivery;
+import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.repository.MessageDeliveryRepository;
 import org.hibernate.Hibernate;
@@ -110,6 +111,7 @@ public class OfflineMessageService {
                 message.getId(),
                 message.getSession().getId(),
                 message.getSenderType(),
+                message.getMessageType() != null ? message.getMessageType() : MessageType.TEXT,
                 message.getAgent() != null ? message.getAgent().getId() : null,
                 agentName,
                 message.getText(),

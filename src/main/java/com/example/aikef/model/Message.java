@@ -1,6 +1,7 @@
 package com.example.aikef.model;
 
 import com.example.aikef.model.base.AuditableEntity;
+import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.CollectionTable;
@@ -34,6 +35,10 @@ public class Message extends AuditableEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "sender_type", nullable = false)
     private SenderType senderType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "message_type", nullable = false, columnDefinition = "varchar(32) default 'TEXT'")
+    private MessageType messageType = MessageType.TEXT;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agent_id")
@@ -81,6 +86,14 @@ public class Message extends AuditableEntity {
 
     public void setSenderType(SenderType senderType) {
         this.senderType = senderType;
+    }
+
+    public MessageType getMessageType() {
+        return messageType;
+    }
+
+    public void setMessageType(MessageType messageType) {
+        this.messageType = messageType;
     }
 
     public Agent getAgent() {

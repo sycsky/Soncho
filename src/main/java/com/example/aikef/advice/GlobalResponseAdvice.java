@@ -2,6 +2,10 @@ package com.example.aikef.advice;
 
 import com.example.aikef.controller.OfficialChannelWebhookController;
 import com.example.aikef.dto.Result;
+import com.example.aikef.shopify.controller.ShopifyAuthController;
+import com.example.aikef.shopify.controller.ShopifyEmbeddedAuthController;
+import com.example.aikef.shopify.controller.ShopifyGdprController;
+import com.example.aikef.shopify.controller.ShopifyWebhookController;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
@@ -32,7 +36,7 @@ import java.util.stream.Collectors;
  * 1. Wraps successful responses in a Result object.
  * 2. Catches exceptions and formats them as a Result object.
  */
-@RestControllerAdvice(basePackages = "com.example.aikef.controller")
+@RestControllerAdvice(basePackages = {"com.example.aikef.controller", "com.example.aikef.shopify.controller"})
 public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalResponseAdvice.class);
@@ -45,8 +49,18 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
 
     @Override
     public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
+        Class<?> declaringClass = returnType.getDeclaringClass();
+        
         // Exclude Webhook controller
-        if (returnType.getDeclaringClass().equals(OfficialChannelWebhookController.class)) {
+        if (declaringClass.equals(OfficialChannelWebhookController.class)) {
+            return false;
+        }
+
+        // Exclude Shopify Webhook and Auth controllers
+        if (declaringClass.equals(ShopifyWebhookController.class) ||
+            declaringClass.equals(ShopifyGdprController.class) ||
+            declaringClass.equals(ShopifyAuthController.class) ||
+            declaringClass.equals(ShopifyEmbeddedAuthController.class)) {
             return false;
         }
 

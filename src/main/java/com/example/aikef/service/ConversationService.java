@@ -14,6 +14,7 @@ import com.example.aikef.model.Attachment;
 import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.MessageDelivery;
+import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.model.enums.SessionAction;
 import com.example.aikef.model.enums.SessionStatus;
@@ -75,7 +76,29 @@ public class ConversationService {
         message.setSession(session);
         message.setSenderType(isUserMessage ? SenderType.USER : SenderType.AGENT);
         message.setAgent(author);
-        message.setText(request.text());
+        
+        // 处理卡片消息 parsing
+        if (request.text() != null && request.text().startsWith("card#")) {
+            String[] parts = request.text().split("#", 3);
+            if (parts.length == 3) {
+                try {
+                    MessageType type = MessageType.valueOf(parts[1]);
+                    message.setMessageType(type);
+                    message.setText(parts[2]);
+                } catch (IllegalArgumentException e) {
+                    // 无效的类型，作为普通文本处理
+                    message.setMessageType(MessageType.TEXT);
+                    message.setText(request.text());
+                }
+            } else {
+                message.setMessageType(MessageType.TEXT);
+                message.setText(request.text());
+            }
+        } else {
+            message.setMessageType(MessageType.TEXT);
+            message.setText(request.text());
+        }
+
         message.setInternal(request.isInternal());
         message.setMentionAgentIds(request.mentions() == null ? List.of() : List.copyOf(request.mentions()));
         if (request.attachments() != null) {
@@ -85,8 +108,11 @@ public class ConversationService {
             message.getAttachments().addAll(attachments);
         }
         
-        // 处理翻译
-        if (translationService.isEnabled() && request.text() != null && !request.text().isBlank()) {
+        // 处理翻译 (仅翻译文本消息)
+        if (translationService.isEnabled() 
+                && message.getMessageType() == MessageType.TEXT 
+                && message.getText() != null 
+                && !message.getText().isBlank()) {
             String sourceLanguage = null;
             
             if (isUserMessage) {

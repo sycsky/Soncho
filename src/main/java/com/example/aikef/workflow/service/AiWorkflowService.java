@@ -13,6 +13,7 @@ import com.example.aikef.repository.ChatSessionRepository;
 import com.example.aikef.repository.SessionCategoryRepository;
 import com.example.aikef.repository.WorkflowCategoryBindingRepository;
 import com.example.aikef.repository.WorkflowExecutionLogRepository;
+import com.example.aikef.saas.context.TenantContext;
 import com.example.aikef.service.AgentService;
 import com.example.aikef.workflow.context.WorkflowContext;
 import com.example.aikef.workflow.converter.ReactFlowToLiteflowConverter;
@@ -29,6 +30,7 @@ import jakarta.annotation.Resource;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -477,6 +479,9 @@ public class AiWorkflowService {
         return executeWorkflowInternal(workflow, sessionId, userMessage, variables, null);
     }
 
+    @Value("${app.saas.enabled:false}")
+    private boolean saasEnabled;
+
     /**
      * 根据会话自动选择并执行工作流
      * 优先级：
@@ -492,6 +497,20 @@ public class AiWorkflowService {
     public WorkflowExecutionResult executeForSession(UUID sessionId, String userMessage, UUID messageId) {
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new EntityNotFoundException("会话不存在"));
+
+        if(saasEnabled){
+            try {
+                if (session != null && session.getTenantId() != null) {
+                    TenantContext.setTenantId(session.getTenantId());
+                    log.debug("WebSocket: 已为会话 {} 设置租户上下文: {}", sessionId, session.getTenantId());
+                } else {
+                    log.warn("WebSocket: 无法获取会话 {} 的租户信息", sessionId);
+                }
+            } catch (Exception e) {
+                log.error("WebSocket: 设置租户上下文失败: sessionId={}, error={}", sessionId, e.getMessage());
+            }
+        }
+
 
         // 优先级1: 检查是否有未完成的暂停状态（工具询问等）
         Optional<WorkflowPausedState> pausedStateOpt = pauseService.findPendingState(sessionId);

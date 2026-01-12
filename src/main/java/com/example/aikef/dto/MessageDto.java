@@ -1,5 +1,6 @@
 package com.example.aikef.dto;
 
+import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
 import java.time.Instant;
 import java.util.List;
@@ -10,6 +11,7 @@ public record MessageDto(
         UUID id,
         UUID sessionId,
         SenderType senderType,
+        MessageType messageType,
         UUID agentId,
         String text,
         boolean internal,

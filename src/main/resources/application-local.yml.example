@@ -29,3 +29,11 @@ translation:
     access-key: 你的AWS_AccessKey
     secret-key: 你的AWS_SecretKey
 
+# Resend 邮件服务配置（用于邮箱验证码）
+resend:
+  api:
+    key: re_你的Resend_API_Key  # 从 https://resend.com/api-keys 获取
+  from:
+    email: noreply@yourdomain.com  # 发件邮箱
+    name: Customer Service  # 发件人名称
+

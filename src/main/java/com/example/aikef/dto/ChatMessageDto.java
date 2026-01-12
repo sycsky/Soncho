@@ -1,5 +1,6 @@
 package com.example.aikef.dto;
 
+import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
 
 import java.time.Instant;
@@ -15,6 +16,7 @@ public record ChatMessageDto(
         UUID id,
         UUID sessionId,
         SenderType senderType,
+        MessageType messageType,
         UUID agentId,
         String agentName,
         String text,

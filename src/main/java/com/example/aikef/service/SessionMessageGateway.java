@@ -8,6 +8,7 @@ import com.example.aikef.model.Attachment;
 import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.AttachmentType;
+import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.repository.ChatSessionRepository;
 import com.example.aikef.repository.MessageRepository;
@@ -133,6 +134,21 @@ public class SessionMessageGateway {
     }
 
     /**
+     * 发送卡片消息
+     * 
+     * @param sessionId     会话ID
+     * @param cardDataJson  卡片数据JSON字符串
+     * @param cardType      卡片类型
+     * @param senderType    发送者类型
+     * @param agentId       客服ID（可选）
+     * @return 发送的消息
+     */
+    @Transactional
+    public Message sendCardMessage(UUID sessionId, String cardDataJson, MessageType cardType, SenderType senderType, UUID agentId) {
+        return sendSingleMessage(sessionId, cardDataJson, senderType, agentId, null, false, null, cardType);
+    }
+
+    /**
      * 统一发送消息方法
      * 
      * @param sessionId   会话ID
@@ -147,12 +163,41 @@ public class SessionMessageGateway {
     public Message sendMessage(UUID sessionId, String text, SenderType senderType, 
                                UUID agentId, Map<String, Object> metadata, boolean isInternal) {
         // 检查是否是结构化数据（struct# 开头）
-        if (text != null && text.startsWith("struct#")) {
-            return sendStructuredMessage(sessionId, text, senderType, agentId, metadata, isInternal);
+        if (text != null) {
+            if (text.startsWith("struct#")) {
+                return sendStructuredMessage(sessionId, text, senderType, agentId, metadata, isInternal);
+            }
+            // 检查是否是卡片消息（card#类型#JSON）
+            if (text.startsWith("card#")) {
+                return sendCardMessageFromText(sessionId, text, senderType, agentId);
+            }
         }
 
         // 普通消息处理
-        return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+        return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null, MessageType.TEXT);
+    }
+
+    /**
+     * 解析并发送卡片消息
+     * 格式: card#CARD_TYPE#JSON_DATA
+     */
+    private Message sendCardMessageFromText(UUID sessionId, String text, SenderType senderType, UUID agentId) {
+        try {
+            String[] parts = text.split("#", 3);
+            if (parts.length < 3) {
+                log.warn("卡片消息格式错误: {}", text);
+                return sendSingleMessage(sessionId, text, senderType, agentId, null, false, null, MessageType.TEXT);
+            }
+
+            String typeStr = parts[1];
+            String jsonStr = parts[2];
+            MessageType messageType = MessageType.valueOf(typeStr);
+
+            return sendCardMessage(sessionId, jsonStr, messageType, senderType, agentId);
+        } catch (Exception e) {
+            log.error("解析卡片消息失败", e);
+            return sendSingleMessage(sessionId, text, senderType, agentId, null, false, null, MessageType.TEXT);
+        }
     }
 
     /**
@@ -174,7 +219,7 @@ public class SessionMessageGateway {
 
             if (structNode == null || !structNode.isArray() || structNode.size() == 0) {
                 log.warn("结构化数据为空，发送原文本");
-                return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+                return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null, MessageType.TEXT);
             }
 
             // 转换为Map列表
@@ -188,7 +233,7 @@ public class SessionMessageGateway {
 
             if (items.isEmpty()) {
                 log.warn("结构化数据为空，发送原文本");
-                return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+                return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null, MessageType.TEXT);
             }
 
             // 限制最多取前3条
@@ -233,28 +278,28 @@ public class SessionMessageGateway {
             String finalContent = messageContent.toString().trim();
             if (finalContent.isEmpty()) {
                 log.warn("合并后的消息内容为空，发送原文本");
-                return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+                return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null, MessageType.TEXT);
             }
 
             List<Attachment> finalAttachments = attachments.isEmpty() ? null : attachments;
             log.info("发送合并的结构化消息: contentLength={}, attachmentCount={}", 
                     finalContent.length(), finalAttachments != null ? finalAttachments.size() : 0);
             
-            return sendSingleMessage(sessionId, finalContent, senderType, agentId, metadata, isInternal, finalAttachments);
+            return sendSingleMessage(sessionId, finalContent, senderType, agentId, metadata, isInternal, finalAttachments, MessageType.TEXT);
 
         } catch (Exception e) {
             log.error("解析结构化数据失败，发送原文本", e);
-            return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null);
+            return sendSingleMessage(sessionId, text, senderType, agentId, metadata, isInternal, null, MessageType.TEXT);
         }
     }
 
     /**
-     * 发送单条消息（支持附件）
+     * 发送单条消息（支持附件和消息类型）
      */
     @Transactional
     private Message sendSingleMessage(UUID sessionId, String text, SenderType senderType,
                                      UUID agentId, Map<String, Object> metadata, boolean isInternal,
-                                     List<Attachment> attachments) {
+                                     List<Attachment> attachments, MessageType messageType) {
         // 获取会话
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("会话不存在: " + sessionId));
@@ -265,6 +310,7 @@ public class SessionMessageGateway {
         message.setText(text);
         message.setSenderType(senderType);
         message.setInternal(isInternal);
+        message.setMessageType(messageType);
 
         // 设置附件
         if (attachments != null && !attachments.isEmpty()) {
@@ -285,8 +331,8 @@ public class SessionMessageGateway {
             message.setAgentMetadata(new HashMap<>(metadata));
         }
 
-        // 处理翻译
-        if (translationService.isEnabled() && text != null && !text.isBlank()) {
+        // 处理翻译 (仅针对文本消息)
+        if (translationService.isEnabled() && messageType == MessageType.TEXT && text != null && !text.isBlank()) {
             String sourceLanguage;
             if (senderType == SenderType.USER) {
                 // 用户消息：使用会话的客户语言，或自动检测
@@ -318,18 +364,19 @@ public class SessionMessageGateway {
 
         // 转发到第三方平台（AI 和客服消息需要转发，客户消息不需要）
         if (senderType == SenderType.AI || senderType == SenderType.AGENT || senderType == SenderType.SYSTEM) {
-            // 先尝试官方渠道（通过SDK，支持附件）
+            // 先尝试官方渠道（通过SDK，支持附件和卡片）
             boolean sentToOfficial = officialChannelMessageService.sendMessageToOfficialChannel(
-                    sessionId, text, senderType, attachments);
+                    sessionId, text, senderType, messageType, attachments);
             if (!sentToOfficial) {
-                // 如果不是官方渠道，使用原有的外部平台方式（支持附件）
+                // 如果不是官方渠道，使用原有的外部平台方式（支持附件和消息类型）
+                // 注意：这里会尝试转换卡片消息为文本，或者直接传递卡片类型
                 externalPlatformService.forwardMessageToExternalPlatform(
-                        sessionId, text, senderType, attachments);
+                        sessionId, text, senderType, messageType, attachments);
             }
         }
 
-        log.info("消息已发送: sessionId={}, type={}, text={}, attachments={}", 
-                sessionId, senderType, 
+        log.info("消息已发送: sessionId={}, type={}, msgType={}, text={}, attachments={}", 
+                sessionId, senderType, messageType,
                 text != null && text.length() > 50 ? text.substring(0, 50) + "..." : text,
                 attachments != null ? attachments.size() : 0);
 

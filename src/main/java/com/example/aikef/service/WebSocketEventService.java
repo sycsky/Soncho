@@ -29,9 +29,12 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.example.aikef.saas.context.TenantContext;
 
 @Service
 public class WebSocketEventService {
@@ -101,71 +104,99 @@ public class WebSocketEventService {
 
     private ServerEvent handleSendMessage(JsonNode payload, AgentPrincipal agentPrincipal, CustomerPrincipal customerPrincipal) throws JsonProcessingException {
         SendMessageRequest request = objectMapper.treeToValue(payload, SendMessageRequest.class);
-        UUID agentId = agentPrincipal != null ? agentPrincipal.getId() : null;
-        UUID customerId = customerPrincipal != null ? customerPrincipal.getId() : null;
-        UUID senderId = agentId != null ? agentId : customerId;
         UUID sessionId = UUID.fromString(request.sessionId());
 
-        if (agentId != null) {
-            readRecordService.updateReadTime(sessionId, agentId);
-        }
-        
-        // 保存消息并获取完整的消息数据
-        MessageDto messageDto = conversationService.sendMessage(request, agentId);
-        
-        // 如果有被@的客服，创建@记录
-        if (request.mentions() != null && !request.mentions().isEmpty()) {
-            // 获取消息实体
-            Message message = messageRepository.findById(messageDto.id()).orElse(null);
-            
-            // 转换 mention 字符串为 UUID 列表
-            List<UUID> mentionAgentIds = request.mentions().stream()
-                    .map(UUID::fromString)
-                    .collect(Collectors.toList());
-            
-            // 创建@记录
-            agentMentionService.createMentions(mentionAgentIds, sessionId, message);
-        }
-        
-        // 广播消息给会话的所有参与者（除了发送者）
-        broadcastMessageToSession(sessionId, messageDto, senderId);
-        
-        // 如果是客户发送的消息，检查是否需要触发 AI 工作流
-        if (customerId != null && agentId == null) {
-            triggerAiWorkflowIfNeeded(sessionId, request.text(), messageDto.id());
-        }
-        
-        // 如果是客服发送的消息，检查是否需要转发到第三方平台
-        if (agentId != null) {
-            // 构建附件列表
-            List<Attachment> attachments = null;
-            if (request.attachments() != null && !request.attachments().isEmpty()) {
-                attachments = request.attachments().stream()
-                        .map(attPayload -> {
-                            Attachment att = new Attachment();
-                            att.setType(attPayload.type());
-                            att.setUrl(attPayload.url());
-                            att.setName(attPayload.name());
-                            att.setSizeKb(attPayload.sizeKb());
-                            return att;
-                        })
-                        .collect(Collectors.toList());
-            }
+        // 根据 Session ID 设置租户上下文
+        setTenantContextFromSession(sessionId);
 
-            // 先尝试官方渠道（通过SDK，支持附件）
-            boolean sentToOfficial = officialChannelMessageService.sendMessageToOfficialChannel(
-                    sessionId, request.text(), SenderType.AGENT, attachments);
-            
-            if (!sentToOfficial) {
-                // 如果不是官方渠道，使用原有的外部平台方式（支持附件）
-                externalPlatformService.forwardMessageToExternalPlatform(
-                        sessionId, request.text(), SenderType.AGENT, attachments);
+        try {
+            UUID agentId = agentPrincipal != null ? agentPrincipal.getId() : null;
+            UUID customerId = customerPrincipal != null ? customerPrincipal.getId() : null;
+            UUID senderId = agentId != null ? agentId : customerId;
+
+            if (agentId != null) {
+                readRecordService.updateReadTime(sessionId, agentId);
             }
+            
+            // 保存消息并获取完整的消息数据
+            MessageDto messageDto = conversationService.sendMessage(request, agentId);
+
+            // 如果有被@的客服，创建@记录
+            if (request.mentions() != null && !request.mentions().isEmpty()) {
+                // 获取消息实体
+                Message message = messageRepository.findById(messageDto.id()).orElse(null);
+                
+                // 转换 mention 字符串为 UUID 列表
+                List<UUID> mentionAgentIds = request.mentions().stream()
+                        .map(UUID::fromString)
+                        .collect(Collectors.toList());
+                
+                // 创建@记录
+                agentMentionService.createMentions(mentionAgentIds, sessionId, message);
+            }
+            
+            // 广播消息给会话的所有参与者（除了发送者）
+            broadcastMessageToSession(sessionId, messageDto, senderId);
+            
+            // 如果是客户发送的消息，检查是否需要触发 AI 工作流
+            if (customerId != null && agentId == null) {
+                triggerAiWorkflowIfNeeded(sessionId, request.text(), messageDto.id());
+            }
+            
+            // 如果是客服发送的消息，检查是否需要转发到第三方平台
+            if (agentId != null) {
+                // 构建附件列表
+                List<Attachment> attachments = null;
+                if (request.attachments() != null && !request.attachments().isEmpty()) {
+                    attachments = request.attachments().stream()
+                            .map(attPayload -> {
+                                Attachment att = new Attachment();
+                                att.setType(attPayload.type());
+                                att.setUrl(attPayload.url());
+                                att.setName(attPayload.name());
+                                att.setSizeKb(attPayload.sizeKb());
+                                return att;
+                            })
+                            .collect(Collectors.toList());
+                }
+
+                // 先尝试官方渠道（通过SDK，支持附件）
+                boolean sentToOfficial = officialChannelMessageService.sendMessageToOfficialChannel(
+                        sessionId, request.text(), SenderType.AGENT,messageDto.messageType(), attachments);
+                
+                if (!sentToOfficial) {
+                    // 如果不是官方渠道，使用原有的外部平台方式（支持附件）
+                    externalPlatformService.forwardMessageToExternalPlatform(
+                            sessionId, request.text(), SenderType.AGENT, attachments);
+                }
+            }
+            
+            return new ServerEvent("newMessage", Map.of(
+                    "sessionId", messageDto.sessionId(),
+                    "message", messageDto));
+        } finally {
+            // 清理租户上下文
+            TenantContext.clear();
         }
-        
-        return new ServerEvent("newMessage", Map.of(
-                "sessionId", messageDto.sessionId(),
-                "message", messageDto));
+    }
+
+    @Value("${app.saas.enabled:false}")
+    private boolean saasEnabled;
+
+    private void setTenantContextFromSession(UUID sessionId) {
+
+        if(!saasEnabled) {return;}
+        try {
+            ChatSession session = conversationService.getChatSession(sessionId);
+            if (session != null && session.getTenantId() != null) {
+                TenantContext.setTenantId(session.getTenantId());
+                log.debug("WebSocket: 已为会话 {} 设置租户上下文: {}", sessionId, session.getTenantId());
+            } else {
+                log.warn("WebSocket: 无法获取会话 {} 的租户信息", sessionId);
+            }
+        } catch (Exception e) {
+            log.error("WebSocket: 设置租户上下文失败: sessionId={}, error={}", sessionId, e.getMessage());
+        }
     }
 
 
