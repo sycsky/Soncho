@@ -13,6 +13,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -194,7 +196,7 @@ public class SupplyChainTools {
     public record SupplierDto(String id, String name, String email) {}
     public record OrderItemRequest(String supplierId, String productName, String shopifyVariantId, int quantity, BigDecimal unitPrice) {}
     public record ItemUpdate(String itemId, int quantity) {}
-    public record PurchaseOrderDto(String id, String status, BigDecimal totalAmount, String supplierName) {}
+    public record PurchaseOrderDto(String id, String status, BigDecimal totalAmount, String supplierName, String createdAt) {}
     
     public record PurchaseOrderDetailDto(
         String id, 
@@ -216,6 +218,18 @@ public class SupplyChainTools {
     ) {}
 
     private PurchaseOrderDto toDto(PurchaseOrder po) {
-        return new PurchaseOrderDto(po.getId(), po.getStatus(), po.getTotalAmount(), po.getSupplier().getName());
+        String formattedDate = "";
+        if (po.getCreatedAt() != null) {
+            formattedDate = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                    .withZone(ZoneId.systemDefault())
+                    .format(po.getCreatedAt());
+        }
+        return new PurchaseOrderDto(
+                po.getId(), 
+                po.getStatus(), 
+                po.getTotalAmount(), 
+                po.getSupplier().getName(),
+                formattedDate
+        );
     }
 }
