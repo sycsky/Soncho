@@ -3,20 +3,26 @@ package com.example.aikef.tool.internal.impl;
 import com.example.aikef.model.Customer;
 import com.example.aikef.model.OrderCancellationPolicy;
 import com.example.aikef.repository.CustomerRepository;
+import com.example.aikef.saas.context.TenantContext;
 import com.example.aikef.service.EmailVerificationService;
 import com.example.aikef.service.OrderCancellationPolicyService;
 import com.example.aikef.shopify.service.ShopifyGraphQLService;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
@@ -31,6 +37,11 @@ public class ShopifyCustomerServiceTools {
     private final EmailVerificationService emailVerificationService;
     private final CustomerRepository customerRepository;
     private final OrderCancellationPolicyService cancellationPolicyService;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+    
+    private static final String PRODUCTS_CACHE_KEY = "shopify:all_products:";
+    private static final Duration CACHE_TTL = Duration.ofMinutes(10); // 10分钟缓存
 
     @Tool("Search for orders by email, order number (e.g. '#1001'), or customer name")
     public String searchOrders(@P("Query string (email, order name, or syntax like 'financial_status:paid')") String query) {
@@ -122,7 +133,149 @@ public class ShopifyCustomerServiceTools {
     @Tool("Search for products by keyword")
     public String searchProducts(@P("Search keyword (title, sku, etc.)") String query) {
         // Delegate to the pagination method with defaults for the AI tool
+
         return searchProductsWithPagination(query, 5, null);
+    }
+    
+    @Tool("Get all products from the store (cached for 10 minutes)")
+    public String getAllProducts() {
+        try {
+            // 1. 构建缓存键（包含租户信息以实现多租户隔离）
+            String tenantId = getCurrentTenantId();
+            String cacheKey = PRODUCTS_CACHE_KEY + tenantId;
+            
+            // 2. 尝试从缓存获取
+            String cachedData = redisTemplate.opsForValue().get(cacheKey);
+            if (cachedData != null && !cachedData.isEmpty()) {
+                log.debug("从缓存返回所有商品数据: tenantId={}", tenantId);
+                return cachedData;
+            }
+            
+            // 3. 缓存未命中，从 Shopify API 获取所有商品
+            log.info("缓存未命中，从 Shopify API 获取所有商品: tenantId={}", tenantId);
+            List<JsonNode> allProducts = new ArrayList<>();
+            String cursor = null;
+            int pageSize = 50; // 每页50个商品
+            int maxPages = 20; // 最多获取20页（1000个商品）
+            int pageCount = 0;
+            
+            do {
+                String gql = """
+                    query ($first: Int!, $after: String) {
+                      products(first: $first, after: $after, sortKey: TITLE) {
+                        pageInfo {
+                          hasNextPage
+                          endCursor
+                        }
+                        edges {
+                          cursor
+                          node {
+                            id
+                            title
+                            handle
+                            description
+                            status
+                            totalInventory
+                            createdAt
+                            updatedAt
+                            images(first: 1) {
+                              edges {
+                                node {
+                                  url
+                                }
+                              }
+                            }
+                            priceRange {
+                              minVariantPrice {
+                                amount
+                                currencyCode
+                              }
+                              maxVariantPrice {
+                                amount
+                                currencyCode
+                              }
+                            }
+                            variants(first: 5) {
+                              edges {
+                                node {
+                                  id
+                                  title
+                                  price
+                                  compareAtPrice
+                                  sku
+                                  inventoryQuantity
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    """;
+                
+                Map<String, Object> variables = new HashMap<>();
+                variables.put("first", pageSize);
+                if (cursor != null) {
+                    variables.put("after", cursor);
+                }
+                
+                JsonNode data = graphQLService.execute(gql, variables);
+                JsonNode productsNode = data.get("products");
+                JsonNode edges = productsNode.get("edges");
+                
+                // 收集当前页的商品
+                if (edges != null && edges.isArray()) {
+                    for (JsonNode edge : edges) {
+                        allProducts.add(edge);
+                    }
+                }
+                
+                // 检查是否有下一页
+                JsonNode pageInfo = productsNode.get("pageInfo");
+                boolean hasNextPage = pageInfo.get("hasNextPage").asBoolean();
+                
+                if (hasNextPage && pageCount < maxPages - 1) {
+                    cursor = pageInfo.get("endCursor").asText();
+                    pageCount++;
+                } else {
+                    cursor = null; // 退出循环
+                }
+                
+            } while (cursor != null);
+            
+            // 4. 构建响应对象
+            Map<String, Object> response = new HashMap<>();
+            response.put("edges", allProducts);
+            response.put("totalCount", allProducts.size());
+            response.put("cached", false);
+            response.put("cacheExpiresIn", CACHE_TTL.getSeconds() + " seconds");
+            
+            String resultJson = objectMapper.writeValueAsString(response);
+            
+            // 5. 存入缓存
+            redisTemplate.opsForValue().set(cacheKey, resultJson, CACHE_TTL);
+            log.info("已缓存所有商品数据: tenantId={}, 商品数量={}, 过期时间={}分钟", 
+                    tenantId, allProducts.size(), CACHE_TTL.toMinutes());
+            
+            return resultJson;
+            
+        } catch (Exception e) {
+            log.error("获取所有商品失败", e);
+            return "{\"error\": \"Failed to get all products: " + e.getMessage() + "\"}";
+        }
+    }
+    
+    /**
+     * 获取当前租户ID
+     * 用于缓存键的多租户隔离
+     */
+    private String getCurrentTenantId() {
+        String tenantId = TenantContext.getTenantId();
+        if (tenantId == null || tenantId.isEmpty()) {
+            log.warn("TenantContext中没有租户ID，使用默认值");
+            return "default";
+        }
+        return tenantId;
     }
 
     /**
