@@ -4,5 +4,6 @@ public enum MessageType {
     TEXT,
     CARD_PRODUCT,
     CARD_GIFT,
-    CARD_DISCOUNT
+    CARD_DISCOUNT,
+    CARD_ORDER
 }

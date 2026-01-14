@@ -76,6 +76,9 @@ public class AiWorkflowService {
     @Resource
     private com.example.aikef.repository.AgentSessionRepository agentSessionRepository;
 
+    @Resource
+    private  com.example.aikef.service.ChatSessionService chatSessionService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // ==================== CRUD 操作 ====================
@@ -989,7 +992,13 @@ public class AiWorkflowService {
             context.setSessionId(sessionId);
             context.setQuery(userMessage);
             context.setMessageId(messageId);
-            
+            com.example.aikef.model.ChatSession session = chatSessionService.getSession(sessionId);
+
+            context.setCustomerId(session.getCustomer().getId());
+            context.getCustomerInfo().put("id", session.getCustomer().getId());
+            context.getCustomerInfo().put("name", session.getCustomer().getName());
+            context.getCustomerInfo().put("email", session.getCustomer().getEmail());
+
             // 注入 AgentSession（如果存在）
             if (agentSession != null) {
                 context.setAgentSession(agentSession);

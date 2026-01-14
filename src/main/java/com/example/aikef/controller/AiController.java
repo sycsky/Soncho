@@ -1,5 +1,8 @@
 package com.example.aikef.controller;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import com.example.aikef.dto.request.AiRewriteRequest;
@@ -8,12 +11,14 @@ import com.example.aikef.dto.request.AiSuggestTagsRequest;
 import com.example.aikef.dto.response.AiRewriteResponse;
 import com.example.aikef.dto.response.AiSuggestTagsResponse;
 import com.example.aikef.dto.response.AiSummaryResponse;
+import com.example.aikef.model.enums.SubscriptionPlan;
+import com.example.aikef.security.AgentPrincipal;
 import com.example.aikef.service.AiKnowledgeService;
+import com.example.aikef.service.SubscriptionService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/ai")
@@ -21,24 +26,42 @@ import java.util.UUID;
 public class AiController {
 
     private final AiKnowledgeService aiKnowledgeService;
+    private final SubscriptionService subscriptionService;
 
-    public AiController(AiKnowledgeService aiKnowledgeService) {
+    public AiController(AiKnowledgeService aiKnowledgeService, SubscriptionService subscriptionService) {
         this.aiKnowledgeService = aiKnowledgeService;
+        this.subscriptionService = subscriptionService;
     }
 
     @PostMapping("/summary")
-    public AiSummaryResponse summary(@Valid @RequestBody AiSummaryRequest request) {
+    public AiSummaryResponse summary(@Valid @RequestBody AiSummaryRequest request, Authentication authentication) {
+        checkFeature(authentication, SubscriptionPlan::isSupportSmartSummary, "Smart Summary");
         return aiKnowledgeService.summarize(request.sessionId());
     }
 
     @PostMapping("/rewrite")
-    public AiRewriteResponse rewrite(@Valid @RequestBody AiRewriteRequest request) {
-        return aiKnowledgeService.rewrite(request.text());
+    public AiRewriteResponse rewrite(@Valid @RequestBody AiRewriteRequest request, Authentication authentication) {
+        checkFeature(authentication, SubscriptionPlan::isSupportMagicRewrite, "Magic Rewrite");
+        return aiKnowledgeService.rewrite(request.text(), request.tone(), request.sessionId());
     }
 
     @PostMapping("/suggest-tags")
-    public AiSuggestTagsResponse suggestTags(@Valid @RequestBody AiSuggestTagsRequest request) {
-        return aiKnowledgeService.suggestTags(request.sessionId());
+    public AiSuggestTagsResponse suggestTags(@Valid @RequestBody AiSuggestTagsRequest request, Authentication authentication) throws ExecutionException, InterruptedException {
+        checkFeature(authentication, SubscriptionPlan::isSupportAiTags, "AI Tags");
+        return aiKnowledgeService.suggestTags(request.sessionId()).get();
+    }
+
+    private void checkFeature(Authentication authentication, java.util.function.Predicate<SubscriptionPlan> featureCheck, String featureName) {
+        if (authentication != null && authentication.getPrincipal() instanceof AgentPrincipal) {
+            String tenantId = ((AgentPrincipal) authentication.getPrincipal()).getTenantId();
+            SubscriptionPlan plan = subscriptionService.getPlan(tenantId);
+            if (!featureCheck.test(plan)) {
+                throw new IllegalStateException("Feature '" + featureName + "' is not available in your current plan (" + plan.getDisplayName() + "). Please upgrade.");
+            }
+        } else {
+            // Should be handled by security filter, but safe guard
+            throw new IllegalStateException("Authentication required");
+        }
     }
 
 

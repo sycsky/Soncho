@@ -56,6 +56,7 @@ public class SessionMessageGateway {
     private final ExternalPlatformService externalPlatformService;
     private final OfficialChannelMessageService officialChannelMessageService;
     private final TranslationService translationService;
+    private final SubscriptionService subscriptionService;
 
     /**
      * 发送 AI 消息
@@ -66,6 +67,9 @@ public class SessionMessageGateway {
      */
     @Transactional
     public Message sendAiMessage(UUID sessionId, String text) {
+        if (!checkAiLimit(sessionId)) {
+            return sendMessage(sessionId, "AI Usage Limit Reached. Please upgrade your plan.", SenderType.SYSTEM, null, null, true);
+        }
         return sendMessage(sessionId, text, SenderType.AI, null, null, false);
     }
 
@@ -79,7 +83,16 @@ public class SessionMessageGateway {
      */
     @Transactional
     public Message sendAiMessage(UUID sessionId, String text, Map<String, Object> metadata) {
+        if (!checkAiLimit(sessionId)) {
+            return sendMessage(sessionId, "AI Usage Limit Reached. Please upgrade your plan.", SenderType.SYSTEM, null, null, true);
+        }
         return sendMessage(sessionId, text, SenderType.AI, null, metadata, false);
+    }
+    
+    private boolean checkAiLimit(UUID sessionId) {
+        return chatSessionRepository.findById(sessionId)
+                .map(s -> subscriptionService.checkAiLimit(s.getTenantId()))
+                .orElse(true); // If session not found, let it fail downstream or allow? Default allow to avoid blocking if error.
     }
 
     /**

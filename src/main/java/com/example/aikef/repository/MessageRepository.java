@@ -92,4 +92,12 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
      */
     List<Message> findBySession_IdAndInternalFalseAndCreatedAtLessThanEqualOrderByCreatedAtDesc(
             UUID sessionId, java.time.Instant maxCreatedAt, Pageable pageable);
+
+    long countByCreatedAtBetweenAndTenantId(java.time.Instant start, java.time.Instant end, String tenantId);
+
+    long countByCreatedAtBetweenAndTenantIdAndSenderType(
+            java.time.Instant start, java.time.Instant end, String tenantId, SenderType senderType);
+            
+    long countByCreatedAtBetweenAndTenantIdAndMessageType(
+            java.time.Instant start, java.time.Instant end, String tenantId, com.example.aikef.model.enums.MessageType messageType);
 }

@@ -76,6 +76,9 @@ public class ExternalPlatformService {
             boolean newSession = mapping.getCreatedAt().equals(mapping.getUpdatedAt());
             ChatSession session = mapping.getSession();
 
+            // 检查并重新打开已解决的会话
+            chatSessionService.checkAndReopenResolvedSession(session.getId());
+
             // 3. 处理客户语言
             String customerLanguage = handleCustomerLanguage(session, request);
 

@@ -73,7 +73,7 @@ public class ShopifyAuthService {
     @Value("${shopify.api-secret:}")
     private String apiSecret;
 
-    @Value("${shopify.scopes:read_orders,read_customers,read_products,read_discounts,write_price_rules,write_gift_cards,write_orders}")
+    @Value("${shopify.scopes:read_orders,read_customers,read_products,read_discounts,write_price_rules,write_gift_cards,write_orders,write_order_edits}")
     private String scopes;
 
     @Value("${shopify.app-url:http://localhost:8080}")

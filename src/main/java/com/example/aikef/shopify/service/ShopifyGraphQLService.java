@@ -33,7 +33,7 @@ public class ShopifyGraphQLService {
      * @param variables 变量
      * @return 响应数据的 data 节点
      */
-    @Transactional(readOnly = true)
+   
     public JsonNode execute(String query, Map<String, Object> variables) {
         ShopifyStore store = getCurrentStore();
         
@@ -61,7 +61,7 @@ public class ShopifyGraphQLService {
             JsonNode root = objectMapper.readTree(response.getBody());
             
             if (root.has("errors")) {
-                throw new RuntimeException("Shopify GraphQL Errors: " + root.get("errors").toString());
+                throw new RuntimeException("Shopify Errors: " + root.get("errors").toString());
             }
 
             return root.get("data");
@@ -69,6 +69,30 @@ public class ShopifyGraphQLService {
         } catch (Exception e) {
             log.error("Failed to execute Shopify GraphQL", e);
             throw new RuntimeException("Shopify Query Failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Use REST API to get policies as they are not easily accessible via Admin GraphQL API
+     */
+    public JsonNode getPolicies() {
+        ShopifyStore store = getCurrentStore();
+        String url = String.format("https://%s/admin/api/%s/policies.json", store.getShopDomain(), apiVersion);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Shopify-Access-Token", store.getAccessToken());
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                throw new RuntimeException("Shopify API Error: " + response.getStatusCode());
+            }
+            JsonNode root = objectMapper.readTree(response.getBody());
+            return root.get("policies");
+        } catch (Exception e) {
+            log.error("Failed to get policies via REST", e);
+            throw new RuntimeException("Get Policies Failed: " + e.getMessage());
         }
     }
 

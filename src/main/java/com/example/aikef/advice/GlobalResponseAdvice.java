@@ -178,6 +178,6 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleAllUncaughtException(Exception ex) {
         logger.error("An unexpected error occurred", ex);
-        return Result.error(HttpStatus.INTERNAL_SERVER_ERROR.value(), "An internal server error occurred");
+        return Result.error(HttpStatus.INTERNAL_SERVER_ERROR.value(), ex.getMessage());
     }
 }

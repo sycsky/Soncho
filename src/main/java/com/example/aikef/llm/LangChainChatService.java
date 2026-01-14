@@ -305,7 +305,7 @@ public class LangChainChatService {
             UUID modelId,
             String systemPrompt,
             String userMessage,
-            JsonObjectSchema jsonSchema,
+            JsonSchemaElement jsonSchema,
             String schemaName,
             Double temperature) {
 
@@ -390,7 +390,7 @@ public class LangChainChatService {
     public StructuredOutputResponse chatWithStructuredOutputMessages(
             UUID modelId,
             List<ChatMessage> messages,
-            JsonObjectSchema jsonSchema,
+            JsonSchemaElement jsonSchema,
             String schemaName,
             Double temperature) {
 

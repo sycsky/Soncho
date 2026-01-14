@@ -4,6 +4,8 @@ import com.example.aikef.dto.AgentDto;
 import com.example.aikef.dto.request.CreateAgentRequest;
 import com.example.aikef.dto.request.CreateTenantAdminRequest;
 import com.example.aikef.dto.request.UpdateAgentRequest;
+import com.example.aikef.dto.billing.SubscriptionDto;
+import com.example.aikef.model.enums.SubscriptionPlan;
 import com.example.aikef.mapper.EntityMapper;
 import com.example.aikef.model.Agent;
 import com.example.aikef.model.Role;
@@ -33,17 +35,20 @@ public class AgentService {
     private final EntityMapper entityMapper;
     private final PasswordEncoder passwordEncoder;
     private final CurrentAgentProvider currentAgentProvider;
+    private final SubscriptionService subscriptionService;
 
     public AgentService(AgentRepository agentRepository,
                         RoleRepository roleRepository,
                         EntityMapper entityMapper,
                         PasswordEncoder passwordEncoder,
-                        CurrentAgentProvider currentAgentProvider) {
+                        CurrentAgentProvider currentAgentProvider,
+                        SubscriptionService subscriptionService) {
         this.agentRepository = agentRepository;
         this.roleRepository = roleRepository;
         this.entityMapper = entityMapper;
         this.passwordEncoder = passwordEncoder;
         this.currentAgentProvider = currentAgentProvider;
+        this.subscriptionService = subscriptionService;
     }
 
     public Page<AgentDto> listAgents(String name, String role, Pageable pageable) {
@@ -75,6 +80,22 @@ public class AgentService {
         // 校验邮箱唯一性
         if (agentRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new IllegalArgumentException("该邮箱已被使用");
+        }
+        
+        // Check Seat Limit
+        String tenantId = null;
+        if (request instanceof CreateTenantAdminRequest tenantAdminRequest) {
+            tenantId = tenantAdminRequest.getTenantId();
+        } else {
+            tenantId = currentAgentProvider.currentAgent().map(AgentPrincipal::getTenantId).orElse(null);
+        }
+
+        if (tenantId != null) {
+            SubscriptionDto sub = subscriptionService.getCurrentSubscription(tenantId);
+            long currentCount = agentRepository.countByTenantId(tenantId);
+            if (sub.getPlan() != SubscriptionPlan.ENTERPRISE && currentCount >= sub.getPlan().getSeatLimit()) {
+                throw new IllegalStateException("Seat limit reached (" + currentCount + "/" + sub.getPlan().getSeatLimit() + "). Please upgrade your plan.");
+            }
         }
         
         Role role = roleRepository.findById(request.getRoleId())

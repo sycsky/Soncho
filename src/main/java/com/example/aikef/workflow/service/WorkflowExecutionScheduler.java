@@ -226,6 +226,7 @@ public class WorkflowExecutionScheduler {
                 } else if (!result.success()) {
                     log.warn("工作流执行失败: sessionId={}, error={}", 
                             sessionId, result.errorMessage());
+                    messageGateway.sendAiMessage(sessionId, "The system seems to be experiencing some issues. You can try again later");
                 }
                 
             } catch (Exception e) {

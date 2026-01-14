@@ -20,4 +20,8 @@ public interface ChatSessionRepository extends JpaRepository<ChatSession, UUID> 
     List<ChatSession> findByPrimaryAgentIdOrSupportAgentIdsContaining(@Param("agentId") UUID agentId);
 
     ChatSession findFirstByCustomer_IdOrderByLastActiveAtDesc(UUID customerId);
+
+    long countByCreatedAtBetweenAndTenantId(java.time.Instant start, java.time.Instant end, String tenantId);
+
+    List<ChatSession> findByCreatedAtBetweenAndTenantId(java.time.Instant start, java.time.Instant end, String tenantId);
 }

@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.*;
@@ -49,6 +50,7 @@ public class AiToolService {
     private final RestTemplate restTemplate;
     private final com.example.aikef.service.ChatSessionService chatSessionService;
     private final com.example.aikef.tool.internal.InternalToolRegistry internalToolRegistry;
+
 
     // ==================== 工具 CRUD ====================
 
@@ -444,6 +446,7 @@ public class AiToolService {
                         ctx.setCustomerId(session.getCustomer().getId());
                         ctx.getCustomerInfo().put("id", session.getCustomer().getId());
                         ctx.getCustomerInfo().put("name", session.getCustomer().getName());
+                        ctx.getCustomerInfo().put("email", session.getCustomer().getEmail());
                     }
                     if (session.getMetadata() != null) {
                         try {

@@ -25,12 +25,12 @@ spring:
   # JPA 配置
   jpa:
     show-sql: false
-    database-platform: org.hibernate.dialect.MySQLDialect
+    database-platform: com.example.aikef.config.CustomMySQLDialect
     hibernate:
       ddl-auto: update
     properties:
       hibernate:
-        format_sql: true
+        # format_sql: true
         type:
           preferred_uuid_jdbc_type: CHAR
     open-in-view: false
@@ -41,8 +41,8 @@ logging:
     root: INFO
     com.example.aikef: DEBUG
     com.yomahub.liteflow: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    # org.hibernate.SQL: DEBUG
+    # org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
 # AI 配置
 ai:

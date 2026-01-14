@@ -154,7 +154,7 @@ public class OrderCancellationPolicyService {
         if (enabledPolicies.isEmpty()) {
             return new CancellationCheckResult(
                 false,
-                "没有可用的取消政策 / No cancellation policy available",
+                "No cancellation policy available",
                 null,
                 null
             );
@@ -174,8 +174,7 @@ public class OrderCancellationPolicyService {
             if (policy.getPolicyType() == OrderCancellationPolicy.PolicyType.FREE) {
                 return new CancellationCheckResult(
                         true,
-                        String.format("根据政策「%s」，可以免费取消 / Can cancel for free according to policy「%s」",
-                                policy.getName(), policy.getName()),
+                        String.format("Can cancel for free according to policy '%s'", policy.getName()),
                         BigDecimal.ZERO,
                         policy
                 );
@@ -193,7 +192,7 @@ public class OrderCancellationPolicyService {
             // 没有超过任何政策的时间限制，完全免费取消
             return new CancellationCheckResult(
                 true,
-                "订单在所有政策保护期内，可以免费取消 / Order is within all policy protection periods, can cancel for free",
+                "Order is within all policy protection periods, can cancel for free",
                 BigDecimal.ZERO,
                 null
             );
@@ -203,8 +202,7 @@ public class OrderCancellationPolicyService {
             // 不可取消
             return new CancellationCheckResult(
                 false,
-                String.format("根据政策「%s」，该订单不可取消 / Order cannot be cancelled according to policy「%s」",
-                    penaltyPolicy.getName(), penaltyPolicy.getName()),
+                String.format("Order cannot be cancelled according to policy '%s'", penaltyPolicy.getName()),
                 null,
                 penaltyPolicy
             );
@@ -216,8 +214,8 @@ public class OrderCancellationPolicyService {
         
         return new CancellationCheckResult(
             true,
-            String.format("根据政策「%s」，可以取消，需支付%.1f%%罚金 / Can cancel with %.1f%% penalty according to policy「%s」",
-                penaltyPolicy.getName(), penaltyPercentage, penaltyPercentage, penaltyPolicy.getName()),
+            String.format("Can cancel with %.1f%% penalty according to policy '%s'",
+                penaltyPercentage, penaltyPolicy.getName()),
             penaltyPercentage,
             penaltyPolicy
         );
@@ -233,7 +231,7 @@ public class OrderCancellationPolicyService {
         if (policy.getPolicyType() == OrderCancellationPolicy.PolicyType.NO_CANCELLATION) {
             return new CancellationCheckResult(
                 false, 
-                "根据取消政策，该订单不可取消 / Order cannot be cancelled according to the cancellation policy",
+                "Order cannot be cancelled according to the cancellation policy",
                 null,
                 policy
             );
@@ -247,10 +245,7 @@ public class OrderCancellationPolicyService {
             if (now.isAfter(cancellableUntil)) {
                 return new CancellationCheckResult(
                     false,
-                    String.format(
-                        "订单创建超过%d小时，无法取消 / Order cannot be cancelled after %d hours",
-                        policy.getCancellableHours(), policy.getCancellableHours()
-                    ),
+                    String.format("Order cannot be cancelled after %d hours", policy.getCancellableHours()),
                     null,
                     policy
                 );
@@ -264,9 +259,8 @@ public class OrderCancellationPolicyService {
         return new CancellationCheckResult(
             true,
             policy.getPolicyType() == OrderCancellationPolicy.PolicyType.FREE ?
-                "可以免费取消 / Can cancel for free" :
-                String.format("可以取消，需支付%.1f%%罚金 / Can cancel with %.1f%% penalty", 
-                    penaltyPercentage, penaltyPercentage),
+                "Can cancel for free" :
+                String.format("Can cancel with %.1f%% penalty", penaltyPercentage),
             penaltyPercentage,
             policy
         );

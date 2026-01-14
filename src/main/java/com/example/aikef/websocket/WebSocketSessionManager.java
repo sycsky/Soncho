@@ -1,6 +1,7 @@
 package com.example.aikef.websocket;
 
 import com.example.aikef.model.ChatSession;
+import com.example.aikef.service.AiKnowledgeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +31,8 @@ public class WebSocketSessionManager {
     // 客户ID -> WebSocket会话列表
     private final Map<UUID, Set<WebSocketSession>> customerSessions = new ConcurrentHashMap<>();
 
+    @Autowired
+    private  AiKnowledgeService aiKnowledgeService;
     /**
      * 注册客服连接
      */
@@ -141,6 +144,10 @@ public class WebSocketSessionManager {
         // 发送给客户（如果不是发送者）
         if (customerId != null && !customerId.equals(senderId)) {
             sendToCustomer(customerId, message);
+        }
+
+        if(customerId.equals(senderId)) {
+            aiKnowledgeService.suggestTags(chatSessionId.toString());
         }
     }
 

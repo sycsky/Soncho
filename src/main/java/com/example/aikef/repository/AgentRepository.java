@@ -14,6 +14,8 @@ import java.util.UUID;
 public interface AgentRepository extends JpaRepository<Agent, UUID>, JpaSpecificationExecutor<Agent> {
 
     Optional<Agent> findByEmail(String email);
+
+    long countByTenantId(String tenantId);
     
     Optional<Agent> findByEmailIgnoreCase(String email);
     

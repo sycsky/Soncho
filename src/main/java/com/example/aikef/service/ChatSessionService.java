@@ -842,4 +842,41 @@ public class ChatSessionService {
         log.info("转移会话: sessionId={}, fromAgentId={}, toAgentId={}, keepAsSupport={}", 
                 sessionId, oldPrimaryAgentId, newPrimaryAgentId, keepAsSupport);
     }
+
+    /**
+     * 检查会话是否已解决，如果是，则重新打开并移动到 Open 分组
+     */
+    @Transactional
+    public void checkAndReopenResolvedSession(UUID sessionId) {
+        ChatSession session = chatSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new EntityNotFoundException("会话不存在"));
+
+        if (session.getStatus() == SessionStatus.RESOLVED) {
+            log.info("重新打开已解决的会话: {}", sessionId);
+            
+            // 1. 更新状态为 AI_HANDLING (作为默认的 Open 状态)
+            session.setStatus(SessionStatus.AI_HANDLING);
+            session.setLastActiveAt(Instant.now());
+            chatSessionRepository.save(session);
+
+            // 2. 移动到 Open 分组
+            // 为主责客服移动
+            if (session.getPrimaryAgent() != null) {
+                UUID categoryId = session.getCategory() != null ? session.getCategory().getId() : null;
+                assignSessionToAgentGroup(session, session.getPrimaryAgent(), categoryId);
+            }
+            
+            // 为所有支持客服移动
+            if (session.getSupportAgentIds() != null) {
+                for (UUID supportAgentId : session.getSupportAgentIds()) {
+                    agentRepository.findById(supportAgentId).ifPresent(agent -> {
+                        UUID categoryId = session.getCategory() != null ? session.getCategory().getId() : null;
+                        assignSessionToAgentGroup(session, agent, categoryId);
+                    });
+                }
+            }
+            
+            log.info("会话 {} 已重新打开并移动到默认分组", sessionId);
+        }
+    }
 }

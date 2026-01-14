@@ -69,6 +69,10 @@ public class WebSocketEventService {
     private OfficialChannelMessageService officialChannelMessageService;
 
     @Autowired
+    @Lazy
+    private ChatSessionService chatSessionService;
+
+    @Autowired
     public WebSocketEventService(ObjectMapper objectMapper,
                                  @Lazy ConversationService conversationService,
                                  @Lazy WebSocketSessionManager sessionManager,
@@ -116,6 +120,11 @@ public class WebSocketEventService {
 
             if (agentId != null) {
                 readRecordService.updateReadTime(sessionId, agentId);
+            }
+            
+            // 如果是客户发送的消息，检查并重新打开会话
+            if (customerId != null && agentId == null) {
+                chatSessionService.checkAndReopenResolvedSession(sessionId);
             }
             
             // 保存消息并获取完整的消息数据
@@ -216,7 +225,7 @@ public class WebSocketEventService {
             }
 
             // 只有 AI_HANDLING 状态才执行工作流
-            if (session.getStatus() != SessionStatus.AI_HANDLING) {
+            if (session.getStatus() == SessionStatus.HUMAN_HANDLING) {
                 log.debug("会话状态不是 AI_HANDLING，跳过工作流: sessionId={}, status={}", 
                         sessionId, session.getStatus());
                 return;

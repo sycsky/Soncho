@@ -437,6 +437,7 @@ public class LlmNode extends BaseWorkflowNode {
 
 
                 ctx.setVariable(result.getToolName()+"_ex", 1);
+
                 AiTool tool = aiToolService.getTool(toolState.getToolId()).orElse(null);
                 String toolName = result.getToolName();
                 String resultDescription = tool.getResultDescription();
@@ -457,13 +458,14 @@ public class LlmNode extends BaseWorkflowNode {
                         }
                     }
                     try {
-                        JSONObject rp = new JSONObject(resultBody);
-                        finalReply += String.format("工具 %s 执行结果: %s\n", toolName, new JSONObject(resultBody).toJSONString(2));
+
+                        finalReply += new JSONObject(resultBody).toJSONString(2);
                     }catch (Exception e){
-                        finalReply += String.format("工具 %s 执行结果: %s\n", toolName, resultBody);
+                        finalReply += resultBody;
+
                     }
 
-                    finalReply += "==================================================\n";
+                    finalReply += "\n\n";
                 }else {
                     finalReply += String.format("执行结果: %s\n", resultBody);
                 }
