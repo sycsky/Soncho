@@ -40,7 +40,7 @@ public class SupplyChainTools {
     }
 
     @Tool("Create purchase orders (supports multiple suppliers)")
-    public List<String> createPurchaseOrder(
+    public String createPurchaseOrder(
             @P(value = "Initiator Customer ID", required = true) String initiatorId,
             @P(value = "List of items to purchase (must include supplierId)", required = true) List<OrderItemRequest> items
     ) {
@@ -85,8 +85,13 @@ public class SupplyChainTools {
                 // Optionally throw or continue. Here we continue to try other suppliers.
             }
         }
-        
-        return createdOrderIds;
+
+        String ids ="";
+        for (String createdOrderId : createdOrderIds) {
+            ids += createdOrderId +",";
+        }
+
+        return "进货单创建成功,这是订单编号:"+ids.substring(0,ids.length()-1);
     }
 
     @Tool("Get my purchase orders (as initiator) with optional status filter")
