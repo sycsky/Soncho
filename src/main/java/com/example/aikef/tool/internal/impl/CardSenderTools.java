@@ -1,5 +1,6 @@
 package com.example.aikef.tool.internal.impl;
 
+import com.example.aikef.service.SessionMessageGateway;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.P;
@@ -19,9 +20,11 @@ public class CardSenderTools {
 
     private final ShopifyCustomerServiceTools shopifyTools;
     private final ObjectMapper objectMapper;
+    private final SessionMessageGateway sessionMessageGateway;
 
     @Tool("Send product cards to the user. Supports multiple products or variants.")
     public String sendProductCard(
+            @P("The Session ID") String sessionId,
             @P("Comma-separated list of Shopify Product IDs or Variant IDs (e.g. '12345,67890')") String ids,
             @P("Recommendation text to explain why these products are recommended") String recommendation) {
         try {
@@ -134,7 +137,10 @@ public class CardSenderTools {
             }
 
             String payload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(payloadMap);
-            return "card#CARD_PRODUCT#" + payload;
+            String cardMessage = "card#CARD_PRODUCT#" + payload;
+            
+            sessionMessageGateway.sendAiMessage(UUID.fromString(sessionId), cardMessage);
+            return "Product card sent successfully.";
 
         } catch (Exception e) {
             log.error("Failed to construct product card", e);
@@ -143,14 +149,19 @@ public class CardSenderTools {
     }
 
     @Tool("Send a gift card to the user.")
-    public String sendGiftCard(@P("Amount/Value of the gift card") String amount) {
+    public String sendGiftCard(
+            @P("The Session ID") String sessionId,
+            @P("Amount/Value of the gift card") String amount) {
         try {
             Map<String, Object> cardData = new HashMap<>();
             cardData.put("amount", amount);
             cardData.put("code", "GIFT-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
             
             String payload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(cardData);
-            return "card#CARD_GIFT#" + payload;
+            String cardMessage = "card#CARD_GIFT#" + payload;
+            
+            sessionMessageGateway.sendAiMessage(UUID.fromString(sessionId), cardMessage);
+            return "Gift card sent successfully.";
         } catch (Exception e) {
             return "Failed to create gift card.";
         }
@@ -158,6 +169,7 @@ public class CardSenderTools {
 
     @Tool("Send a discount card to the user.")
     public String sendDiscountCard(
+            @P("The Session ID") String sessionId,
             @P("Discount code") String code,
             @P("Discount value (e.g. '20% off' or '$10')") String value) {
         try {
@@ -166,7 +178,10 @@ public class CardSenderTools {
             cardData.put("value", value);
             
             String payload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(cardData);
-            return "card#CARD_DISCOUNT#" + payload;
+            String cardMessage = "card#CARD_DISCOUNT#" + payload;
+            
+            sessionMessageGateway.sendAiMessage(UUID.fromString(sessionId), cardMessage);
+            return "Discount card sent successfully.";
         } catch (Exception e) {
             return "Failed to create discount card.";
         }
@@ -174,6 +189,7 @@ public class CardSenderTools {
 
     @Tool("Send an order card to the user with order details and tracking information.")
     public String sendOrderCard(
+            @P("The Session ID") String sessionId,
             @P("The Shopify Order Number (e.g., '#1001' or '1001')") String orderNumber,
             @P("Customer email address for verification") String email) {
         try {
@@ -306,7 +322,10 @@ public class CardSenderTools {
             cardDataList.add(cardData);
             
             String payload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(cardDataList);
-            return "card#CARD_ORDER#" + payload;
+            String cardMessage = "card#CARD_ORDER#" + payload;
+            
+            sessionMessageGateway.sendAiMessage(UUID.fromString(sessionId), cardMessage);
+            return "Order card sent successfully.";
         } catch (Exception e) {
             log.error("Failed to create order card", e);
             return "Failed to retrieve order information: " + e.getMessage();
@@ -315,6 +334,7 @@ public class CardSenderTools {
 
     @Tool("Search orders by email and send order cards to the user.")
     public String sendOrderCardsByEmail(
+            @P("The Session ID") String sessionId,
             @P("Customer email address") String email) {
         try {
             if (email == null || email.isBlank()) {
@@ -421,7 +441,10 @@ public class CardSenderTools {
             }
             
             String payload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(orderCards);
-            return "card#CARD_ORDER#" + payload;
+            String cardMessage = "card#CARD_ORDER#" + payload;
+            
+            sessionMessageGateway.sendAiMessage(UUID.fromString(sessionId), cardMessage);
+            return "Order cards sent successfully.";
             
         } catch (Exception e) {
             log.error("Failed to create order cards from email", e);
