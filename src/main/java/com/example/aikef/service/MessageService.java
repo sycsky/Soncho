@@ -70,13 +70,18 @@ public class MessageService {
         
         ChatSession session = chatSessionService.getSession(sessionId);
         
+        // 排除的消息类型
+        List<SenderType> excludedTypes = List.of(SenderType.TOOL, SenderType.AI_TOOL_REQUEST);
+
         // 客户只能看到非内部消息
         // 按创建时间倒序查询，最新的消息在前
         Page<Message> messages;
         if (isCustomer) {
-            messages = messageRepository.findBySession_IdAndInternalFalseOrderByCreatedAtDesc(sessionId, pageable);
+            messages = messageRepository.findBySession_IdAndInternalFalseAndSenderTypeNotInOrderByCreatedAtDesc(
+                    sessionId, excludedTypes, pageable);
         } else {
-            messages = messageRepository.findBySession_IdOrderByCreatedAtDesc(sessionId, pageable);
+            messages = messageRepository.findBySession_IdAndSenderTypeNotInOrderByCreatedAtDesc(
+                    sessionId, excludedTypes, pageable);
         }
         
         return messages.map(message -> toMessageDto(message, isAgent, currentUserId));

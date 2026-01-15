@@ -129,7 +129,8 @@ public class AgentNode extends BaseWorkflowNode {
 
                     for (ToolExecutionRequest request : requests) {
                         log.info("Executing tool: {}", request.name());
-                        
+
+                        ctx.setVariable(request.name()+"_ex", 1);
                         // Execute directly (simplified for autonomous agent)
                         // Note: Real Agent might need state management for parameters, but here we assume LLM provides args
                         String result = executeTool(request, ctx);
