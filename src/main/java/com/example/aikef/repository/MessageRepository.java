@@ -2,6 +2,7 @@ package com.example.aikef.repository;
 
 import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.Message;
+import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -98,6 +99,7 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     long countByCreatedAtBetweenAndTenantIdAndSenderType(
             java.time.Instant start, java.time.Instant end, String tenantId, SenderType senderType);
 
+
     /**
      * 查询会话消息，排除指定发送者类型（按创建时间倒序）
      */
@@ -109,4 +111,7 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
      */
     Page<Message> findBySession_IdAndInternalFalseAndSenderTypeNotInOrderByCreatedAtDesc(
             UUID sessionId, java.util.Collection<SenderType> senderTypes, Pageable pageable);
+
+    long countByCreatedAtBetweenAndTenantIdAndMessageType(
+            java.time.Instant start, java.time.Instant end, String tenantId, MessageType type);
 }
