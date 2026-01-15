@@ -398,73 +398,134 @@ public class WorkflowGeneratorService {
                 3. **intent** - 意图识别节点（Switch类型）
                    - 配置: {
                        "modelId": "模型UUID",
+                       "customPrompt": "自定义提示词",
+                       "historyCount": 0,
                        "intents": [{"id": "intent_id", "label": "意图描述"}]
                      }
+                   - 输出: 使用意图配置中的 id
                 
                 4. **llm** - LLM调用节点
                    - 配置: {
                        "modelId": "模型UUID",
                        "systemPrompt": "系统提示词",
                        "temperature": 0.7,
-                       "useHistory": true
+                       "useHistory": true,
+                       "readCount": 5,
+                       "tools": ["工具UUID"]
                      }
                 
                 5. **knowledge** - 知识库查询节点
                    - 配置: {
                        "knowledgeBaseIds": ["知识库UUID"],
-                       "topK": 3
+                       "topK": 3,
+                       "scoreThreshold": 0.5
                      }
                 
                 6. **reply** - 回复节点
                    - 配置: {
-                       "text": "回复内容"
+                       "text": "回复内容",
+                       "source": "来源说明"
                      }
                 
                 7. **human_transfer** - 转人工节点
                    - 配置: 无需配置
                 
-                8. **agent** - 子工作流节点
+                8. **flow** - 子工作流节点
                    - 配置: {
                        "workflowId": "工作流UUID"
                      }
                 
-                9. **agent_end** - 子工作流结束节点
+                9. **flow_end** - 子工作流结束节点
                    - 配置: 无需配置
                 
-                10. **agent_update** - 子工作流更新节点
-                    - 配置: 无需配置
+                10. **flow_update** - 子工作流更新节点
+                    - 配置: {
+                        "updateMode": "replace"
+                      }
                 
-                11. **tool** - 工具执行节点（Switch类型）
+                11. **agent** - 自主Agent节点
+                    - 配置: {
+                        "goal": "目标指令",
+                        "modelId": "模型UUID",
+                        "tools": ["工具UUID"],
+                        "maxIterations": 10,
+                        "useHistory": true
+                      }
+                
+                12. **tool** - 工具执行节点（Switch类型）
                     - 配置: {
                         "toolId": "工具UUID",
                         "toolName": "工具名称"
                       }
+                    - 输出: "executed" 或 "not_executed"
                 
-                12. **imageTextSplit** - 图文分割节点
-                    - 配置: {
-                        "modelId": "模型UUID"
-                      }
-                
-                13. **setSessionMetadata** - 会话元数据设置节点
+                13. **imageTextSplit** - 图文分割节点
                     - 配置: {
                         "modelId": "模型UUID",
+                        "systemPrompt": "提示词"
+                      }
+                
+                14. **setSessionMetadata** - 会话元数据设置节点
+                    - 配置: {
+                        "modelId": "模型UUID",
+                        "systemPrompt": "提示词",
                         "mappings": {"sourceField": "targetField"}
                       }
                 
-                14. **parameter_extraction** - 参数提取节点（Switch类型）
+                15. **condition** - 条件判断节点（Switch类型）
+                    - 配置: {
+                        "conditions": [
+                          {
+                            "id": "条件ID",
+                            "sourceValue": "变量或模板",
+                            "conditionType": "contains/equals/...",
+                            "inputValue": "比较值"
+                          }
+                        ]
+                      }
+                    - 输出: 匹配的条件ID 或 "else"
+                
+                16. **parameter_extraction** - 参数提取节点（Switch类型）
                     - 配置: {
                         "toolId": "工具UUID",
                         "toolName": "工具名称",
                         "modelId": "模型UUID",
-                        "historyCount": 10,
-                        "extractParams": ["param1", "param2"]
+                        "historyCount": 0,
+                        "extractParams": ["参数名"]
                       }
-                    - 输出: "success"（参数完整）或 "incomplete"（参数不完整）
+                    - 输出: "success" 或 "incomplete"
+                
+                17. **variable** - 变量操作节点
+                    - 配置: {
+                        "variableName": "变量名",
+                        "sourceField": "字段路径",
+                        "sourceNodeId": "节点ID"
+                      }
+                    - 或: {"operation": "set", "variables": {"key": "value"}}
+                
+                18. **translation** - 翻译节点
+                    - 配置: {
+                        "modelId": "模型UUID",
+                        "targetText": "目标文本",
+                        "systemPrompt": "风格提示",
+                        "outputVar": "变量名"
+                      }
+                
+                19. **api** - API调用节点
+                    - 配置: {
+                        "url": "URL地址",
+                        "method": "GET/POST",
+                        "headers": {},
+                        "body": {},
+                        "responseMapping": "JSONPath",
+                        "saveToVariable": "变量名"
+                      }
                 
                 **Switch 类型节点说明**：
                 - **tool** 节点有两个固定输出: "executed"（执行成功）和 "not_executed"（未执行）
                 - **intent** 节点输出: 使用意图配置中的 id
                 - **parameter_extraction** 节点有两个固定输出: "success"（参数完整）和 "incomplete"（参数不完整）
+                - **condition** 节点输出: 匹配的条件 id 或 "else"
                 """;
     }
 
@@ -547,11 +608,12 @@ public class WorkflowGeneratorService {
                     - 每个边必须有 id、source（源节点ID）和 target（目标节点ID）
                     - 边的 id 格式: "xy-edge__" + source + sourceHandle + "-" + target（如果有 sourceHandle）
                       - 例如: "xy-edge__hx4wljexecuted-jspgq" 或 "xy-edge__vdx2vn-2y1jis"
-                    - Switch类型节点（tool, intent, parameter_extraction）必须提供 sourceHandle:
+                    - Switch类型节点（tool, intent, parameter_extraction, condition）必须提供 sourceHandle:
                       - **tool 节点**: sourceHandle 必须是 "executed" 或 "not_executed"（固定值）
                       - **intent 节点**: sourceHandle 必须是该 intent 节点配置中 intents 数组里某个 intent 的 id（动态值）
                         - 例如：如果 intent 节点配置了 {"id": "i1764404624506", "label": "咨询部分退款"}，则 sourceHandle 应该是 "i1764404624506"
                       - **parameter_extraction 节点**: sourceHandle 必须是 "success" 或 "incomplete"（固定值）
+                      - **condition 节点**: sourceHandle 必须是该 condition 节点配置中 conditions 数组里某个 condition 的 id（动态值），或者 "else"（默认分支）
                     - 普通节点（非 Switch）的边不需要 sourceHandle，设置为 null
                     - 边的完整格式必须包含以下字段:
                       {
@@ -573,7 +635,11 @@ public class WorkflowGeneratorService {
                    - 使用 tool 节点调用可用工具
                    - 使用 llm 节点进行智能对话
                    - 使用 intent 节点进行意图识别和路由
-                   - 使用 condition 节点进行条件判断
+                   - 使用 condition 节点进行条件判断（如：根据变量值判断走哪个分支）
+                   - 使用 parameter_extraction 节点提取用户关键信息
+                   - 使用 variable 节点进行变量的读取和设置
+                   - 使用 translation 节点处理多语言场景
+                   - 使用 api 节点调用外部接口（替代简单的 LLM+Tool 组合）
                    - 使用 setSessionMetadata 节点保存会话数据
                    - 使用 knowledge 节点查询知识库
                 
@@ -784,6 +850,10 @@ public class WorkflowGeneratorService {
             } else if ("intent".equals(sourceType)) {
                 // intent 节点需要从配置中获取第一个 intent 的 id
                 sourceHandle = getFirstIntentId(sourceNode);
+            } else if ("parameter_extraction".equals(sourceType)) {
+                sourceHandle = "success";
+            } else if ("condition".equals(sourceType)) {
+                sourceHandle = "else";
             }
         }
 
