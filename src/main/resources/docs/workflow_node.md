@@ -13,7 +13,7 @@ This document details the configuration and parameters for the available workflo
 - **Parameters**: None.
 
 ### 3. Intent Recognition (`intent`)
-- **Description**: Classifies user input into one of several defined intents using an LLM.
+- **Description**: Classifies user input into one of several defined intents using an LLM. This is a **Switch** node.
 - **Configuration (`data.config`)**:
     - `modelId` (String, Required): ID of the LLM model to use for classification.
     - `customPrompt` (String, Optional): Custom system prompt to guide the classification.
@@ -21,6 +21,8 @@ This document details the configuration and parameters for the available workflo
     - `intents` (Array, Required): List of possible intents.
         - `id` (String): Unique ID for the intent.
         - `label` (String): Description of the intent (e.g., "Check Order Status").
+- **Outputs**:
+    - Each defined intent `id` is a valid output handle.
 
 ### 4. LLM Generation (`llm`)
 - **Description**: Generates a response using a Large Language Model.
@@ -49,44 +51,106 @@ This document details the configuration and parameters for the available workflo
 - **Description**: Transfers the conversation to a human agent.
 - **Parameters**: None.
 
-### 8. Agent (`agent`)
-- **Description**: Executes another workflow (sub-workflow).
+### 8. Sub-Workflow (`flow`)
+- **Description**: Executes another existing workflow.
 - **Configuration (`data.config`)**:
     - `workflowId` (String, Required): ID of the sub-workflow to execute.
-    - `workflowName` (String, Read-only): Name of the selected workflow.
 
-### 9. Agent End (`agent_end`)
-- **Description**: Marks the end of an agent execution path.
+### 9. Sub-Workflow End (`flow_end`)
+- **Description**: Marks the end of a sub-workflow execution path. Used within the sub-workflow to return control.
 - **Parameters**: None.
 
-### 10. Agent Update (`agent_update`)
-- **Description**: Updates the state or context of the agent.
-- **Parameters**: None.
+### 10. Sub-Workflow Update (`flow_update`)
+- **Description**: Updates the context (System Prompt) of the current sub-workflow session.
+- **Configuration (`data.config`)**:
+    - `updateMode` (String, Default: "replace"): "replace" or "append".
 
-### 11. Tool Execution (`tool`)
-- **Description**: Executes a specific tool or function.
+### 11. Autonomous Agent (`agent`)
+- **Description**: An advanced autonomous agent capable of multi-step reasoning and tool usage (ReAct pattern).
+- **Configuration (`data.config`)**:
+    - `goal` (String, Required): The goal or instruction for the agent.
+    - `modelId` (String, Required): ID of the LLM model.
+    - `tools` (Array<String>, Optional): List of Tool IDs the agent can use.
+    - `maxIterations` (Number, Default: 10): Maximum reasoning steps.
+    - `useHistory` (Boolean, Default: true): Whether to use conversation history.
+
+### 12. Tool Execution (`tool`)
+- **Description**: Executes a specific tool or function directly. This is a **Switch** node.
 - **Configuration (`data.config`)**:
     - `toolId` (String, Required): ID of the tool to execute.
     - `toolName` (String, Read-only): Name of the selected tool.
+- **Outputs**:
+    - `executed`: Tool execution successful.
+    - `not_executed`: Tool execution failed or not run.
 
-### 12. Image-Text Split (`imageTextSplit`)
+### 13. Image-Text Split (`imageTextSplit`)
 - **Description**: Uses an AI model to split and analyze image and text content.
 - **Configuration (`data.config`)**:
     - `modelId` (String, Required): ID of the Multimodal model.
     - `systemPrompt` (String, Optional): Instructions for the analysis.
 
-### 13. Set Metadata (`setSessionMetadata`)
+### 14. Set Metadata (`setSessionMetadata`)
 - **Description**: Extracts information from the conversation context and updates session metadata.
 - **Configuration (`data.config`)**:
     - `modelId` (String, Required): ID of the LLM model used for extraction.
     - `systemPrompt` (String, Optional): Instructions for extraction.
     - `mappings` (Object): Key-value pairs mapping extracted JSON fields to session metadata keys.
 
+### 15. Condition Switch (`condition`)
+- **Description**: Routes the flow based on conditional logic. This is a **Switch** node.
+- **Configuration (`data.config`)**:
+    - `conditions` (Array, Required): List of conditions.
+        - `id` (String): Unique ID for the condition (used as output handle).
+        - `sourceValue` (String): The value to check (supports templates like `{{sys.lastoutput}}`).
+        - `conditionType` (String): Operator (`contains`, `notContains`, `startsWith`, `endsWith`, `equals`, `notEquals`, `isEmpty`, `isNotEmpty`).
+        - `inputValue` (String): The value to compare against.
+- **Outputs**:
+    - Matches condition `id` or fallback to `else` (if no match).
+
+### 16. Parameter Extraction (`parameter_extraction`)
+- **Description**: Extracts parameters from conversation for a specific tool. This is a **Switch** node.
+- **Configuration (`data.config`)**:
+    - `toolId` (String, Optional): ID of the tool.
+    - `toolName` (String, Optional): Name of the tool.
+    - `modelId` (String, Optional): Model used for extraction.
+    - `historyCount` (Number, Default: 0): History turns to use.
+    - `extractParams` (Array<String>, Optional): Specific parameters to extract.
+- **Outputs**:
+    - `success`: All parameters extracted.
+    - `incomplete`: Missing parameters (usually connects to a reply node to ask user).
+
+### 17. Variable Operation (`variable`)
+- **Description**: Sets or modifies workflow variables.
+- **Configuration (`data.config`)**:
+    - `variableName` (String): Name of the variable to set.
+    - `sourceField` (String): JSON path to extract from last output (or `#lastResponse`).
+    - `sourceNodeId` (String, Optional): Specific node to read output from.
+    - OR
+    - `operation` (String): `set`, `append`, `delete`.
+    - `variables` (Object): Key-value pairs to set.
+
+### 18. Translation (`translation`)
+- **Description**: Translates target text to the user's language (inferred from history).
+- **Configuration (`data.config`)**:
+    - `modelId` (String, Required): Model ID.
+    - `targetText` (String, Required): Text to translate (supports templates).
+    - `systemPrompt` (String, Optional): Additional style instructions.
+    - `historyCount` (Number, Default: 10): Context for language inference.
+    - `outputVar` (String, Default: "translationResult"): Variable to store result.
+
+### 19. API Call (`api`)
+- **Description**: Makes an HTTP request to an external API.
+- **Configuration (`data.config`)**:
+    - `url` (String, Required): Target URL.
+    - `method` (String, Default: "GET"): HTTP method.
+    - `headers` (Object): HTTP headers.
+    - `body` (Object): Request body (for POST/PUT).
+    - `responseMapping` (String, Optional): JSONPath to extract specific data from response.
+    - `saveToVariable` (String, Optional): Variable to save the output to.
+
 ---
 
 ## Generated Workflow Demo
-
-Below is an example of a workflow configuration JSON. This example represents a customer service flow for an online restaurant, including intent recognition ("Chat", "Check Order", "Buy Items"), product search via tool, LLM response, and agent delegation.
 
 ### `edgesJson`
 ```json
@@ -173,10 +237,10 @@ Below is an example of a workflow configuration JSON. This example represents a 
   },
   {
     "id": "90bm6n",
-    "type": "agent",
+    "type": "flow",
     "position": { "x": 1246.09, "y": 234.61 },
     "data": {
-      "label": "Agent",
+      "label": "Sub-Workflow",
       "config": {
         "workflowId": "22576f74-1047-420c-8655-0526c9f3859a",
         "workflowName": "推销员"

@@ -38,7 +38,8 @@ public class HistoryMessageLoader {
      */
     public List<Message> loadHistoryMessages(UUID sessionId, int readCount, UUID messageId) {
         List<Message> historyMessages = new ArrayList<>();
-        
+        //+1，除历史消息外，还包括了触发工作流的用户消息
+        readCount++;
         try {
             // 获取触发工作流的消息的创建时间（如果提供了messageId）
             Instant maxCreatedAt;
@@ -106,25 +107,23 @@ public class HistoryMessageLoader {
                         continue;
                     }
 
-                    candidateMessages.add(msg);
 
-                    // 计数逻辑：TOOL 消息不算 readCount
-                    if (msg.getSenderType() != SenderType.TOOL) {
-                        effectiveCount++;
+                    // 计数逻辑：TOOL,AI_TOOL_REQUEST 消息不算 readCount
+                    if (msg.getSenderType() != SenderType.TOOL || msg.getSenderType() != SenderType.AI_TOOL_REQUEST) {
+                        readCount--;
                     }
-                    
-                    // 检查是否满足 readCount
-                    // 注意：readCount = 0 时，需要一直往上读，直到遇到普通消息？
-                    // 题目要求："读取的时候readCount=0时需要往上再读直到碰到普通的消息"
-                    // 这句话理解为：如果 readCount > 0，则收集到 effectiveCount == readCount 为止。
-                    // 如果 readCount == 0 (或初始状态)，可能是指需要至少找到一条普通消息？
-                    // 但通常 readCount 是外部传入的期望获取的历史对话轮数。
-                    // 假设 readCount 是指 "非 Tool 类型的消息数量"。
-                    
-                    if (readCount > 0 && effectiveCount >= readCount) {
+
+
+
+                    // 为什么不是0,因为读取到最后一个普通消息后，它之前可能不是普通消息，可能是调用的工具记录，所以继续往前读取，尽量取把数据读取完整，包括完整的调用环
+                    if(readCount<-1){
                         stopCollecting = true;
                         break;
                     }
+
+                    candidateMessages.add(msg);
+                    
+
                 }
 
                 if (stopCollecting) {
