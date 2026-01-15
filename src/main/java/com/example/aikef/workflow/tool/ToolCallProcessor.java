@@ -186,8 +186,7 @@ public class ToolCallProcessor {
      * @param sessionId 会话ID（用于获取会话元数据）
      * @return 处理结果
      */
-    public ToolCallProcessResult executeToolDirectly(ToolCallState toolCallState, UUID sessionId) {
-        ToolCallState.ToolCallRequest request = toolCallState.getCurrentToolCall();
+    public ToolCallProcessResult executeToolDirectly(ToolCallState.ToolCallRequest request, UUID sessionId) {
         if (request == null) {
             return ToolCallProcessResult.error("没有待处理的工具调用");
         }
@@ -431,27 +430,27 @@ public class ToolCallProcessor {
             );
 
             if (result.success()) {
-                return ToolCallProcessResult.success(
-                        new ToolCallState.ToolCallResult(
-                                toolCallId,
-                                tool.getName(),
-                                true,
-                                result.output(),
-                                null,
-                                result.durationMs()
-                        )
+                ToolCallState.ToolCallResult toolCallResult = new ToolCallState.ToolCallResult(
+                        toolCallId,
+                        tool.getName(),
+                        true,
+                        result.output(),
+                        null,
+                        result.durationMs()
                 );
+                toolCallResult.setToolId(tool.getId());
+                return ToolCallProcessResult.success(toolCallResult);
             } else {
-                return ToolCallProcessResult.failed(
-                        new ToolCallState.ToolCallResult(
-                                toolCallId,
-                                tool.getName(),
-                                false,
-                                null,
-                                result.errorMessage(),
-                                result.durationMs()
-                        )
+                ToolCallState.ToolCallResult toolCallResult = new ToolCallState.ToolCallResult(
+                        toolCallId,
+                        tool.getName(),
+                        false,
+                        null,
+                        result.errorMessage(),
+                        result.durationMs()
                 );
+                toolCallResult.setToolId(tool.getId());
+                return ToolCallProcessResult.failed(toolCallResult);
             }
 
         } catch (Exception e) {

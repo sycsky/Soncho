@@ -75,6 +75,12 @@ public class LlmNode extends BaseWorkflowNode {
     @Resource
     private HistoryMessageLoader historyMessageLoader;
     
+    @Resource
+    private com.example.aikef.repository.MessageRepository messageRepository;
+
+    @Resource
+    private com.example.aikef.repository.ChatSessionRepository chatSessionRepository;
+
     @Autowired
     private AiToolService aiToolService;
 
@@ -197,12 +203,16 @@ public class LlmNode extends BaseWorkflowNode {
         List<ToolExecutionRequest> toolRequests = aiMessage.toolExecutionRequests();
         log.info("检测到 {} 个工具调用请求，将串行处理", toolRequests.size());
         log.info("config={}", getNodeConfig());
-        // 初始化工具调用状态
+
+        // 初始化工具调用状态 (用于存储结果)
         ToolCallState toolState = ctx.getOrCreateToolCallState();
         toolState.setStatus(ToolCallState.Status.TOOL_CALL_DETECTED);
         toolState.setLlmMessageWithToolCall(aiMessage.text());
 
-        // 解析工具调用请求
+        // 清空旧结果
+        toolState.getCompletedResults().clear();
+
+        // 解析并执行工具调用请求
         for (ToolExecutionRequest toolRequest : toolRequests) {
             String toolName = toolRequest.name();
             String arguments = toolRequest.arguments();
@@ -222,135 +232,34 @@ public class LlmNode extends BaseWorkflowNode {
 
             // 获取工具ID
             UUID toolId = toolCallProcessor.getToolIdByName(toolName);
+            // 暂时设置 toolId 到 toolState，以便 sendToolResultToLlm 中使用 (虽然这有点 hack，但为了兼容)
+            toolState.setToolId(toolId);
 
             ToolCallState.ToolCallRequest request = new ToolCallState.ToolCallRequest(
                     callId, toolName, toolId, params
             );
-            toolState.addToolCall(request);
-        }
-
-        // 处理第一个工具调用（不验证参数完整性，直接执行）
-        if (!toolState.getPendingToolCalls().isEmpty()) {
-            ToolCallState.ToolCallRequest firstRequest = toolState.getPendingToolCalls().get(0);
-            toolState.setCurrentToolCall(firstRequest);
-            toolState.setStatus(ToolCallState.Status.EXECUTING_TOOL);
-            toolState.setToolId(firstRequest.getToolId());
             
-            // 直接执行工具，不进行参数完整性检查
-            // LLM 提取的参数直接使用，如果 bodyTemplate 为空则直接使用参数 JSON
+            // 直接执行工具
             ToolCallProcessor.ToolCallProcessResult result = 
-                    toolCallProcessor.executeToolDirectly(toolState, ctx.getSessionId());
+                    toolCallProcessor.executeToolDirectly(request, ctx.getSessionId());
 
-            handleToolCallResult(ctx, result, messages, toolSpecs, modelIdStr, startTime);
-        }
-    }
-
-    /**
-     * 处理工具调用结果
-     */
-    private void handleToolCallResult(
-            WorkflowContext ctx,
-            ToolCallProcessor.ToolCallProcessResult result,
-            List<ChatMessage> messages,
-            List<ToolSpecification> toolSpecs,
-            String modelIdStr,
-            long startTime) {
-
-        ToolCallState toolState = ctx.getToolCallState();
-
-        switch (result.getType()) {
-            case SUCCESS, FAILED -> {
-                // 工具执行完成，将结果发送回 LLM
+            if (result.isSuccess()) {
                 toolState.addResult(result.getResult());
-                toolState.setStatus(result.isSuccess() ? 
-                        ToolCallState.Status.TOOL_COMPLETED : ToolCallState.Status.TOOL_FAILED);
-
-                // 从待处理列表中移除当前工具调用
-                toolState.getPendingToolCalls().removeIf(req -> 
-                    req.getId().equals(toolState.getCurrentToolCall().getId()));
-
-                // 检查是否还有待处理的工具调用
-                if (!toolState.getPendingToolCalls().isEmpty()) {
-                    // 还有待处理的工具调用，继续处理下一个
-                    log.info("还有 {} 个待处理的工具调用，继续处理下一个", toolState.getPendingToolCalls().size());
-                    processNextToolCall(ctx, messages, toolSpecs, modelIdStr, startTime);
-                } else {
-                    // 所有工具调用都完成了，将结果发送回 LLM
-                sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime);
-                }
-            }
-
-            case SKIPPED -> {
-                // 跳过工具执行
-                toolState.setStatus(ToolCallState.Status.SKIPPED);
-                String skipMessage = "无法完成工具调用，" + result.getErrorMessage();
-                setOutput(skipMessage);
-                recordExecution(ctx.getQuery(), skipMessage, startTime, true, null);
-            }
-
-            case ERROR -> {
-                // 错误
-                toolState.setStatus(ToolCallState.Status.TOOL_FAILED);
-                String errorMessage = "工具调用失败：" + result.getErrorMessage();
-                setOutput(errorMessage);
-                recordExecution(ctx.getQuery(), errorMessage, startTime, false, result.getErrorMessage());
+            } else {
+                // 失败也记录，标记为失败
+                ToolCallState.ToolCallResult failedResult = new ToolCallState.ToolCallResult(
+                    callId, toolName, false, null, result.getErrorMessage(), 0
+                );
+                failedResult.setToolId(toolId);
+                toolState.addResult(failedResult);
             }
         }
+
+        // 所有工具调用都完成了，将结果发送回 LLM
+        sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime);
     }
 
-    /**
-     * 继续处理工具调用（用户提供了参数后）
-     */
-    private void handleToolCallContinuation(WorkflowContext ctx, ToolCallState toolState, long startTime) {
-        log.info("继续处理工具调用，用户输入: {}", ctx.getQuery());
 
-        // 恢复工作流
-        ctx.resumeWorkflow();
-
-        // 检查是否从数据库恢复的暂停状态
-        Boolean resumeFromPause = (Boolean) ctx.getVariable("_resumeFromPause");
-        if (Boolean.TRUE.equals(resumeFromPause)) {
-            // 恢复已收集的参数
-            @SuppressWarnings("unchecked")
-            Map<String, Object> savedParams = (Map<String, Object>) ctx.getVariable("_collectedParams");
-            if (savedParams != null && !savedParams.isEmpty()) {
-                toolState.getCollectedParams().putAll(savedParams);
-                log.info("已恢复收集的参数: {}", savedParams.keySet());
-            }
-            
-            // 恢复轮次信息
-            Integer currentRound = (Integer) ctx.getVariable("_currentRound");
-            Integer maxRounds = (Integer) ctx.getVariable("_maxRounds");
-            if (currentRound != null) {
-                toolState.setCurrentRound(currentRound);
-            }
-            if (maxRounds != null) {
-                toolState.setMaxRounds(maxRounds);
-            }
-            
-            // 清除恢复标记
-            ctx.setVariable("_resumeFromPause", null);
-        }
-
-        // 获取模型ID
-        String modelIdStr = getConfigString("modelId", null);
-        UUID modelId = parseModelId(modelIdStr);
-
-        // 继续参数收集
-        ToolCallProcessor.ToolCallProcessResult result = 
-                toolCallProcessor.continueParamCollection(toolState, ctx.getQuery(), modelId, ctx.getSessionId());
-
-        // 重建消息列表（这里简化处理）
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(UserMessage.from(ctx.getQuery()));
-
-        // 获取工具规格
-        JsonNode config = getNodeConfig();
-        List<UUID> toolIds = getToolIds(config);
-        List<ToolSpecification> toolSpecs = toolCallProcessor.buildToolSpecifications(toolIds);
-
-        handleToolCallResult(ctx, result, messages, toolSpecs, modelIdStr, startTime);
-    }
 
     /**
      * 获取当前节点所在的子链ID
@@ -375,36 +284,9 @@ public class LlmNode extends BaseWorkflowNode {
     }
 
     /**
-     * 处理下一个工具调用（串行处理多个工具调用）
+     * 处理下一个工具调用（已废弃）
      */
-    private void processNextToolCall(
-            WorkflowContext ctx,
-            List<ChatMessage> messages,
-            List<ToolSpecification> toolSpecs,
-            String modelIdStr,
-            long startTime) {
-        
-        ToolCallState toolState = ctx.getToolCallState();
-        
-        if (toolState.getPendingToolCalls().isEmpty()) {
-            log.warn("没有待处理的工具调用");
-            return;
-        }
-        
-        // 获取下一个待处理的工具调用
-        ToolCallState.ToolCallRequest nextRequest = toolState.getPendingToolCalls().get(0);
-        toolState.setCurrentToolCall(nextRequest);
-        toolState.setStatus(ToolCallState.Status.EXECUTING_TOOL);
-        toolState.setToolId(nextRequest.getToolId());
-        
-        log.info("处理下一个工具调用: toolName={}, toolId={}", nextRequest.getToolName(), nextRequest.getToolId());
-        
-        // 直接执行工具，不进行参数完整性检查
-        ToolCallProcessor.ToolCallProcessResult result = 
-                toolCallProcessor.executeToolDirectly(toolState, ctx.getSessionId());
-        
-        handleToolCallResult(ctx, result, messages, toolSpecs, modelIdStr, startTime);
-    }
+    // private void processNextToolCall(...)
 
     /**
      * 将工具执行结果发送回 LLM
@@ -434,14 +316,27 @@ public class LlmNode extends BaseWorkflowNode {
                         result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage()
                 );
 
+                messages.add(resultMessage);
 
+                // 保存工具执行结果到数据库
+                saveToolResultToDatabase(ctx, result, result.getToolName());
 
                 ctx.setVariable(result.getToolName()+"_ex", 1);
 
-                AiTool tool = aiToolService.getTool(toolState.getToolId()).orElse(null);
+                UUID toolId = result.getToolId();
+                if (toolId == null) {
+                    // Fallback to state if result doesn't have it (should have it)
+                    toolId = toolState.getToolId();
+                }
+
+                AiTool tool = null;
+                if (toolId != null) {
+                    tool = aiToolService.getTool(toolId).orElse(null);
+                }
+
                 String toolName = result.getToolName();
-                String resultDescription = tool.getResultDescription();
-                String resultMetadata = tool.getResultMetadata();
+                String resultDescription = tool != null ? tool.getResultDescription() : null;
+                String resultMetadata = tool != null ? tool.getResultMetadata() : null;
                 String resultBody = result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage();
                 if(tool != null){
 //                    finalReply += String.format("工具 %s 执行结果: %s\n", toolName, result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage());
@@ -488,6 +383,36 @@ public class LlmNode extends BaseWorkflowNode {
             log.error("发送工具结果到 LLM 失败", e);
             setOutput("抱歉，处理工具调用结果时出错");
             recordExecution(ctx.getQuery(), "处理失败", startTime, false, e.getMessage());
+        }
+    }
+
+    private void saveToolResultToDatabase(WorkflowContext ctx, ToolCallState.ToolCallResult result, String toolName) {
+        try {
+            Message message = new Message();
+            chatSessionRepository.findById(ctx.getSessionId()).ifPresent(message::setSession);
+            message.setSenderType(SenderType.TOOL);
+            message.setInternal(false);
+
+            // 工具执行结果通常作为文本存储
+            // 如果结果是 JSON，也可以存储在 text 字段，或者额外字段
+            String resultText = toolName + "#TOOL#" + (result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage());
+            message.setText(resultText);
+
+            // 存储工具元数据
+            Map<String, Object> toolData = new HashMap<>();
+            toolData.put("toolName", toolName);
+            toolData.put("toolCallId", result.getToolCallId());
+            toolData.put("success", result.isSuccess());
+            toolData.put("durationMs", result.getDurationMs());
+            if (result.getErrorMessage() != null) {
+                toolData.put("error", result.getErrorMessage());
+            }
+            message.setToolCallData(toolData);
+
+            messageRepository.save(message);
+            log.debug("保存工具执行结果到数据库: toolName={}, messageId={}", toolName, message.getId());
+        } catch (Exception e) {
+            log.error("保存工具执行结果失败", e);
         }
     }
 

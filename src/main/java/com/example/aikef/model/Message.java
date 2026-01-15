@@ -3,6 +3,8 @@ package com.example.aikef.model;
 import com.example.aikef.model.base.AuditableEntity;
 import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
+import jakarta.persistence.AttributeOverride;
+import jakarta.persistence.AttributeOverrides;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -25,6 +27,10 @@ import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "messages")
+@AttributeOverrides({
+    @AttributeOverride(name = "createdAt", column = @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "DATETIME(6)")),
+    @AttributeOverride(name = "updatedAt", column = @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME(6)"))
+})
 @Filter(name = "tenantFilter", condition = "1=1")
 public class Message extends AuditableEntity {
 
@@ -57,6 +63,10 @@ public class Message extends AuditableEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "translation_data", columnDefinition = "json")
     private Map<String, Object> translationData = new HashMap<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "tool_call_data", columnDefinition = "json")
+    private Map<String, Object> toolCallData = new HashMap<>();
 
     @ElementCollection
     @CollectionTable(name = "message_mentions", joinColumns = @JoinColumn(name = "message_id"))
@@ -166,5 +176,13 @@ public class Message extends AuditableEntity {
 
     public void setReadByAgent(boolean readByAgent) {
         this.readByAgent = readByAgent;
+    }
+
+    public Map<String, Object> getToolCallData() {
+        return toolCallData;
+    }
+
+    public void setToolCallData(Map<String, Object> toolCallData) {
+        this.toolCallData = toolCallData;
     }
 }
