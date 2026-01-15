@@ -256,7 +256,7 @@ public class LlmNode extends BaseWorkflowNode {
         }
         
         // 所有工具调用都完成了，将结果发送回 LLM
-        sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime);
+        sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime, toolRequests);
     }
 
 
@@ -296,7 +296,8 @@ public class LlmNode extends BaseWorkflowNode {
             List<ChatMessage> originalMessages,
             List<ToolSpecification> toolSpecs,
             String modelIdStr,
-            long startTime) {
+            long startTime,
+            List<ToolExecutionRequest> originalRequests) {
 
         try {
             ToolCallState toolState = ctx.getToolCallState();
@@ -318,8 +319,19 @@ public class LlmNode extends BaseWorkflowNode {
 
                 messages.add(resultMessage);
 
+                // Find matching request
+                ToolExecutionRequest matchingRequest = null;
+                if (originalRequests != null) {
+                    for (ToolExecutionRequest req : originalRequests) {
+                        if (Objects.equals(req.id(), result.getToolCallId())) {
+                            matchingRequest = req;
+                            break;
+                        }
+                    }
+                }
+
                 // 保存工具执行结果到数据库
-                saveToolResultToDatabase(ctx, result, result.getToolName());
+                saveToolResultToDatabase(ctx, result, result.getToolName(), matchingRequest);
 
                 ctx.setVariable(result.getToolName()+"_ex", 1);
                 
@@ -385,7 +397,7 @@ public class LlmNode extends BaseWorkflowNode {
         }
     }
 
-    private void saveToolResultToDatabase(WorkflowContext ctx, ToolCallState.ToolCallResult result, String toolName) {
+    private void saveToolResultToDatabase(WorkflowContext ctx, ToolCallState.ToolCallResult result, String toolName, ToolExecutionRequest request) {
         try {
             Message message = new Message();
             chatSessionRepository.findById(ctx.getSessionId()).ifPresent(message::setSession);
@@ -393,12 +405,21 @@ public class LlmNode extends BaseWorkflowNode {
             message.setInternal(false);
             
             // 工具执行结果通常作为文本存储
-            // 如果结果是 JSON，也可以存储在 text 字段，或者额外字段
             String resultText = toolName + "#TOOL#" + (result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage());
             message.setText(resultText);
             
             // 存储工具元数据
             Map<String, Object> toolData = new HashMap<>();
+            
+            // Store request data
+            if (request != null) {
+                Map<String, Object> reqMap = new HashMap<>();
+                reqMap.put("id", request.id());
+                reqMap.put("name", request.name());
+                reqMap.put("arguments", request.arguments());
+                toolData.put("request", reqMap);
+            }
+
             toolData.put("toolName", toolName);
             toolData.put("toolCallId", result.getToolCallId());
             toolData.put("success", result.isSuccess());
@@ -528,7 +549,7 @@ public class LlmNode extends BaseWorkflowNode {
                 }
                 
                 if (readCount > 0) {
-                    List<ChatMessage> historyMessages = loadHistoryFromDatabase(
+                    List<ChatMessage> historyMessages = historyMessageLoader.loadChatMessages(
                             ctx.getSessionId(), readCount, ctx.getMessageId());
                     messages.addAll(historyMessages);
                     log.debug("从数据库加载了 {} 条历史消息", historyMessages.size());
@@ -647,35 +668,6 @@ public class LlmNode extends BaseWorkflowNode {
         log.debug("已添加工具调用引导提示词，工具数量: {}", toolSpecs.size());
     }
     
-    /**
-     * 从数据库加载会话历史消息
-     * 忽略 SYSTEM 类型的消息
-     * 
-     * @param sessionId 会话ID
-     * @param readCount 读取条数（排除 SYSTEM 消息后的数量）
-     * @param messageId 触发工作流的消息ID（可为null，用于时间过滤）
-     * @return 历史消息列表（按时间正序）
-     */
-    private List<ChatMessage> loadHistoryFromDatabase(UUID sessionId, int readCount, UUID messageId) {
-        List<ChatMessage> historyMessages = new ArrayList<>();
-        
-        // 使用公共的历史消息加载器
-        List<Message> dbMessages = historyMessageLoader.loadHistoryMessages(sessionId, readCount, messageId);
-        
-        // 转换为 ChatMessage 格式
-        for (Message msg : dbMessages) {
-            // SenderType.USER 为用户消息，其他为客服/AI消息
-            if (msg.getSenderType() == SenderType.USER) {
-                historyMessages.add(UserMessage.from(msg.getText()));
-            } else {
-                // AGENT, AI 作为 assistant 消息
-                historyMessages.add(AiMessage.from(msg.getText()));
-            }
-        }
-        
-        return historyMessages;
-    }
-
     /**
      * 获取绑定的工具ID列表
      */
