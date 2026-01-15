@@ -58,74 +58,99 @@ public class HistoryMessageLoader {
                 maxCreatedAt = null;
             }
 
-            // 为了确保过滤掉 SYSTEM 消息和空消息后仍有足够数量的消息，查询更多消息
-            // 查询数量设为 readCount * 2，以确保过滤后仍有足够的消息
-            int queryCount = Math.max(readCount * 2, 50); // 至少查询50条，确保有足够的数据
-            
-            // 根据是否有时间限制选择查询方法
-            List<Message> dbMessages;
-            if (maxCreatedAt != null) {
-                // 为了避免时间精度问题，查询时使用 maxCreatedAt + 1秒 作为上限
-                // 然后在内存中过滤，确保只包含创建时间 <= maxCreatedAt 的消息
-                // 这样可以确保当前消息（创建时间 = maxCreatedAt）一定能被查到
-                Instant queryUpperBound = maxCreatedAt.plusSeconds(1);
-                dbMessages = messageRepository.findBySession_IdAndInternalFalseAndCreatedAtLessThanEqualOrderByCreatedAtDesc(
-                        sessionId, queryUpperBound, PageRequest.of(0, queryCount));
-                
-                // 在内存中过滤，只保留创建时间 <= maxCreatedAt 的消息
-                dbMessages = dbMessages.stream()
-                        .filter(msg -> msg.getCreatedAt().isBefore(maxCreatedAt) || 
-                                      msg.getCreatedAt().equals(maxCreatedAt))
-                        .collect(Collectors.toList());
-                
-                // 确保触发消息本身被包含（如果它符合条件）
-                if (triggerMessage != null && 
-                    triggerMessage.getSenderType() != SenderType.SYSTEM &&
-                    triggerMessage.getText() != null && !triggerMessage.getText().isEmpty() &&
-                    !dbMessages.stream().anyMatch(msg -> msg.getId().equals(messageId))) {
-                    // 如果触发消息不在结果中，添加到列表（按时间排序）
-                    dbMessages.add(triggerMessage);
-                    dbMessages.sort((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()));
+            // 分页查询消息，每次查询一部分，直到满足条件或没有更多消息
+            // 初始查询数量适当放大，以减少查询次数
+            int pageSize = Math.max(readCount * 2, 50); 
+            int pageNum = 0;
+            List<Message> candidateMessages = new ArrayList<>();
+            boolean stopCollecting = false;
+            int effectiveCount = 0; // 记录有效消息数量（不含 TOOL 消息）
+
+            while (!stopCollecting) {
+                List<Message> batchMessages;
+                PageRequest pageRequest = PageRequest.of(pageNum, pageSize);
+
+                if (maxCreatedAt != null) {
+                    // 查询 <= maxCreatedAt 的消息，倒序
+                    // 使用 maxCreatedAt + 1秒 作为上限，然后在内存过滤
+                    Instant queryUpperBound = maxCreatedAt.plusSeconds(1);
+                    batchMessages = messageRepository.findBySession_IdAndInternalFalseAndCreatedAtLessThanEqualOrderByCreatedAtDesc(
+                            sessionId, queryUpperBound, pageRequest);
+                    
+                    // 过滤掉晚于 maxCreatedAt 的消息
+                    batchMessages = batchMessages.stream()
+                            .filter(msg -> !msg.getCreatedAt().isAfter(maxCreatedAt))
+                            .collect(Collectors.toList());
+                } else {
+                    // 查询最近消息，倒序
+                    Page<Message> messagePage = messageRepository.findBySession_IdAndInternalFalseOrderByCreatedAtDesc(
+                            sessionId, pageRequest);
+                    batchMessages = messagePage.getContent();
                 }
-            } else {
-                // 查询最近的N条消息（按时间倒序查询，最新的在前）
-                Page<Message> messagePage = messageRepository.findBySession_IdAndInternalFalseOrderByCreatedAtDesc(
-                        sessionId, PageRequest.of(0, queryCount));
-                dbMessages = messagePage.getContent();
-            }
-            
-            if (dbMessages.isEmpty()) {
-                return historyMessages;
-            }
-            
-            // 先过滤掉 SYSTEM 类型的消息和空消息，保留最新的消息
-            List<Message> filteredMessages = new ArrayList<>();
-            for (Message msg : dbMessages) {
-                // 忽略 SYSTEM 类型的消息
-                if (msg.getSenderType() == SenderType.SYSTEM) {
-                    continue;
+
+                if (batchMessages.isEmpty()) {
+                    break; // 没有更多消息了
                 }
-                
-                String text = msg.getText();
-                if (text == null || text.isEmpty()) {
-                    continue;
+
+                // 处理当前批次
+                for (Message msg : batchMessages) {
+                    // 遇到 SYSTEM 消息，停止收集之前的所有消息（包括本条 SYSTEM 及其之后的消息都不需要）
+                    // 题目要求：遇到 SYSTEM 就截止，只查 SYSTEM 之前的消息
+                    if (msg.getSenderType() == SenderType.SYSTEM) {
+                        stopCollecting = true;
+                        break;
+                    }
+
+
+                    if (msg.getSenderType()!=SenderType.AI_TOOL_REQUEST && (msg.getText() == null || msg.getText().isEmpty())) {
+                        continue;
+                    }
+
+                    candidateMessages.add(msg);
+
+                    // 计数逻辑：TOOL 消息不算 readCount
+                    if (msg.getSenderType() != SenderType.TOOL) {
+                        effectiveCount++;
+                    }
+                    
+                    // 检查是否满足 readCount
+                    // 注意：readCount = 0 时，需要一直往上读，直到遇到普通消息？
+                    // 题目要求："读取的时候readCount=0时需要往上再读直到碰到普通的消息"
+                    // 这句话理解为：如果 readCount > 0，则收集到 effectiveCount == readCount 为止。
+                    // 如果 readCount == 0 (或初始状态)，可能是指需要至少找到一条普通消息？
+                    // 但通常 readCount 是外部传入的期望获取的历史对话轮数。
+                    // 假设 readCount 是指 "非 Tool 类型的消息数量"。
+                    
+                    if (readCount > 0 && effectiveCount >= readCount) {
+                        stopCollecting = true;
+                        break;
+                    }
                 }
+
+                if (stopCollecting) {
+                    break;
+                }
+
+                pageNum++; // 继续下一页
                 
-                filteredMessages.add(msg);
-                
-                // 达到请求的数量后停止
-                if (filteredMessages.size() >= readCount) {
+                // 防止无限循环（比如数据库全是 TOOL 消息且没有 SYSTEM 消息）
+                if (pageNum > 20) { // 最多查 20 * 50 = 1000 条
+                    log.warn("历史消息查询超过深度限制，强制停止");
                     break;
                 }
             }
+
+            // 如果触发消息存在且符合条件，且不在结果中，需要添加进去？
+            // 之前的逻辑是这样的。现在的逻辑是按时间倒序查的。
+            // 如果触发消息在时间范围内，它应该已经被查到了。
+            // 如果触发消息是 SYSTEM，那它会触发截止。
             
-            // 反转列表，使其按时间正序排列（最老的在前，最新的在后）
-            java.util.Collections.reverse(filteredMessages);
+            // 反转列表，按时间正序排列
+            java.util.Collections.reverse(candidateMessages);
+            historyMessages = candidateMessages;
             
-            historyMessages = filteredMessages;
-            
-            log.debug("加载历史消息: sessionId={}, messageId={}, 请求条数={}, 实际条数={}", 
-                    sessionId, messageId, readCount, historyMessages.size());
+            log.debug("加载历史消息: sessionId={}, messageId={}, 请求readCount={}, 实际返回={}, 有效条数={}", 
+                    sessionId, messageId, readCount, historyMessages.size(), effectiveCount);
                     
         } catch (Exception e) {
             log.warn("加载历史消息失败: sessionId={}, messageId={}, error={}", 

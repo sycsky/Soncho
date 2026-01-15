@@ -288,6 +288,7 @@ public class ToolCallState {
     public static class ToolCallResult {
         private String toolCallId;   // 对应的调用ID
         private String toolName;     // 工具名称
+        private UUID toolId;         // 工具ID (Add this field)
         private boolean success;     // 是否成功
         private String result;       // 执行结果
         private String errorMessage; // 错误信息
@@ -302,6 +303,14 @@ public class ToolCallState {
             this.result = result;
             this.errorMessage = errorMessage;
             this.durationMs = durationMs;
+        }
+
+        public UUID getToolId() {
+            return toolId;
+        }
+
+        public void setToolId(UUID toolId) {
+            this.toolId = toolId;
         }
 
         public String getToolCallId() {

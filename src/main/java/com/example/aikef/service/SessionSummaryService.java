@@ -192,6 +192,8 @@ public class SessionSummaryService {
             case AGENT -> "客服";
             case AI -> "AI助手";
             case SYSTEM -> "系统";
+            case TOOL -> "工具";
+            case AI_TOOL_REQUEST -> "AI工具请求";
         };
     }
 
