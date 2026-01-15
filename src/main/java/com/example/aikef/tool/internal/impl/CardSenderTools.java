@@ -22,7 +22,8 @@ public class CardSenderTools {
 
     @Tool("Send product cards to the user. Supports multiple products or variants.")
     public String sendProductCard(
-            @P("Comma-separated list of Shopify Product IDs or Variant IDs (e.g. '12345,67890')") String ids) {
+            @P("Comma-separated list of Shopify Product IDs or Variant IDs (e.g. '12345,67890')") String ids,
+            @P("Recommendation text to explain why these products are recommended") String recommendation) {
         try {
             if (ids == null || ids.isBlank()) {
                 return "No product IDs provided.";
@@ -126,7 +127,13 @@ public class CardSenderTools {
                 return "Failed to fetch details for provided IDs.";
             }
 
-            String payload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(cards);
+            Map<String, Object> payloadMap = new HashMap<>();
+            payloadMap.put("products", cards);
+            if (recommendation != null && !recommendation.isBlank()) {
+                payloadMap.put("recommendation", recommendation);
+            }
+
+            String payload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(payloadMap);
             return "card#CARD_PRODUCT#" + payload;
 
         } catch (Exception e) {

@@ -351,8 +351,30 @@ public class OfficialChannelMessageService {
                         sb.append("🛍️ Product Recommendation\n");
                         sb.append("----------------\n");
                         
-                        // Check if it's a list (Combo Card) or single object
-                        if (cardData instanceof java.util.List) {
+                        // Handle new structure (Map with products and recommendation)
+                        if (cardData instanceof Map && ((Map)cardData).containsKey("products")) {
+                            Map<String, Object> dataMap = (Map<String, Object>) cardData;
+                            if (dataMap.containsKey("recommendation")) {
+                                String rec = (String) dataMap.get("recommendation");
+                                if (rec != null && !rec.isEmpty()) {
+                                    sb.append(rec).append("\n\n");
+                                }
+                            }
+                            
+                            Object productsObj = dataMap.get("products");
+                            if (productsObj instanceof java.util.List) {
+                                java.util.List<Map<String, Object>> products = (java.util.List<Map<String, Object>>) productsObj;
+                                for (int i = 0; i < products.size(); i++) {
+                                    Map<String, Object> p = products.get(i);
+                                    if (i > 0) sb.append("\n");
+                                    if (p.get("title") != null) sb.append(p.get("title")).append("\n");
+                                    if (p.get("price") != null) sb.append("Price: ").append(p.get("price")).append(" ").append(p.getOrDefault("currency", "")).append("\n");
+                                    if (p.get("url") != null) sb.append("Link: ").append(p.get("url")).append("\n");
+                                }
+                            }
+                        } 
+                        // Check if it's a list (Combo Card) or single object (Legacy)
+                        else if (cardData instanceof java.util.List) {
                             java.util.List<Map<String, Object>> products = (java.util.List<Map<String, Object>>) cardData;
                             for (int i = 0; i < products.size(); i++) {
                                 Map<String, Object> p = products.get(i);
