@@ -205,26 +205,16 @@ public class AgentNode extends BaseWorkflowNode {
 
     private void saveAiMessageToDatabase(WorkflowContext ctx, AiMessage aiMessage) {
         try {
+            // If the message has tool execution requests, we don't save it here as a separate message.
+            // It will be saved combined with the tool result in saveToolResultToDatabase.
+            if (aiMessage.hasToolExecutionRequests()) {
+                return;
+            }
+
             Message message = new Message();
             chatSessionRepository.findById(ctx.getSessionId()).ifPresent(message::setSession);
             
-            if (aiMessage.hasToolExecutionRequests()) {
-                message.setSenderType(SenderType.AI_TOOL_REQUEST);
-                List<Map<String, Object>> requests = new ArrayList<>();
-                for (ToolExecutionRequest req : aiMessage.toolExecutionRequests()) {
-                    Map<String, Object> reqMap = new HashMap<>();
-                    reqMap.put("id", req.id());
-                    reqMap.put("name", req.name());
-                    reqMap.put("arguments", req.arguments());
-                    requests.add(reqMap);
-                }
-                
-                Map<String, Object> toolData = new HashMap<>();
-                toolData.put("toolExecutionRequests", requests);
-                message.setToolCallData(toolData);
-            } else {
-                message.setSenderType(SenderType.AI);
-            }
+            message.setSenderType(SenderType.AI);
             
             message.setInternal(false);
             message.setText(aiMessage.text());
@@ -244,11 +234,17 @@ public class AgentNode extends BaseWorkflowNode {
             message.setText(request.name() + "#TOOL#" + resultText);
             
             Map<String, Object> toolData = new HashMap<>();
+            // Store request data
+            Map<String, Object> reqMap = new HashMap<>();
+            reqMap.put("id", request.id());
+            reqMap.put("name", request.name());
+            reqMap.put("arguments", request.arguments());
+            toolData.put("request", reqMap);
+
+            // Store result data
             toolData.put("toolName", request.name());
             toolData.put("toolCallId", request.id());
             toolData.put("success", !resultText.startsWith("Tool Execution Error"));
-            // AgentNode doesn't track duration as easily as LlmNode's processor result, 
-            // unless we refactor executeTool to return a rich object.
             
             message.setToolCallData(toolData);
             
@@ -274,7 +270,7 @@ public class AgentNode extends BaseWorkflowNode {
         if (useHistory && ctx.getSessionId() != null) {
             int readCount = config != null && config.has("readCount") ? config.get("readCount").asInt(10) : 10;
             if (readCount > 0) {
-                List<ChatMessage> historyMessages = loadHistoryFromDatabase(ctx.getSessionId(), readCount, ctx.getMessageId());
+                List<ChatMessage> historyMessages = historyMessageLoader.loadChatMessages(ctx.getSessionId(), readCount, ctx.getMessageId());
                 messages.addAll(historyMessages);
             }
         }
@@ -282,70 +278,6 @@ public class AgentNode extends BaseWorkflowNode {
 
 
         return messages;
-    }
-
-    private List<ChatMessage> loadHistoryFromDatabase(UUID sessionId, int readCount, UUID messageId) {
-        List<ChatMessage> historyMessages = new ArrayList<>();
-        List<Message> dbMessages = historyMessageLoader.loadHistoryMessages(sessionId, readCount, messageId);
-        
-        for (Message msg : dbMessages) {
-            if (msg.getSenderType() == SenderType.USER) {
-                historyMessages.add(UserMessage.from(msg.getText()));
-            } else if (msg.getSenderType() == SenderType.TOOL) {
-                String text = msg.getText();
-                String toolName = "UnknownTool";
-                String toolResult = text;
-                
-                if (text != null && text.contains("#TOOL#")) {
-                    String[] parts = text.split("#TOOL#", 2);
-                    if (parts.length >= 2) {
-                        toolName = parts[0];
-                        toolResult = parts[1];
-                    }
-                }
-                
-                String toolCallId = "unknown_call_id";
-                if (msg.getToolCallData() != null && msg.getToolCallData().containsKey("toolCallId")) {
-                    Object idObj = msg.getToolCallData().get("toolCallId");
-                    if (idObj != null) {
-                        toolCallId = idObj.toString();
-                    }
-                }
-                
-                historyMessages.add(ToolExecutionResultMessage.from(toolCallId, toolName, toolResult));
-            } else if (msg.getSenderType() == SenderType.AI_TOOL_REQUEST) {
-                if (msg.getToolCallData() != null && msg.getToolCallData().containsKey("toolExecutionRequests")) {
-                    List<ToolExecutionRequest> requests = new ArrayList<>();
-                    Object reqsObj = msg.getToolCallData().get("toolExecutionRequests");
-                    if (reqsObj instanceof List) {
-                        List<?> reqsList = (List<?>) reqsObj;
-                        for (Object r : reqsList) {
-                            if (r instanceof Map) {
-                                Map<?, ?> m = (Map<?, ?>) r;
-                                String id = (String) m.get("id");
-                                String name = (String) m.get("name");
-                                String args = (String) m.get("arguments");
-                                requests.add(ToolExecutionRequest.builder().id(id).name(name).arguments(args).build());
-                            }
-                        }
-                    }
-                    if (!requests.isEmpty()) {
-                        if (msg.getText() != null && !msg.getText().isEmpty()) {
-                            historyMessages.add(AiMessage.from(msg.getText(), requests));
-                        } else {
-                            historyMessages.add(AiMessage.from(requests));
-                        }
-                    } else {
-                        historyMessages.add(AiMessage.from(msg.getText()));
-                    }
-                } else {
-                    historyMessages.add(AiMessage.from(msg.getText()));
-                }
-            } else {
-                historyMessages.add(AiMessage.from(msg.getText()));
-            }
-        }
-        return historyMessages;
     }
 
     private List<UUID> getToolIds(JsonNode config) {
