@@ -103,13 +103,13 @@ public class HistoryMessageLoader {
                     }
 
 
-                    if (msg.getSenderType()!=SenderType.AI_TOOL_REQUEST && (msg.getText() == null || msg.getText().isEmpty())) {
+                    if (msg.getText() == null || msg.getText().isEmpty()) {
                         continue;
                     }
 
 
-                    // 计数逻辑：TOOL,AI_TOOL_REQUEST 消息不算 readCount
-                    if (msg.getSenderType() != SenderType.TOOL || msg.getSenderType() != SenderType.AI_TOOL_REQUEST) {
+                    // 计数逻辑：TOOL 消息不算 readCount
+                    if (msg.getSenderType() != SenderType.TOOL) {
                         readCount--;
                     }
 
@@ -156,6 +156,78 @@ public class HistoryMessageLoader {
                     sessionId, messageId, e.getMessage(), e);
         }
         
+        return historyMessages;
+    }
+
+    /**
+     * 加载历史消息并转换为 ChatMessage 格式
+     *
+     * @param sessionId 会话ID
+     * @param readCount 读取数量
+     * @param messageId 触发工作流的消息ID
+     * @return ChatMessage 列表
+     */
+    public List<dev.langchain4j.data.message.ChatMessage> loadChatMessages(UUID sessionId, int readCount, UUID messageId) {
+        List<dev.langchain4j.data.message.ChatMessage> historyMessages = new ArrayList<>();
+        List<Message> dbMessages = loadHistoryMessages(sessionId, readCount, messageId);
+
+        for (Message msg : dbMessages) {
+            if (msg.getSenderType() == SenderType.USER) {
+                historyMessages.add(dev.langchain4j.data.message.UserMessage.from(msg.getText()));
+            } else if (msg.getSenderType() == SenderType.TOOL) {
+                // Parse the merged TOOL message
+                String text = msg.getText();
+                String toolName = "UnknownTool";
+                String toolResult = text;
+
+                if (text != null && text.contains("#TOOL#")) {
+                    String[] parts = text.split("#TOOL#", 2);
+                    if (parts.length >= 2) {
+                        toolName = parts[0];
+                        toolResult = parts[1];
+                    }
+                }
+
+                String toolCallId = "unknown_call_id";
+                // Try to get ID from toolCallData
+                if (msg.getToolCallData() != null) {
+                    if (msg.getToolCallData().containsKey("toolCallId")) {
+                        Object idObj = msg.getToolCallData().get("toolCallId");
+                        if (idObj != null) toolCallId = idObj.toString();
+                    }
+
+                    // Reconstruct the ToolExecutionRequest (AI Message)
+                    if (msg.getToolCallData().containsKey("request")) {
+                        Object reqObj = msg.getToolCallData().get("request");
+                        if (reqObj instanceof java.util.Map) {
+                            java.util.Map<?, ?> reqMap = (java.util.Map<?, ?>) reqObj;
+                            String reqId = (String) reqMap.get("id");
+                            String reqName = (String) reqMap.get("name");
+                            String reqArgs = (String) reqMap.get("arguments");
+
+                            dev.langchain4j.agent.tool.ToolExecutionRequest request = dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                                    .id(reqId)
+                                    .name(reqName)
+                                    .arguments(reqArgs)
+                                    .build();
+
+                            historyMessages.add(dev.langchain4j.data.message.AiMessage.from(request));
+
+                            // Use the ID from request if available
+                            if (reqId != null) toolCallId = reqId;
+                            if (reqName != null) toolName = reqName;
+                        }
+                    }
+                }
+
+                // Add the Tool Result
+                historyMessages.add(dev.langchain4j.data.message.ToolExecutionResultMessage.from(toolCallId, toolName, toolResult));
+
+            } else {
+                // AGENT, AI 作为 assistant 消息
+                historyMessages.add(dev.langchain4j.data.message.AiMessage.from(msg.getText()));
+            }
+        }
         return historyMessages;
     }
 }
