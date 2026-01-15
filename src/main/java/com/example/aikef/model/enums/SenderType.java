@@ -4,5 +4,7 @@ public enum SenderType {
     USER,
     AGENT,
     AI,
-    SYSTEM
+    SYSTEM,
+    TOOL,
+    AI_TOOL_REQUEST
 }
