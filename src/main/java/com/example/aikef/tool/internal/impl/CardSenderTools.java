@@ -25,8 +25,7 @@ public class CardSenderTools {
     @Tool("Send product cards to the user. Supports multiple products or variants.")
     public String sendProductCard(
             @P("The Session ID") String sessionId,
-            @P("Comma-separated list of Shopify Product IDs or Variant IDs (e.g. '12345,67890')") String ids,
-            @P("Recommendation text to explain why these products are recommended") String recommendation) {
+            @P("Comma-separated list of Shopify Product IDs or Variant IDs (e.g. '12345,67890')") String ids) {
         try {
             if (ids == null || ids.isBlank()) {
                 return "No product IDs provided.";
@@ -132,9 +131,7 @@ public class CardSenderTools {
 
             Map<String, Object> payloadMap = new HashMap<>();
             payloadMap.put("products", cards);
-            if (recommendation != null && !recommendation.isBlank()) {
-                payloadMap.put("recommendation", recommendation);
-            }
+
 
             String payload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(payloadMap);
             String cardMessage = "card#CARD_PRODUCT#" + payload;
@@ -332,8 +329,8 @@ public class CardSenderTools {
         }
     }
 
-    @Tool("Search orders by email and send order cards to the user.")
-    public String sendOrderCardsByEmail(
+    @Tool("Search orders by email and display order cards in the chat.")
+    public String showAllOrdersByEmail(
             @P("The Session ID") String sessionId,
             @P("Customer email address") String email) {
         try {

@@ -2344,19 +2344,32 @@ public class ShopifyCustomerServiceTools {
             String finalMessage = cancellationMessage;
             
             // 13. 如果已付款，先执行退款（在取消订单之前）
-            if (isPaid) {
-                String captureGql = """
-                    mutation orderCapture($input: OrderCaptureInput!) {
-                      orderCapture(input: $input) {
-                        transaction {
+            // 注意：这里是进行部分退款（总金额 - 罚金），保留罚金部分
+            if (isPaid && refundAmount.compareTo(BigDecimal.ZERO) > 0) {
+                // 找到支付交易ID
+                String parentTransactionId = null;
+                JsonNode transactions = order.get("transactions");
+                if (transactions != null && transactions.isArray()) {
+                    for (JsonNode transaction : transactions) {
+                        String kind = transaction.get("kind").asText();
+                        String status = transaction.get("status").asText();
+                        if (("SALE".equals(kind) || "CAPTURE".equals(kind)) && "SUCCESS".equals(status)) {
+                            parentTransactionId = transaction.get("id").asText();
+                            break;
+                        }
+                    }
+                }
+                
+                if (parentTransactionId == null) {
+                    log.error("未找到支付交易，无法退款: orderNumber={}", orderNumber);
+                    return "Failed to find payment transaction. Cannot process refund.";
+                }
+
+                String refundGql = """
+                    mutation refundCreate($input: RefundInput!) {
+                      refundCreate(input: $input) {
+                        refund {
                           id
-                          status
-                          amountSet {
-                            shopMoney {
-                              amount
-                              currencyCode
-                            }
-                          }
                         }
                         userErrors {
                           field
@@ -2366,28 +2379,35 @@ public class ShopifyCustomerServiceTools {
                     }
                     """;
                 
-                Map<String, Object> captureInput = new HashMap<>();
-                captureInput.put("id", gid);
-                captureInput.put("amount", penaltyAmount.toString());
-                captureInput.put("currency", currencyCode);
+                Map<String, Object> transactionInput = new HashMap<>();
+                transactionInput.put("parentId", parentTransactionId);
+                transactionInput.put("amount", refundAmount.toString());
+                transactionInput.put("kind", "REFUND");
+                transactionInput.put("gateway", "manual");
+                transactionInput.put("orderId", gid);
+                
+                Map<String, Object> refundInput = new HashMap<>();
+                refundInput.put("orderId", gid);
+                refundInput.put("currency", currencyCode);
+                refundInput.put("transactions", List.of(transactionInput));
+                refundInput.put("notify", true);
+                refundInput.put("note", "Refunded " + refundAmount + " " + currencyCode + " (Penalty: " + penaltyPercentage + "%)");
                 
                 try {
-                    JsonNode captureResult = graphQLService.execute(captureGql, Map.of("input", captureInput));
-                    JsonNode captureErrors = captureResult.path("orderCapture").path("userErrors");
+                    JsonNode refundResult = graphQLService.execute(refundGql, Map.of("input", refundInput));
+                    JsonNode refundErrors = refundResult.path("refundCreate").path("userErrors");
                     
-                    if (captureErrors != null && captureErrors.isArray() && captureErrors.size() > 0) {
-                        String errorMsg = captureErrors.get(0).get("message").asText();
-                        log.error("捕获罚金失败: {}", captureErrors);
-                        return "Failed to capture penalty: " + errorMsg + 
-                               "\nPlease manually capture " + penaltyAmount + " " + currencyCode + " before cancelling.";
+                    if (refundErrors != null && refundErrors.isArray() && refundErrors.size() > 0) {
+                        String errorMsg = refundErrors.get(0).get("message").asText();
+                        log.error("退款失败: {}", refundErrors);
+                        return "Failed to process refund: " + errorMsg;
                     } else {
-                        finalMessage += "\n✅ Penalty captured: " + penaltyAmount + " " + currencyCode + " (" + penaltyPercentage + "%)";
-                        log.info("授权订单罚金捕获成功: orderNumber={}, penalty={} {}", orderNumber, penaltyAmount, currencyCode);
+                        finalMessage += "\n✅ Refund processed: " + refundAmount + " " + currencyCode;
+                        log.info("订单退款成功: orderNumber={}, refund={} {}", orderNumber, refundAmount, currencyCode);
                     }
-                } catch (Exception captureEx) {
-                    log.error("捕获授权金额失败", captureEx);
-                    return "Failed to capture penalty: " + captureEx.getMessage() + 
-                           "\nPlease manually capture " + penaltyAmount + " " + currencyCode + " before cancelling.";
+                } catch (Exception refundEx) {
+                    log.error("退款执行失败", refundEx);
+                    return "Failed to process refund: " + refundEx.getMessage();
                 }
             }
             
