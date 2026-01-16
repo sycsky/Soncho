@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -175,7 +176,62 @@ public class HistoryMessageLoader {
             if (msg.getSenderType() == SenderType.USER) {
                 historyMessages.add(dev.langchain4j.data.message.UserMessage.from(msg.getText()));
             } else if (msg.getSenderType() == SenderType.TOOL) {
-                // Parse the merged TOOL message
+                Map<String, Object> toolCallData = msg.getToolCallData();
+                if (toolCallData != null && toolCallData.containsKey("aiMessage")) {
+                    Object aiObj = toolCallData.get("aiMessage");
+                    if (aiObj instanceof Map<?, ?> aiMapRaw) {
+                        String aiText = toStringOrNull(aiMapRaw.get("text"));
+                        String aiThinking = toStringOrNull(aiMapRaw.get("thinking"));
+
+                        List<dev.langchain4j.agent.tool.ToolExecutionRequest> requests = new ArrayList<>();
+                        Object reqsObj = aiMapRaw.get("requests");
+                        if (reqsObj instanceof List<?> reqListRaw) {
+                            for (Object reqItem : reqListRaw) {
+                                if (reqItem instanceof Map<?, ?> reqMapRaw) {
+                                    String reqId = toStringOrNull(reqMapRaw.get("id"));
+                                    String reqName = toStringOrNull(reqMapRaw.get("name"));
+                                    String reqArgs = toStringOrNull(reqMapRaw.get("arguments"));
+                                    if (reqId == null || reqName == null) {
+                                        continue;
+                                    }
+                                    requests.add(dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                                            .id(reqId)
+                                            .name(reqName)
+                                            .arguments(reqArgs)
+                                            .build());
+                                }
+                            }
+                        }
+
+                        dev.langchain4j.data.message.AiMessage.Builder aiBuilder = dev.langchain4j.data.message.AiMessage.builder()
+                                .text(aiText)
+                                .toolExecutionRequests(requests);
+                        if (aiThinking != null) {
+                            aiBuilder.thinking(aiThinking);
+                        }
+                        historyMessages.add(aiBuilder.build());
+
+                        Object resultsObj = toolCallData.get("results");
+                        if (resultsObj instanceof List<?> resultsListRaw) {
+                            for (Object resItem : resultsListRaw) {
+                                if (resItem instanceof Map<?, ?> resMapRaw) {
+                                    String toolCallId = toStringOrNull(resMapRaw.get("toolCallId"));
+                                    String toolName = toStringOrNull(resMapRaw.get("toolName"));
+                                    String toolResult = toStringOrNull(resMapRaw.get("result"));
+                                    if (toolCallId != null && toolName != null) {
+                                        historyMessages.add(dev.langchain4j.data.message.ToolExecutionResultMessage.from(
+                                                toolCallId,
+                                                toolName,
+                                                toolResult != null ? toolResult : ""
+                                        ));
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                }
+
                 String text = msg.getText();
                 String toolName = "UnknownTool";
                 String toolResult = text;
@@ -189,16 +245,14 @@ public class HistoryMessageLoader {
                 }
 
                 String toolCallId = "unknown_call_id";
-                // Try to get ID from toolCallData
-                if (msg.getToolCallData() != null) {
-                    if (msg.getToolCallData().containsKey("toolCallId")) {
-                        Object idObj = msg.getToolCallData().get("toolCallId");
+                if (toolCallData != null) {
+                    if (toolCallData.containsKey("toolCallId")) {
+                        Object idObj = toolCallData.get("toolCallId");
                         if (idObj != null) toolCallId = idObj.toString();
                     }
 
-                    // Reconstruct the ToolExecutionRequest (AI Message)
-                    if (msg.getToolCallData().containsKey("request")) {
-                        Object reqObj = msg.getToolCallData().get("request");
+                    if (toolCallData.containsKey("request")) {
+                        Object reqObj = toolCallData.get("request");
                         if (reqObj instanceof java.util.Map) {
                             java.util.Map<?, ?> reqMap = (java.util.Map<?, ?>) reqObj;
                             String reqId = (String) reqMap.get("id");
@@ -213,22 +267,37 @@ public class HistoryMessageLoader {
 
                             historyMessages.add(dev.langchain4j.data.message.AiMessage.from(request));
 
-                            // Use the ID from request if available
                             if (reqId != null) toolCallId = reqId;
                             if (reqName != null) toolName = reqName;
                         }
                     }
                 }
 
-                // Add the Tool Result
                 historyMessages.add(dev.langchain4j.data.message.ToolExecutionResultMessage.from(toolCallId, toolName, toolResult));
 
             } else {
-                // AGENT, AI 作为 assistant 消息
-                historyMessages.add(dev.langchain4j.data.message.AiMessage.from(msg.getText()));
+                String thinking = msg.getToolCallData() != null ? toStringOrNull(msg.getToolCallData().get("thinking")) : null;
+                if (thinking != null) {
+                    historyMessages.add(dev.langchain4j.data.message.AiMessage.builder()
+                            .text(msg.getText())
+                            .thinking(thinking)
+                            .build());
+                } else {
+                    historyMessages.add(dev.langchain4j.data.message.AiMessage.from(msg.getText()));
+                }
             }
         }
         return historyMessages;
     }
-}
 
+    private static String toStringOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String s = value.toString();
+        if (s.isBlank()) {
+            return null;
+        }
+        return s;
+    }
+}
