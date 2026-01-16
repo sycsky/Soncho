@@ -114,12 +114,41 @@ public class SupplyChainTools {
                 .collect(Collectors.toList());
     }
 
+    @Tool("Get supply order details including items")
+    public PurchaseOrderDetailDto getSupplyOrderDetails(
+            @P(value = "Order ID", required = true) String orderId
+    ) {
+        PurchaseOrder order = purchaseOrderService.getOrderDetails(orderId);
+        
+        List<OrderItemDto> items = order.getItems().stream()
+                .map(item -> new OrderItemDto(
+                        item.getId().toString(),
+                        item.getProductName(),
+                        item.getQuantityRequested(),
+                        item.getQuantityShipped(),
+                        item.getQuantityReceived(),
+                        item.getUnitPrice(),
+                        item.getTotalAmount()
+                ))
+                .collect(Collectors.toList());
+
+        return new PurchaseOrderDetailDto(
+                order.getId(),
+                order.getStatus(),
+                order.getTotalAmount(),
+                order.getInitiator().getName(),
+                order.getSupplier().getName(),
+                items
+        );
+    }
+
+
     @Tool("Get purchase order details including items")
     public PurchaseOrderDetailDto getPurchaseOrderDetails(
             @P(value = "Order ID", required = true) String orderId
     ) {
         PurchaseOrder order = purchaseOrderService.getOrderDetails(orderId);
-        
+
         List<OrderItemDto> items = order.getItems().stream()
                 .map(item -> new OrderItemDto(
                         item.getId().toString(),
