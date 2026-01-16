@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -220,15 +222,29 @@ public class PurchaseOrderService {
     }
 
     public void triggerEventForCustomer(UUID customerId, String eventName, Map<String, Object> data) {
-        try {
-            ChatSession session = chatSessionRepository.findFirstByCustomer_IdOrderByLastActiveAtDesc(customerId);
-            if (session != null) {
-                eventService.triggerEventAsync(eventName, session.getId(), data);
-            } else {
-                log.warn("No active session found for customer {}, cannot trigger event {}", customerId, eventName);
+        Runnable task = () -> {
+            try {
+                ChatSession session = chatSessionRepository.findFirstByCustomer_IdOrderByLastActiveAtDesc(customerId);
+                if (session != null) {
+                    eventService.triggerEventAsync(eventName, session.getId(), data);
+                } else {
+                    log.warn("No active session found for customer {}, cannot trigger event {}", customerId, eventName);
+                }
+            } catch (Exception e) {
+                log.error("Failed to trigger event {} for customer {}", eventName, customerId, e);
             }
-        } catch (Exception e) {
-            log.error("Failed to trigger event {} for customer {}", eventName, customerId, e);
+        };
+
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    task.run();
+                }
+            });
+            return;
         }
+
+        task.run();
     }
 }
