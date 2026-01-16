@@ -11,6 +11,7 @@ import com.example.aikef.workflow.context.WorkflowContext;
 import com.example.aikef.workflow.exception.WorkflowPausedException;
 import com.example.aikef.workflow.tool.ToolCallProcessor;
 import com.example.aikef.workflow.tool.ToolCallState;
+import com.example.aikef.workflow.util.ChatResponseThinkingExtractor;
 import com.example.aikef.workflow.util.HistoryMessageLoader;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -115,32 +116,30 @@ public class AgentNode extends BaseWorkflowNode {
 
                 // Call LLM
                 ChatResponse response = langChainChatService.chatWithTools(modelId, messages, toolSpecs, temperature, null);
-                AiMessage aiMessage = response.aiMessage();
+                AiMessage aiMessage = ChatResponseThinkingExtractor.enrichAiMessage(response, objectMapper);
                 messages.add(aiMessage); // Add AI response to history
 
 
 
                 if (aiMessage.hasToolExecutionRequests()) {
-                    // Save AI message to database (to support history)
-                    saveAiMessageToDatabase(ctx, aiMessage);
                     // Execute Tools
                     List<ToolExecutionRequest> requests = aiMessage.toolExecutionRequests();
                     log.info("Agent decided to call tools: {}", requests.size());
 
+                    List<ToolExecutionOutcome> outcomes = new ArrayList<>();
                     for (ToolExecutionRequest request : requests) {
                         log.info("Executing tool: {}", request.name());
 
                         ctx.setVariable(request.name()+"_ex", 1);
                         // Execute directly (simplified for autonomous agent)
                         // Note: Real Agent might need state management for parameters, but here we assume LLM provides args
-                        String result = executeTool(request, ctx);
+                        ToolExecutionOutcome outcome = executeTool(request, ctx);
+                        outcomes.add(outcome);
                         
                         // Add Result to history
-                        messages.add(ToolExecutionResultMessage.from(request, result));
-
-                        // Save tool result to database
-                        saveToolResultToDatabase(ctx, request, result);
+                        messages.add(ToolExecutionResultMessage.from(request, outcome.resultText()));
                     }
+                    saveToolBatchToDatabase(ctx, aiMessage, requests, outcomes);
                     // Loop continues with new history
                 } else {
                     // No tools, just text -> Final Answer
@@ -163,7 +162,10 @@ public class AgentNode extends BaseWorkflowNode {
         }
     }
 
-    private String executeTool(ToolExecutionRequest request, WorkflowContext ctx) {
+    private record ToolExecutionOutcome(boolean success, String resultText, String errorMessage) {
+    }
+
+    private ToolExecutionOutcome executeTool(ToolExecutionRequest request, WorkflowContext ctx) {
         try {
             String toolName = request.name();
             UUID toolId = toolCallProcessor.getToolIdByName(toolName);
@@ -193,13 +195,12 @@ public class AgentNode extends BaseWorkflowNode {
             );
             
             if (result.isSuccess()) {
-                return result.getResult().getResult();
-            } else {
-                return "Tool Execution Failed: " + result.getErrorMessage();
+                return new ToolExecutionOutcome(true, result.getResult().getResult(), null);
             }
+            return new ToolExecutionOutcome(false, "Tool Execution Failed: " + result.getErrorMessage(), result.getErrorMessage());
         } catch (Exception e) {
             log.error("Tool execution error", e);
-            return "Tool Execution Error: " + e.getMessage();
+            return new ToolExecutionOutcome(false, "Tool Execution Error: " + e.getMessage(), e.getMessage());
         }
     }
 
@@ -218,6 +219,11 @@ public class AgentNode extends BaseWorkflowNode {
             
             message.setInternal(false);
             message.setText(aiMessage.text());
+            if (StringUtils.hasText(aiMessage.thinking())) {
+                Map<String, Object> toolData = new HashMap<>();
+                toolData.put("thinking", aiMessage.thinking());
+                message.setToolCallData(toolData);
+            }
             
             messageRepository.save(message);
         } catch (Exception e) {
@@ -225,27 +231,60 @@ public class AgentNode extends BaseWorkflowNode {
         }
     }
 
-    private void saveToolResultToDatabase(WorkflowContext ctx, ToolExecutionRequest request, String resultText) {
+    private void saveToolBatchToDatabase(
+            WorkflowContext ctx,
+            AiMessage aiMessage,
+            List<ToolExecutionRequest> requests,
+            List<ToolExecutionOutcome> outcomes) {
         try {
             Message message = new Message();
             chatSessionRepository.findById(ctx.getSessionId()).ifPresent(message::setSession);
             message.setSenderType(SenderType.TOOL);
             message.setInternal(false);
-            message.setText(request.name() + "#TOOL#" + resultText);
-            
-            Map<String, Object> toolData = new HashMap<>();
-            // Store request data
-            Map<String, Object> reqMap = new HashMap<>();
-            reqMap.put("id", request.id());
-            reqMap.put("name", request.name());
-            reqMap.put("arguments", request.arguments());
-            toolData.put("request", reqMap);
 
-            // Store result data
-            toolData.put("toolName", request.name());
-            toolData.put("toolCallId", request.id());
-            toolData.put("success", !resultText.startsWith("Tool Execution Error"));
-            
+            message.setText("TOOL_BATCH");
+
+            Map<String, Object> toolData = new HashMap<>();
+            toolData.put("schemaVersion", 2);
+
+            Map<String, Object> aiMap = new HashMap<>();
+            aiMap.put("text", aiMessage.text());
+            if (StringUtils.hasText(aiMessage.thinking())) {
+                aiMap.put("thinking", aiMessage.thinking());
+            }
+
+            List<Map<String, Object>> reqList = new ArrayList<>();
+            if (requests != null) {
+                for (ToolExecutionRequest request : requests) {
+                    Map<String, Object> reqMap = new HashMap<>();
+                    reqMap.put("id", request.id());
+                    reqMap.put("name", request.name());
+                    reqMap.put("arguments", request.arguments());
+                    reqList.add(reqMap);
+                }
+            }
+            aiMap.put("requests", reqList);
+            toolData.put("aiMessage", aiMap);
+
+            List<Map<String, Object>> resultList = new ArrayList<>();
+            if (requests != null && outcomes != null) {
+                int size = Math.min(requests.size(), outcomes.size());
+                for (int i = 0; i < size; i++) {
+                    ToolExecutionRequest request = requests.get(i);
+                    ToolExecutionOutcome outcome = outcomes.get(i);
+                    Map<String, Object> resMap = new HashMap<>();
+                    resMap.put("toolCallId", request.id());
+                    resMap.put("toolName", request.name());
+                    resMap.put("success", outcome.success());
+                    resMap.put("result", outcome.resultText());
+                    if (outcome.errorMessage() != null) {
+                        resMap.put("error", outcome.errorMessage());
+                    }
+                    resultList.add(resMap);
+                }
+            }
+            toolData.put("results", resultList);
+
             message.setToolCallData(toolData);
             
             messageRepository.save(message);
