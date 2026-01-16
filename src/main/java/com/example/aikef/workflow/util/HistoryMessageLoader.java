@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -103,13 +104,13 @@ public class HistoryMessageLoader {
                     }
 
 
-                    if (msg.getSenderType()!=SenderType.AI_TOOL_REQUEST && (msg.getText() == null || msg.getText().isEmpty())) {
+                    if (msg.getText() == null || msg.getText().isEmpty()) {
                         continue;
                     }
 
 
-                    // 计数逻辑：TOOL,AI_TOOL_REQUEST 消息不算 readCount
-                    if (msg.getSenderType() != SenderType.TOOL || msg.getSenderType() != SenderType.AI_TOOL_REQUEST) {
+                    // 计数逻辑：TOOL 消息不算 readCount
+                    if (msg.getSenderType() != SenderType.TOOL) {
                         readCount--;
                     }
 
@@ -158,5 +159,145 @@ public class HistoryMessageLoader {
         
         return historyMessages;
     }
-}
 
+    /**
+     * 加载历史消息并转换为 ChatMessage 格式
+     *
+     * @param sessionId 会话ID
+     * @param readCount 读取数量
+     * @param messageId 触发工作流的消息ID
+     * @return ChatMessage 列表
+     */
+    public List<dev.langchain4j.data.message.ChatMessage> loadChatMessages(UUID sessionId, int readCount, UUID messageId) {
+        List<dev.langchain4j.data.message.ChatMessage> historyMessages = new ArrayList<>();
+        List<Message> dbMessages = loadHistoryMessages(sessionId, readCount, messageId);
+
+        for (Message msg : dbMessages) {
+            if (msg.getSenderType() == SenderType.USER) {
+                historyMessages.add(dev.langchain4j.data.message.UserMessage.from(msg.getText()));
+            } else if (msg.getSenderType() == SenderType.TOOL) {
+                Map<String, Object> toolCallData = msg.getToolCallData();
+                if (toolCallData != null && toolCallData.containsKey("aiMessage")) {
+                    Object aiObj = toolCallData.get("aiMessage");
+                    if (aiObj instanceof Map<?, ?> aiMapRaw) {
+                        String aiText = toStringOrNull(aiMapRaw.get("text"));
+                        String aiThinking = toStringOrNull(aiMapRaw.get("thinking"));
+
+                        List<dev.langchain4j.agent.tool.ToolExecutionRequest> requests = new ArrayList<>();
+                        Object reqsObj = aiMapRaw.get("requests");
+                        if (reqsObj instanceof List<?> reqListRaw) {
+                            for (Object reqItem : reqListRaw) {
+                                if (reqItem instanceof Map<?, ?> reqMapRaw) {
+                                    String reqId = toStringOrNull(reqMapRaw.get("id"));
+                                    String reqName = toStringOrNull(reqMapRaw.get("name"));
+                                    String reqArgs = toStringOrNull(reqMapRaw.get("arguments"));
+                                    if (reqId == null || reqName == null) {
+                                        continue;
+                                    }
+                                    requests.add(dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                                            .id(reqId)
+                                            .name(reqName)
+                                            .arguments(reqArgs)
+                                            .build());
+                                }
+                            }
+                        }
+
+                        dev.langchain4j.data.message.AiMessage.Builder aiBuilder = dev.langchain4j.data.message.AiMessage.builder()
+                                .text(aiText)
+                                .toolExecutionRequests(requests);
+                        if (aiThinking != null) {
+                            aiBuilder.thinking(aiThinking);
+                        }
+                        historyMessages.add(aiBuilder.build());
+
+                        Object resultsObj = toolCallData.get("results");
+                        if (resultsObj instanceof List<?> resultsListRaw) {
+                            for (Object resItem : resultsListRaw) {
+                                if (resItem instanceof Map<?, ?> resMapRaw) {
+                                    String toolCallId = toStringOrNull(resMapRaw.get("toolCallId"));
+                                    String toolName = toStringOrNull(resMapRaw.get("toolName"));
+                                    String toolResult = toStringOrNull(resMapRaw.get("result"));
+                                    if (toolCallId != null && toolName != null) {
+                                        historyMessages.add(dev.langchain4j.data.message.ToolExecutionResultMessage.from(
+                                                toolCallId,
+                                                toolName,
+                                                toolResult != null ? toolResult : ""
+                                        ));
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                }
+
+                String text = msg.getText();
+                String toolName = "UnknownTool";
+                String toolResult = text;
+
+                if (text != null && text.contains("#TOOL#")) {
+                    String[] parts = text.split("#TOOL#", 2);
+                    if (parts.length >= 2) {
+                        toolName = parts[0];
+                        toolResult = parts[1];
+                    }
+                }
+
+                String toolCallId = "unknown_call_id";
+                if (toolCallData != null) {
+                    if (toolCallData.containsKey("toolCallId")) {
+                        Object idObj = toolCallData.get("toolCallId");
+                        if (idObj != null) toolCallId = idObj.toString();
+                    }
+
+                    if (toolCallData.containsKey("request")) {
+                        Object reqObj = toolCallData.get("request");
+                        if (reqObj instanceof java.util.Map) {
+                            java.util.Map<?, ?> reqMap = (java.util.Map<?, ?>) reqObj;
+                            String reqId = (String) reqMap.get("id");
+                            String reqName = (String) reqMap.get("name");
+                            String reqArgs = (String) reqMap.get("arguments");
+
+                            dev.langchain4j.agent.tool.ToolExecutionRequest request = dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                                    .id(reqId)
+                                    .name(reqName)
+                                    .arguments(reqArgs)
+                                    .build();
+
+                            historyMessages.add(dev.langchain4j.data.message.AiMessage.from(request));
+
+                            if (reqId != null) toolCallId = reqId;
+                            if (reqName != null) toolName = reqName;
+                        }
+                    }
+                }
+
+                historyMessages.add(dev.langchain4j.data.message.ToolExecutionResultMessage.from(toolCallId, toolName, toolResult));
+
+            } else {
+                String thinking = msg.getToolCallData() != null ? toStringOrNull(msg.getToolCallData().get("thinking")) : null;
+                if (thinking != null) {
+                    historyMessages.add(dev.langchain4j.data.message.AiMessage.builder()
+                            .text(msg.getText())
+                            .thinking(thinking)
+                            .build());
+                } else {
+                    historyMessages.add(dev.langchain4j.data.message.AiMessage.from(msg.getText()));
+                }
+            }
+        }
+        return historyMessages;
+    }
+
+    private static String toStringOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String s = value.toString();
+        if (s.isBlank()) {
+            return null;
+        }
+        return s;
+    }
+}

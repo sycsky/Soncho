@@ -13,6 +13,7 @@ import com.example.aikef.workflow.service.WorkflowPauseService;
 import com.example.aikef.workflow.tool.ToolCallProcessor;
 import com.example.aikef.workflow.tool.ToolCallState;
 import com.example.aikef.workflow.util.HistoryMessageLoader;
+import com.example.aikef.workflow.util.ChatResponseThinkingExtractor;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -168,7 +169,7 @@ public class LlmNode extends BaseWorkflowNode {
 
         UUID modelId = parseModelId(modelIdStr);
         ChatResponse response = langChainChatService.chatWithTools(modelId, messages, toolSpecs, temperature, maxTokens);
-        AiMessage aiMessage = response.aiMessage();
+        AiMessage aiMessage = ChatResponseThinkingExtractor.enrichAiMessage(response, objectMapper);
 
         log.info("LLM 响应: hasToolExecutionRequests={}, text={}", 
                 aiMessage.hasToolExecutionRequests(),
@@ -208,7 +209,7 @@ public class LlmNode extends BaseWorkflowNode {
         ToolCallState toolState = ctx.getOrCreateToolCallState();
         toolState.setStatus(ToolCallState.Status.TOOL_CALL_DETECTED);
         toolState.setLlmMessageWithToolCall(aiMessage.text());
-        
+
         // 清空旧结果
         toolState.getCompletedResults().clear();
 
@@ -254,9 +255,9 @@ public class LlmNode extends BaseWorkflowNode {
                 toolState.addResult(failedResult);
             }
         }
-        
+
         // 所有工具调用都完成了，将结果发送回 LLM
-        sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime);
+    sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime, toolRequests, aiMessage);
     }
 
 
@@ -296,7 +297,9 @@ public class LlmNode extends BaseWorkflowNode {
             List<ChatMessage> originalMessages,
             List<ToolSpecification> toolSpecs,
             String modelIdStr,
-            long startTime) {
+            long startTime,
+            List<ToolExecutionRequest> originalRequests,
+            AiMessage aiMessage) {
 
         try {
             ToolCallState toolState = ctx.getToolCallState();
@@ -318,22 +321,30 @@ public class LlmNode extends BaseWorkflowNode {
 
                 messages.add(resultMessage);
 
-                // 保存工具执行结果到数据库
-                saveToolResultToDatabase(ctx, result, result.getToolName());
+                // Find matching request
+                ToolExecutionRequest matchingRequest = null;
+                if (originalRequests != null) {
+                    for (ToolExecutionRequest req : originalRequests) {
+                        if (Objects.equals(req.id(), result.getToolCallId())) {
+                            matchingRequest = req;
+                            break;
+                        }
+                    }
+                }
 
                 ctx.setVariable(result.getToolName()+"_ex", 1);
-                
+
                 UUID toolId = result.getToolId();
                 if (toolId == null) {
                     // Fallback to state if result doesn't have it (should have it)
                     toolId = toolState.getToolId();
                 }
-                
+
                 AiTool tool = null;
                 if (toolId != null) {
                     tool = aiToolService.getTool(toolId).orElse(null);
                 }
-                
+
                 String toolName = result.getToolName();
                 String resultDescription = tool != null ? tool.getResultDescription() : null;
                 String resultMetadata = tool != null ? tool.getResultMetadata() : null;
@@ -368,9 +379,10 @@ public class LlmNode extends BaseWorkflowNode {
             }
 
 
+            saveToolBatchToDatabase(ctx, aiMessage, originalRequests, toolState.getCompletedResults());
 
-            // 所有工具调用都已完成，重置工具状态
-            toolState.reset();
+
+            setOutput(finalReply);
 
             setOutput(finalReply);
             recordExecution(buildInputInfo(messages), finalReply, startTime, true, null);
@@ -385,31 +397,61 @@ public class LlmNode extends BaseWorkflowNode {
         }
     }
 
-    private void saveToolResultToDatabase(WorkflowContext ctx, ToolCallState.ToolCallResult result, String toolName) {
+    private void saveToolBatchToDatabase(
+            WorkflowContext ctx,
+            AiMessage aiMessage,
+            List<ToolExecutionRequest> requests,
+            List<ToolCallState.ToolCallResult> results) {
         try {
             Message message = new Message();
             chatSessionRepository.findById(ctx.getSessionId()).ifPresent(message::setSession);
             message.setSenderType(SenderType.TOOL);
             message.setInternal(false);
-            
-            // 工具执行结果通常作为文本存储
-            // 如果结果是 JSON，也可以存储在 text 字段，或者额外字段
-            String resultText = toolName + "#TOOL#" + (result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage());
-            message.setText(resultText);
-            
-            // 存储工具元数据
+
+            message.setText("TOOL_BATCH");
+
             Map<String, Object> toolData = new HashMap<>();
-            toolData.put("toolName", toolName);
-            toolData.put("toolCallId", result.getToolCallId());
-            toolData.put("success", result.isSuccess());
-            toolData.put("durationMs", result.getDurationMs());
-            if (result.getErrorMessage() != null) {
-                toolData.put("error", result.getErrorMessage());
+            toolData.put("schemaVersion", 2);
+
+            Map<String, Object> aiMap = new HashMap<>();
+            aiMap.put("text", aiMessage != null ? aiMessage.text() : null);
+            if (aiMessage != null && StringUtils.hasText(aiMessage.thinking())) {
+                aiMap.put("thinking", aiMessage.thinking());
             }
+
+            List<Map<String, Object>> reqList = new ArrayList<>();
+            if (requests != null) {
+                for (ToolExecutionRequest request : requests) {
+                    Map<String, Object> reqMap = new HashMap<>();
+                    reqMap.put("id", request.id());
+                    reqMap.put("name", request.name());
+                    reqMap.put("arguments", request.arguments());
+                    reqList.add(reqMap);
+                }
+            }
+            aiMap.put("requests", reqList);
+            toolData.put("aiMessage", aiMap);
+
+            List<Map<String, Object>> resultList = new ArrayList<>();
+            if (results != null) {
+                for (ToolCallState.ToolCallResult result : results) {
+                    Map<String, Object> resMap = new HashMap<>();
+                    resMap.put("toolCallId", result.getToolCallId());
+                    resMap.put("toolName", result.getToolName());
+                    resMap.put("success", result.isSuccess());
+                    resMap.put("durationMs", result.getDurationMs());
+                    String resultText = result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage();
+                    resMap.put("result", resultText);
+                    if (result.getErrorMessage() != null) {
+                        resMap.put("error", result.getErrorMessage());
+                    }
+                    resultList.add(resMap);
+                }
+            }
+            toolData.put("results", resultList);
             message.setToolCallData(toolData);
-            
+
             messageRepository.save(message);
-            log.debug("保存工具执行结果到数据库: toolName={}, messageId={}", toolName, message.getId());
         } catch (Exception e) {
             log.error("保存工具执行结果失败", e);
         }
@@ -528,7 +570,7 @@ public class LlmNode extends BaseWorkflowNode {
                 }
                 
                 if (readCount > 0) {
-                    List<ChatMessage> historyMessages = loadHistoryFromDatabase(
+                    List<ChatMessage> historyMessages = historyMessageLoader.loadChatMessages(
                             ctx.getSessionId(), readCount, ctx.getMessageId());
                     messages.addAll(historyMessages);
                     log.debug("从数据库加载了 {} 条历史消息", historyMessages.size());
@@ -647,35 +689,6 @@ public class LlmNode extends BaseWorkflowNode {
         log.debug("已添加工具调用引导提示词，工具数量: {}", toolSpecs.size());
     }
     
-    /**
-     * 从数据库加载会话历史消息
-     * 忽略 SYSTEM 类型的消息
-     * 
-     * @param sessionId 会话ID
-     * @param readCount 读取条数（排除 SYSTEM 消息后的数量）
-     * @param messageId 触发工作流的消息ID（可为null，用于时间过滤）
-     * @return 历史消息列表（按时间正序）
-     */
-    private List<ChatMessage> loadHistoryFromDatabase(UUID sessionId, int readCount, UUID messageId) {
-        List<ChatMessage> historyMessages = new ArrayList<>();
-        
-        // 使用公共的历史消息加载器
-        List<Message> dbMessages = historyMessageLoader.loadHistoryMessages(sessionId, readCount, messageId);
-        
-        // 转换为 ChatMessage 格式
-        for (Message msg : dbMessages) {
-            // SenderType.USER 为用户消息，其他为客服/AI消息
-            if (msg.getSenderType() == SenderType.USER) {
-                historyMessages.add(UserMessage.from(msg.getText()));
-            } else {
-                // AGENT, AI 作为 assistant 消息
-                historyMessages.add(AiMessage.from(msg.getText()));
-            }
-        }
-        
-        return historyMessages;
-    }
-
     /**
      * 获取绑定的工具ID列表
      */
