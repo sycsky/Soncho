@@ -13,6 +13,7 @@ import com.example.aikef.workflow.service.WorkflowPauseService;
 import com.example.aikef.workflow.tool.ToolCallProcessor;
 import com.example.aikef.workflow.tool.ToolCallState;
 import com.example.aikef.workflow.util.HistoryMessageLoader;
+import com.example.aikef.workflow.util.ChatResponseThinkingExtractor;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -168,7 +169,7 @@ public class LlmNode extends BaseWorkflowNode {
 
         UUID modelId = parseModelId(modelIdStr);
         ChatResponse response = langChainChatService.chatWithTools(modelId, messages, toolSpecs, temperature, maxTokens);
-        AiMessage aiMessage = response.aiMessage();
+        AiMessage aiMessage = ChatResponseThinkingExtractor.enrichAiMessage(response, objectMapper);
 
         log.info("LLM 响应: hasToolExecutionRequests={}, text={}", 
                 aiMessage.hasToolExecutionRequests(),
@@ -256,7 +257,7 @@ public class LlmNode extends BaseWorkflowNode {
         }
 
         // 所有工具调用都完成了，将结果发送回 LLM
-        sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime, toolRequests);
+    sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime, toolRequests, aiMessage);
     }
 
 
@@ -297,7 +298,8 @@ public class LlmNode extends BaseWorkflowNode {
             List<ToolSpecification> toolSpecs,
             String modelIdStr,
             long startTime,
-            List<ToolExecutionRequest> originalRequests) {
+            List<ToolExecutionRequest> originalRequests,
+            AiMessage aiMessage) {
 
         try {
             ToolCallState toolState = ctx.getToolCallState();
@@ -329,9 +331,6 @@ public class LlmNode extends BaseWorkflowNode {
                         }
                     }
                 }
-
-                // 保存工具执行结果到数据库
-                saveToolResultToDatabase(ctx, result, result.getToolName(), matchingRequest);
 
                 ctx.setVariable(result.getToolName()+"_ex", 1);
 
@@ -381,9 +380,10 @@ public class LlmNode extends BaseWorkflowNode {
             }
 
 
+            saveToolBatchToDatabase(ctx, aiMessage, originalRequests, toolState.getCompletedResults());
 
-            // 所有工具调用都已完成，重置工具状态
-            toolState.reset();
+
+            setOutput(finalReply);
 
             setOutput(finalReply);
             recordExecution(buildInputInfo(messages), finalReply, startTime, true, null);
@@ -398,40 +398,61 @@ public class LlmNode extends BaseWorkflowNode {
         }
     }
 
-    private void saveToolResultToDatabase(WorkflowContext ctx, ToolCallState.ToolCallResult result, String toolName, ToolExecutionRequest request) {
+    private void saveToolBatchToDatabase(
+            WorkflowContext ctx,
+            AiMessage aiMessage,
+            List<ToolExecutionRequest> requests,
+            List<ToolCallState.ToolCallResult> results) {
         try {
             Message message = new Message();
             chatSessionRepository.findById(ctx.getSessionId()).ifPresent(message::setSession);
             message.setSenderType(SenderType.TOOL);
             message.setInternal(false);
 
-            // 工具执行结果通常作为文本存储
-            String resultText = toolName + "#TOOL#" + (result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage());
-            message.setText(resultText);
+            message.setText("TOOL_BATCH");
 
-            // 存储工具元数据
             Map<String, Object> toolData = new HashMap<>();
-            
-            // Store request data
-            if (request != null) {
-                Map<String, Object> reqMap = new HashMap<>();
-                reqMap.put("id", request.id());
-                reqMap.put("name", request.name());
-                reqMap.put("arguments", request.arguments());
-                toolData.put("request", reqMap);
+            toolData.put("schemaVersion", 2);
+
+            Map<String, Object> aiMap = new HashMap<>();
+            aiMap.put("text", aiMessage != null ? aiMessage.text() : null);
+            if (aiMessage != null && StringUtils.hasText(aiMessage.thinking())) {
+                aiMap.put("thinking", aiMessage.thinking());
             }
 
-            toolData.put("toolName", toolName);
-            toolData.put("toolCallId", result.getToolCallId());
-            toolData.put("success", result.isSuccess());
-            toolData.put("durationMs", result.getDurationMs());
-            if (result.getErrorMessage() != null) {
-                toolData.put("error", result.getErrorMessage());
+            List<Map<String, Object>> reqList = new ArrayList<>();
+            if (requests != null) {
+                for (ToolExecutionRequest request : requests) {
+                    Map<String, Object> reqMap = new HashMap<>();
+                    reqMap.put("id", request.id());
+                    reqMap.put("name", request.name());
+                    reqMap.put("arguments", request.arguments());
+                    reqList.add(reqMap);
+                }
             }
+            aiMap.put("requests", reqList);
+            toolData.put("aiMessage", aiMap);
+
+            List<Map<String, Object>> resultList = new ArrayList<>();
+            if (results != null) {
+                for (ToolCallState.ToolCallResult result : results) {
+                    Map<String, Object> resMap = new HashMap<>();
+                    resMap.put("toolCallId", result.getToolCallId());
+                    resMap.put("toolName", result.getToolName());
+                    resMap.put("success", result.isSuccess());
+                    resMap.put("durationMs", result.getDurationMs());
+                    String resultText = result.isSuccess() ? result.getResult() : "执行失败: " + result.getErrorMessage();
+                    resMap.put("result", resultText);
+                    if (result.getErrorMessage() != null) {
+                        resMap.put("error", result.getErrorMessage());
+                    }
+                    resultList.add(resMap);
+                }
+            }
+            toolData.put("results", resultList);
             message.setToolCallData(toolData);
 
             messageRepository.save(message);
-            log.debug("保存工具执行结果到数据库: toolName={}, messageId={}", toolName, message.getId());
         } catch (Exception e) {
             log.error("保存工具执行结果失败", e);
         }

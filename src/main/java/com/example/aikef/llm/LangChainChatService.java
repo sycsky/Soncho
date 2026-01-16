@@ -666,6 +666,7 @@ public class LangChainChatService {
             if(temperature<1.0){
                 temperature=1.0;
             }
+
             return OpenAiChatModel.builder()
                     .apiKey(config.getApiKey())
                     .baseUrl(baseUrl)
