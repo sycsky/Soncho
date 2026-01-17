@@ -193,11 +193,11 @@ public class AgentNode extends BaseWorkflowNode {
                 ), 
                 ctx.getSessionId()
             );
-            
+
             if (result.isSuccess()) {
                 return new ToolExecutionOutcome(true, result.getResult().getResult(), null);
             }
-            return new ToolExecutionOutcome(false, "Tool Execution Failed: " + result.getErrorMessage(), result.getErrorMessage());
+            return new ToolExecutionOutcome(false, "Tool Execution Failed: " + result.getResult().getErrorMessage(), result.getResult().getErrorMessage());
         } catch (Exception e) {
             log.error("Tool execution error", e);
             return new ToolExecutionOutcome(false, "Tool Execution Error: " + e.getMessage(), e.getMessage());
