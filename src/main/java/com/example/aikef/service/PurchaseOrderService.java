@@ -17,6 +17,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,6 +35,11 @@ public class PurchaseOrderService {
 
     @Transactional
     public PurchaseOrder createOrder(UUID initiatorId, UUID supplierId, List<PurchaseOrderItem> items) {
+        return createOrder(initiatorId, supplierId, items, null);
+    }
+
+    @Transactional
+    public PurchaseOrder createOrder(UUID initiatorId, UUID supplierId, List<PurchaseOrderItem> items, LocalDate deliveryDate) {
         Customer initiator = customerRepository.findById(initiatorId)
                 .orElseThrow(() -> new EntityNotFoundException("Initiator not found"));
         Customer supplier = customerRepository.findById(supplierId)
@@ -43,6 +49,7 @@ public class PurchaseOrderService {
         order.setInitiator(initiator);
         order.setSupplier(supplier);
         order.setStatus("ORDERED");
+        order.setDeliveryDate(deliveryDate);
         
         BigDecimal total = BigDecimal.ZERO;
         for (PurchaseOrderItem item : items) {
@@ -172,6 +179,14 @@ public class PurchaseOrderService {
         // 复用 syncInventoryToShopify 逻辑，传入 multiplier
         int multiplier = isRevert ? -1 : 1;
         syncInventoryToShopify(order, multiplier);
+    }
+
+    @Transactional
+    public void updateDeliveryDate(String orderId, LocalDate deliveryDate) {
+        PurchaseOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found"));
+        order.setDeliveryDate(deliveryDate);
+        orderRepository.save(order);
     }
     
     // 修改原方法，支持 multiplier

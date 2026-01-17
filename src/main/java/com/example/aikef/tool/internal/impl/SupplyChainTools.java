@@ -13,6 +13,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -42,8 +43,14 @@ public class SupplyChainTools {
     @Tool("Create purchase orders (supports multiple suppliers)")
     public String createPurchaseOrder(
             @P(value = "Initiator Customer ID", required = true) String initiatorId,
-            @P(value = "List of items to purchase (must include supplierId)", required = true) List<OrderItemRequest> items
+            @P(value = "List of items to purchase (must include supplierId)", required = true) List<OrderItemRequest> items,
+            @P(value = "Delivery date (yyyy-MM-dd)", required = false) String deliveryDate
     ) {
+        LocalDate parsedDeliveryDate = null;
+        if (deliveryDate != null && !deliveryDate.isBlank()) {
+            parsedDeliveryDate = LocalDate.parse(deliveryDate.trim());
+        }
+
         // Group items by supplierId
         java.util.Map<String, List<OrderItemRequest>> itemsBySupplier = items.stream()
                 .collect(Collectors.groupingBy(OrderItemRequest::supplierId));
@@ -76,7 +83,8 @@ public class SupplyChainTools {
                 PurchaseOrder order = purchaseOrderService.createOrder(
                         UUID.fromString(initiatorId),
                         UUID.fromString(supplierId),
-                        orderItems
+                        orderItems,
+                        parsedDeliveryDate
                 );
                 createdOrderIds.add(order.getId());
                 log.info("Created Purchase Order {} for Supplier {}", order.getId(), supplierId);
@@ -138,6 +146,7 @@ public class SupplyChainTools {
                 order.getTotalAmount(),
                 order.getInitiator().getName(),
                 order.getSupplier().getName(),
+                order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ISO_LOCAL_DATE) : "",
                 items
         );
     }
@@ -167,6 +176,7 @@ public class SupplyChainTools {
                 order.getTotalAmount(),
                 order.getInitiator().getName(),
                 order.getSupplier().getName(),
+                order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ISO_LOCAL_DATE) : "",
                 items
         );
     }
@@ -204,6 +214,15 @@ public class SupplyChainTools {
         return "Order status updated to " + status;
     }
 
+    @Tool("Update purchase order delivery date")
+    public String updatePurchaseOrderDeliveryDate(
+            @P(value = "Order ID", required = true) String orderId,
+            @P(value = "Delivery date (yyyy-MM-dd)", required = true) String deliveryDate
+    ) {
+        purchaseOrderService.updateDeliveryDate(orderId, LocalDate.parse(deliveryDate.trim()));
+        return "Delivery date updated to " + deliveryDate;
+    }
+
     @Tool("Manually adjust inventory for purchase order (Sync or Revert)")
     public String adjustInventoryForOrder(
             @P(value = "Order ID", required = true) String orderId,
@@ -230,7 +249,7 @@ public class SupplyChainTools {
     public record SupplierDto(String id, String name, String email) {}
     public record OrderItemRequest(String supplierId, String productName, String shopifyVariantId, int quantity, BigDecimal unitPrice) {}
     public record ItemUpdate(String itemId, int quantity) {}
-    public record PurchaseOrderDto(String id, String status, BigDecimal totalAmount, String supplierName, String createdAt) {}
+    public record PurchaseOrderDto(String id, String status, BigDecimal totalAmount, String supplierName, String createdAt, String deliveryDate) {}
     
     public record PurchaseOrderDetailDto(
         String id, 
@@ -238,6 +257,7 @@ public class SupplyChainTools {
         BigDecimal totalAmount, 
         String initiatorName, 
         String supplierName,
+        String deliveryDate,
         List<OrderItemDto> items
     ) {}
 
@@ -258,12 +278,17 @@ public class SupplyChainTools {
                     .withZone(ZoneId.systemDefault())
                     .format(po.getCreatedAt());
         }
+        String formattedDeliveryDate = "";
+        if (po.getDeliveryDate() != null) {
+            formattedDeliveryDate = po.getDeliveryDate().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        }
         return new PurchaseOrderDto(
                 po.getId(), 
                 po.getStatus(), 
                 po.getTotalAmount(), 
                 po.getSupplier().getName(),
-                formattedDate
+                formattedDate,
+                formattedDeliveryDate
         );
     }
 }

@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,6 +40,9 @@ public class PurchaseOrder {
 
     private BigDecimal totalAmount;
     private BigDecimal payableAmount;
+
+    @Column(name = "delivery_date")
+    private LocalDate deliveryDate;
 
     @OneToMany(mappedBy = "purchaseOrder", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PurchaseOrderItem> items = new ArrayList<>();
