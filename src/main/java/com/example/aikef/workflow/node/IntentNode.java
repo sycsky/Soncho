@@ -428,8 +428,10 @@ public class IntentNode extends NodeSwitchComponent {
             String role;
             if (msg.getSenderType() == SenderType.USER) {
                 role = "user";
-            } else {
+            } else if(SenderType.AGENT.equals(msg.getSenderType())) {
                 role = "assistant";
+            }else{
+                continue;
             }
             
             historyMessages.add(new LangChainChatService.ChatHistoryMessage(role, msg.getText()));
