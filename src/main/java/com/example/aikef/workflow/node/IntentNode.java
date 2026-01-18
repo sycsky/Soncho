@@ -241,7 +241,7 @@ public class IntentNode extends NodeSwitchComponent {
                     根据上面对话记录，判断当前意图是哪个,只回答我给你的意图名称,不要其他任何内容。如果无法匹配任何意图，返回 "unknown"。
                     可选意图:
                        """+ intentDesc.toString();
-        LangChainChatService.ChatHistoryMessage intentMessage = new LangChainChatService.ChatHistoryMessage("user", intentStr);
+        LangChainChatService.ChatHistoryMessage intentMessage = new LangChainChatService.ChatHistoryMessage("system", intentStr);
         chatHistory.add(intentMessage);
         
         // 合并自定义提示（如果配置了）
