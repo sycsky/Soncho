@@ -22,6 +22,7 @@ import com.example.aikef.workflow.model.WorkflowPausedState;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.yomahub.liteflow.builder.el.LiteFlowChainELBuilder;
 import com.yomahub.liteflow.core.FlowExecutor;
 import com.yomahub.liteflow.flow.LiteflowResponse;
@@ -74,7 +75,8 @@ public class AiWorkflowService {
     @Resource
     private com.example.aikef.repository.AgentSessionRepository agentSessionRepository;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
 
     // ==================== CRUD 操作 ====================
 
