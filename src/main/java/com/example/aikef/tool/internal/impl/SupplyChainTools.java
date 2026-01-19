@@ -44,7 +44,7 @@ public class SupplyChainTools {
     public String createPurchaseOrder(
             @P(value = "Initiator Customer ID", required = true) String initiatorId,
             @P(value = "List of items to purchase (must include supplierId)", required = true) List<OrderItemRequest> items,
-            @P(value = "Delivery date (yyyy-MM-dd)", required = false) String deliveryDate
+            @P(value = "Delivery date (yyyy-MM-dd)", required = true) String deliveryDate
     ) {
         LocalDate parsedDeliveryDate = null;
         if (deliveryDate != null && !deliveryDate.isBlank()) {
