@@ -340,7 +340,7 @@ public class AgentNode extends BaseWorkflowNode {
 
         // History
         if (useHistory && ctx.getSessionId() != null) {
-            int readCount = config != null && config.has("readCount") ? config.get("readCount").asInt(10) : 10;
+            int readCount = config != null && config.has("readCount") ? config.get("readCount").asInt(0) : 10;
             if (readCount > 0) {
                 List<ChatMessage> historyMessages = historyMessageLoader.loadChatMessages(ctx.getSessionId(), readCount, ctx.getMessageId());
                 messages.addAll(historyMessages);
