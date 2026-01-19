@@ -181,7 +181,7 @@ public class AgentNode extends BaseWorkflowNode {
             }
 
             setOutput(finalOutput);
-            recordExecution(messages.get(0), finalOutput, startTime, true, null);
+            recordExecution(((SystemMessage)messages.get(0)).text(), finalOutput, startTime, true, null);
 
         } catch (Exception e) {
             log.error("Agent Node execution failed", e);
