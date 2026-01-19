@@ -178,6 +178,34 @@ public class ToolCallProcessor {
     }
 
     /**
+     * 直接执行工具，使用提供的 WorkflowContext
+     */
+    public ToolCallProcessResult executeToolDirectly(ToolCallState.ToolCallRequest request, WorkflowContext ctx) {
+        if (request == null) {
+            return ToolCallProcessResult.error("没有待处理的工具调用");
+        }
+
+        // 获取工具（带 Schema）
+        AiTool tool = toolRepository.findByNameWithSchema(request.getToolName()).orElse(null);
+        if (tool == null && request.getToolId() != null) {
+            tool = toolRepository.findByIdWithSchema(request.getToolId()).orElse(null);
+        }
+
+        if (tool == null) {
+            return ToolCallProcessResult.error("工具不存在: " + request.getToolName());
+        }
+
+        // 使用 LLM 提取的参数，不进行完整性检查
+        Map<String, Object> params = request.getArguments() != null ? 
+                new HashMap<>(request.getArguments()) : new HashMap<>();
+        
+        log.info("直接执行工具(带上下文): tool={}, params={}", tool.getName(), params);
+
+        // 直接执行工具
+        return executeToolWithParams(tool, params, request.getId(), ctx);
+    }
+
+    /**
      * 直接执行工具，不进行参数完整性检查
      * 使用 LLM 提取的参数直接调用工具
      * 如果 bodyTemplate 为空，则直接使用参数 JSON
@@ -415,6 +443,29 @@ public class ToolCallProcessor {
         return new HashMap<>();
     }
 
+
+    /**
+     * 使用参数执行工具（带上下文）
+     */
+    private ToolCallProcessResult executeToolWithParams(AiTool tool, Map<String, Object> params, String toolCallId, WorkflowContext ctx) {
+        try {
+            log.info("执行工具(带上下文): tool={}, params={}", tool.getName(), params);
+
+            AiToolService.ToolExecutionResult result = toolService.executeTool(
+                    tool.getId(),
+                    params,
+                    ctx,
+                    null
+            );
+
+            return buildToolCallResult(tool, toolCallId, result);
+
+        } catch (Exception e) {
+            log.error("工具执行失败: tool={}", tool.getName(), e);
+            return ToolCallProcessResult.error("工具执行异常: " + e.getMessage());
+        }
+    }
+
     /**
      * 使用参数执行工具
      */
@@ -429,33 +480,37 @@ public class ToolCallProcessor {
                     null
             );
 
-            if (result.success()) {
-                ToolCallState.ToolCallResult toolCallResult = new ToolCallState.ToolCallResult(
-                        toolCallId,
-                        tool.getName(),
-                        true,
-                        result.output(),
-                        null,
-                        result.durationMs()
-                );
-                toolCallResult.setToolId(tool.getId());
-                return ToolCallProcessResult.success(toolCallResult);
-            } else {
-                ToolCallState.ToolCallResult toolCallResult = new ToolCallState.ToolCallResult(
-                        toolCallId,
-                        tool.getName(),
-                        false,
-                        null,
-                        result.errorMessage(),
-                        result.durationMs()
-                );
-                toolCallResult.setToolId(tool.getId());
-                return ToolCallProcessResult.failed(toolCallResult);
-            }
+            return buildToolCallResult(tool, toolCallId, result);
 
         } catch (Exception e) {
             log.error("工具执行失败: tool={}", tool.getName(), e);
             return ToolCallProcessResult.error("工具执行异常: " + e.getMessage());
+        }
+    }
+
+    private ToolCallProcessResult buildToolCallResult(AiTool tool, String toolCallId, AiToolService.ToolExecutionResult result) {
+        if (result.success()) {
+            ToolCallState.ToolCallResult toolCallResult = new ToolCallState.ToolCallResult(
+                    toolCallId,
+                    tool.getName(),
+                    true,
+                    result.output(),
+                    null,
+                    result.durationMs()
+            );
+            toolCallResult.setToolId(tool.getId());
+            return ToolCallProcessResult.success(toolCallResult);
+        } else {
+            ToolCallState.ToolCallResult toolCallResult = new ToolCallState.ToolCallResult(
+                    toolCallId,
+                    tool.getName(),
+                    false,
+                    null,
+                    result.errorMessage(),
+                    result.durationMs()
+            );
+            toolCallResult.setToolId(tool.getId());
+            return ToolCallProcessResult.failed(toolCallResult);
         }
     }
 

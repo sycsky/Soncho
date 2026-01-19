@@ -24,17 +24,20 @@ public class EntityMapper {
     private final AgentRepository agentRepository;
     private final ObjectMapper objectMapper;
     private final com.example.aikef.repository.SpecialCustomerRepository specialCustomerRepository;
+    private final com.example.aikef.repository.WorkflowExecutionLogRepository workflowExecutionLogRepository;
 
     public EntityMapper(SessionGroupMappingRepository sessionGroupMappingRepository,
                         com.example.aikef.repository.MessageRepository messageRepository,
                         AgentRepository agentRepository,
                         ObjectMapper objectMapper,
-                        com.example.aikef.repository.SpecialCustomerRepository specialCustomerRepository) {
+                        com.example.aikef.repository.SpecialCustomerRepository specialCustomerRepository,
+                        com.example.aikef.repository.WorkflowExecutionLogRepository workflowExecutionLogRepository) {
         this.sessionGroupMappingRepository = sessionGroupMappingRepository;
         this.messageRepository = messageRepository;
         this.agentRepository = agentRepository;
         this.objectMapper = objectMapper;
         this.specialCustomerRepository = specialCustomerRepository;
+        this.workflowExecutionLogRepository = workflowExecutionLogRepository;
     }
 
     public AgentDto toAgentDto(Agent agent) {
@@ -430,6 +433,12 @@ public class EntityMapper {
                 .map(this::toAttachmentDto)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+
+        // 客服可见的元数据（客户看不到）
+        Map<String, Object> agentMetadata = message.getAgentMetadata() != null ? new HashMap<>(message.getAgentMetadata()) : new HashMap<>();
+
+        // 移除自动注入工作流执行日志的逻辑，改为通过独立接口按需查询
+        
         return new MessageDto(
                 message.getId(),
                 message.getSession() != null ? message.getSession().getId() : null,
@@ -441,6 +450,7 @@ public class EntityMapper {
                 message.getTranslationData(),
                 List.copyOf(message.getMentionAgentIds()),
                 attachments,
+                agentMetadata,
                 message.getCreatedAt());
     }
 

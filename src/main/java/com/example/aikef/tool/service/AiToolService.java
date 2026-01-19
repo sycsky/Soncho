@@ -583,7 +583,14 @@ public class AiToolService {
                 body = TemplateEngine.render(tool.getApiBodyTemplate(), ctx, params);
             }
 
-            Object result = internalToolRegistry.execute(tool.getName(), params, body);
+            // 注入 sessionId 到参数中，以便内部工具可以使用 @P("sessionId") 获取
+            Map<String, Object> effectiveParams = new HashMap<>();
+            if (params != null) {
+                effectiveParams.putAll(params);
+            }
+
+
+            Object result = internalToolRegistry.execute(tool.getName(), effectiveParams, body, ctx);
             String output = result != null ? result.toString() : "null";
 
             // 如果结果是复杂对象，尝试转为 JSON

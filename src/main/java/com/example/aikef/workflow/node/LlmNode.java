@@ -243,21 +243,23 @@ public class LlmNode extends BaseWorkflowNode {
             // 直接执行工具
             ToolCallProcessor.ToolCallProcessResult result = 
                     toolCallProcessor.executeToolDirectly(request, ctx.getSessionId());
-
+            
             if (result.isSuccess()) {
                 toolState.addResult(result.getResult());
+                ctx.addToolExecution(getActualNodeId(), "llm", toolName, arguments, result.getResult().getResult(), null, result.getResult().getDurationMs(), true);
             } else {
-                // 失败也记录，标记为失败
-                ToolCallState.ToolCallResult failedResult = new ToolCallState.ToolCallResult(
-                    callId, toolName, false, null, result.getErrorMessage(), 0
-                );
-                failedResult.setToolId(toolId);
+                ToolCallState.ToolCallResult failedResult = result.getResult();
+                if (failedResult == null) {
+                    failedResult = new ToolCallState.ToolCallResult(callId, toolName, false, null, result.getErrorMessage(), 0);
+                    failedResult.setToolId(toolId);
+                }
                 toolState.addResult(failedResult);
+                ctx.addToolExecution(getActualNodeId(), "llm", toolName, arguments, failedResult.getResult(), failedResult.getErrorMessage(), failedResult.getDurationMs(), false);
             }
         }
 
         // 所有工具调用都完成了，将结果发送回 LLM
-    sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime, toolRequests, aiMessage);
+        sendToolResultToLlm(ctx, messages, toolSpecs, modelIdStr, startTime, toolRequests, aiMessage);
     }
 
 

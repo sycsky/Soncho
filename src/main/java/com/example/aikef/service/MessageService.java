@@ -6,7 +6,9 @@ import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.MessageType;
 import com.example.aikef.model.enums.SenderType;
+import com.example.aikef.model.WorkflowExecutionLog;
 import com.example.aikef.repository.MessageRepository;
+import com.example.aikef.repository.WorkflowExecutionLogRepository;
 import com.example.aikef.security.AgentPrincipal;
 import com.example.aikef.security.CustomerPrincipal;
 import org.springframework.context.annotation.Lazy;
@@ -29,15 +31,18 @@ public class MessageService {
     private final ChatSessionService chatSessionService;
     private final AgentService agentService;
     private final ReadRecordService readRecordService;
+    private final WorkflowExecutionLogRepository workflowExecutionLogRepository;
 
     public MessageService(MessageRepository messageRepository,
                          ChatSessionService chatSessionService,
                          AgentService agentService,
-                         @Lazy ReadRecordService readRecordService) {
+                         @Lazy ReadRecordService readRecordService,
+                         WorkflowExecutionLogRepository workflowExecutionLogRepository) {
         this.messageRepository = messageRepository;
         this.chatSessionService = chatSessionService;
         this.agentService = agentService;
         this.readRecordService = readRecordService;
+        this.workflowExecutionLogRepository = workflowExecutionLogRepository;
     }
 
     /**
@@ -101,7 +106,32 @@ public class MessageService {
         }
         
         // 客服可见的元数据（客户看不到）
-        Map<String, Object> agentMetadata = isAgent ? message.getAgentMetadata() : null;
+        Map<String, Object> agentMetadata = null;
+        if (isAgent) {
+            agentMetadata = message.getAgentMetadata() != null ? new HashMap<>(message.getAgentMetadata()) : new HashMap<>();
+
+            // 尝试获取关联的工作流执行日志
+            Optional<WorkflowExecutionLog> logOpt = workflowExecutionLogRepository.findByMessageId(message.getId());
+            if (logOpt.isPresent()) {
+                WorkflowExecutionLog log = logOpt.get();
+                Map<String, Object> workflowInfo = new HashMap<>();
+                workflowInfo.put("executionId", log.getId());
+                workflowInfo.put("status", log.getStatus());
+                workflowInfo.put("nodeDetails", log.getNodeDetails());
+                workflowInfo.put("toolExecutionChain", log.getToolExecutionChain());
+                workflowInfo.put("errorMessage", log.getErrorMessage());
+                workflowInfo.put("durationMs", log.getDurationMs());
+                if (log.getWorkflow() != null) {
+                    workflowInfo.put("workflowId", log.getWorkflow().getId());
+                    workflowInfo.put("workflowName", log.getWorkflow().getName());
+                }
+                agentMetadata.put("workflowExecution", workflowInfo);
+            }
+
+            if (agentMetadata.isEmpty()) {
+                agentMetadata = null;
+            }
+        }
         
         List<AttachmentDto> attachments = message.getAttachments().stream()
                 .map(att -> new AttachmentDto(

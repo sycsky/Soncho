@@ -27,6 +27,11 @@ public interface WorkflowExecutionLogRepository extends JpaRepository<WorkflowEx
     List<WorkflowExecutionLog> findBySession_IdOrderByCreatedAtDesc(UUID sessionId);
 
     /**
+     * 根据消息ID查找执行日志
+     */
+    java.util.Optional<WorkflowExecutionLog> findByMessageId(UUID messageId);
+
+    /**
      * 根据状态查找执行日志
      */
     Page<WorkflowExecutionLog> findByStatusOrderByCreatedAtDesc(String status, Pageable pageable);

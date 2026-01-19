@@ -327,30 +327,39 @@ public class AiWorkflowService {
                 Throwable cause = response.getCause();
                 if (cause instanceof com.example.aikef.workflow.exception.WorkflowPausedException pauseEx) {
                     log.info("子链执行暂停: reason={}, message={}", pauseEx.getPauseReason(), pauseEx.getPauseMessage());
-                    return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false);
+                    return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false, null);
                 }
-                return new WorkflowExecutionResult(false, null, response.getMessage(), null, false);
+                return new WorkflowExecutionResult(false, null, response.getMessage(), null, false, null);
             }
             
             // 检查上下文暂停标记
             if (context.isPaused()) {
-                log.info("子链执行暂停: reason={}, message={}", context.getPauseReason(), context.getPauseMessage());
-                return new WorkflowExecutionResult(true, context.getPauseMessage(), null, null, false);
+                log.info("子链执行暂停: reason={}, context.getPauseReason(), context.getPauseMessage()");
+                return new WorkflowExecutionResult(true, context.getPauseMessage(), null, null, false, null);
             }
             
+            // 序列化工具执行链
+            String toolExecutionChainJson = null;
+            try {
+                toolExecutionChainJson = objectMapper.writeValueAsString(context.getToolExecutionChain());
+            } catch (Exception e) {
+                log.warn("序列化工具执行链失败", e);
+            }
+
             return new WorkflowExecutionResult(
                     true,
                     context.getFinalReply(),
                     null,
                     null,
-                    context.isNeedHumanTransfer()
+                    context.isNeedHumanTransfer(),
+                    toolExecutionChainJson
             );
         } catch (com.example.aikef.workflow.exception.WorkflowPausedException pauseEx) {
             log.info("子链执行暂停: reason={}, message={}", pauseEx.getPauseReason(), pauseEx.getPauseMessage());
-            return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false);
+            return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false, null);
         } catch (Exception e) {
             log.error("执行子链失败: chainId={}", chainId, e);
-            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false);
+            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false, null);
         }
     }
 
@@ -410,6 +419,38 @@ public class AiWorkflowService {
         
         // 注册子链到 LiteFlow
         return saved;
+    }
+
+    /**
+     * 根据消息ID获取工作流执行日志
+     */
+    public Map<String, Object> getExecutionLogByMessageId(UUID messageId) {
+        return executionLogRepository.findByMessageId(messageId)
+                .map(log -> {
+                    Map<String, Object> workflowInfo = new HashMap<>();
+                    workflowInfo.put("executionId", log.getId());
+                    workflowInfo.put("status", log.getStatus());
+                    
+                    try {
+                        if (log.getNodeDetails() != null) {
+                            workflowInfo.put("nodeDetails", objectMapper.readValue(log.getNodeDetails(), new TypeReference<List<Map<String, Object>>>() {}));
+                        }
+                        if (log.getToolExecutionChain() != null) {
+                            workflowInfo.put("toolExecutionChain", objectMapper.readValue(log.getToolExecutionChain(), new TypeReference<List<Map<String, Object>>>() {}));
+                        }
+                    } catch (Exception e) {
+                        AiWorkflowService.log.warn("解析工作流日志JSON失败", e);
+                    }
+                    
+                    workflowInfo.put("errorMessage", log.getErrorMessage());
+                    workflowInfo.put("durationMs", log.getDurationMs());
+                    if (log.getWorkflow() != null) {
+                        workflowInfo.put("workflowId", log.getWorkflow().getId());
+                        workflowInfo.put("workflowName", log.getWorkflow().getName());
+                    }
+                    return workflowInfo;
+                })
+                .orElse(null);
     }
 
     /**
@@ -553,7 +594,7 @@ public class AiWorkflowService {
         if (workflow == null) {
             log.warn("未找到匹配的工作流: sessionId={}, categoryId={}", 
                     sessionId, session.getCategory() != null ? session.getCategory().getId() : null);
-            return new WorkflowExecutionResult(false, null, "未找到匹配的工作流", null, null);
+            return new WorkflowExecutionResult(false, null, "未找到匹配的工作流", null, false, null);
         }
 
         log.info("会话匹配工作流: sessionId={}, workflowId={}, workflowName={}", 
@@ -585,6 +626,7 @@ public class AiWorkflowService {
         log.setWorkflow(workflow);
         log.setUserInput(userMessage);
         log.setStartedAt(Instant.now());
+        log.setMessageId(messageId);
 
         if (sessionId != null) {
             chatSessionRepository.findById(sessionId).ifPresent(log::setSession);
@@ -597,6 +639,7 @@ public class AiWorkflowService {
             log.setStatus(result.success() ? "SUCCESS" : "FAILED");
             log.setFinalOutput(result.reply());
             log.setNodeDetails(result.nodeDetailsJson());
+            log.setToolExecutionChain(result.toolExecutionChainJson());
             log.setErrorMessage(result.errorMessage());
             log.setFinishedAt(Instant.now());
             log.setDurationMs(System.currentTimeMillis() - startTime);
@@ -611,7 +654,7 @@ public class AiWorkflowService {
             log.setDurationMs(System.currentTimeMillis() - startTime);
             executionLogRepository.save(log);
 
-            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false);
+            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false, null);
         }
     }
 
@@ -826,22 +869,29 @@ public class AiWorkflowService {
                 if (cause instanceof com.example.aikef.workflow.exception.WorkflowPausedException pauseEx) {
                     log.info("工作流再次暂停: reason={}, message={}", 
                             pauseEx.getPauseReason(), pauseEx.getPauseMessage());
-                    return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false);
+                    return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false, null);
                 }
                 log.error("子链执行失败: subChainId={}, error={}",
                         pausedState.getSubChainId(), response.getMessage());
-                return new WorkflowExecutionResult(false, null, response.getMessage(), null, false);
+                return new WorkflowExecutionResult(false, null, response.getMessage(), null, false, null);
             }
 
             // 检查上下文是否标记为暂停
             if (context.isPaused()) {
                 log.info("工作流再次暂停: reason={}, message={}", 
                         context.getPauseReason(), context.getPauseMessage());
-                return new WorkflowExecutionResult(true, context.getPauseMessage(), null, null, false);
+                return new WorkflowExecutionResult(true, context.getPauseMessage(), null, null, false, null);
             }
 
             // 执行成功，标记暂停状态为已完成
             pauseService.completeWorkflow(pausedState.getId());
+            
+            String toolExecutionChainJson = null;
+            try {
+                toolExecutionChainJson = objectMapper.writeValueAsString(context.getToolExecutionChain());
+            } catch (Exception e) {
+                log.warn("序列化工具执行链失败", e);
+            }
 
             log.info("子链执行成功: subChainId={}, duration={}ms",
                     pausedState.getSubChainId(), System.currentTimeMillis() - startTime);
@@ -850,14 +900,15 @@ public class AiWorkflowService {
                     context.getFinalReply(),
                     null,
                     null,
-                    context.isNeedHumanTransfer()
+                    context.isNeedHumanTransfer(),
+                    toolExecutionChainJson
             );
         } catch (com.example.aikef.workflow.exception.WorkflowPausedException pauseEx) {
             log.info("工作流再次暂停: reason={}, message={}", pauseEx.getPauseReason(), pauseEx.getPauseMessage());
-            return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false);
+            return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false, null);
         } catch (Exception e) {
             log.error("从暂停状态恢复执行失败", e);
-            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false);
+            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false, null);
         }
     }
 
@@ -933,6 +984,7 @@ public class AiWorkflowService {
         log.setWorkflow(workflow);
         log.setUserInput(userMessage);
         log.setStartedAt(Instant.now());
+        log.setMessageId(messageId);
 
         if (sessionId != null) {
             chatSessionRepository.findById(sessionId).ifPresent(log::setSession);
@@ -945,6 +997,7 @@ public class AiWorkflowService {
             log.setStatus(result.success() ? "SUCCESS" : "FAILED");
             log.setFinalOutput(result.reply());
             log.setNodeDetails(result.nodeDetailsJson());
+            log.setToolExecutionChain(result.toolExecutionChainJson());
             log.setErrorMessage(result.errorMessage());
             log.setFinishedAt(Instant.now());
             log.setDurationMs(System.currentTimeMillis() - startTime);
@@ -959,7 +1012,7 @@ public class AiWorkflowService {
             log.setDurationMs(System.currentTimeMillis() - startTime);
             executionLogRepository.save(log);
 
-            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false);
+            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false, null);
         }
     }
 
@@ -1033,7 +1086,7 @@ public class AiWorkflowService {
             // 动态注册/更新 chain（使用 EL 表达式）
             String elExpression = workflow.getLiteflowEl();
             if (elExpression == null || elExpression.isBlank()) {
-                return new WorkflowExecutionResult(false, null, "工作流 EL 表达式为空", null, false);
+                return new WorkflowExecutionResult(false, null, "工作流 EL 表达式为空", null, false, null);
             }
             
             // 包装成 THEN 表达式确保是有效的 EL
@@ -1058,39 +1111,47 @@ public class AiWorkflowService {
                 // 检查是否是暂停异常
                 if (cause instanceof com.example.aikef.workflow.exception.WorkflowPausedException pauseEx) {
                     log.info("工作流暂停: reason={}, message={}", pauseEx.getPauseReason(), pauseEx.getPauseMessage());
-                    return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false);
+                    return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false, null);
                 }
                 String errorMsg = response.getMessage();
                 if (cause != null) {
                     errorMsg = cause.getMessage();
                 }
-                return new WorkflowExecutionResult(false, null, errorMsg, null, false);
+                return new WorkflowExecutionResult(false, null, errorMsg, null, false, null);
             }
 
             // 检查上下文是否标记为暂停
             if (context.isPaused()) {
                 log.info("工作流暂停: reason={}, message={}", context.getPauseReason(), context.getPauseMessage());
-                return new WorkflowExecutionResult(true, context.getPauseMessage(), null, null, false);
+                return new WorkflowExecutionResult(true, context.getPauseMessage(), null, null, false, null);
             }
 
             // 获取执行结果
             String reply = context.getFinalReply();
             String nodeDetailsJson = objectMapper.writeValueAsString(context.getNodeExecutionDetails());
+            
+            String toolExecutionChainJson = null;
+            try {
+                toolExecutionChainJson = objectMapper.writeValueAsString(context.getToolExecutionChain());
+            } catch (Exception e) {
+                log.warn("序列化工具执行链失败", e);
+            }
 
             return new WorkflowExecutionResult(
                     true,
                     reply,
                     null,
                     nodeDetailsJson,
-                    context.isNeedHumanTransfer()
+                    context.isNeedHumanTransfer(),
+                    toolExecutionChainJson
             );
 
         } catch (com.example.aikef.workflow.exception.WorkflowPausedException pauseEx) {
             log.info("工作流暂停: reason={}, message={}", pauseEx.getPauseReason(), pauseEx.getPauseMessage());
-            return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false);
+            return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false, null);
         } catch (Exception e) {
             AiWorkflowService.log.error("工作流执行失败", e);
-            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false);
+            return new WorkflowExecutionResult(false, null, e.getMessage(), null, false, null);
         }
     }
     
@@ -1366,7 +1427,8 @@ public class AiWorkflowService {
             String reply,
             String errorMessage,
             String nodeDetailsJson,
-            Boolean needHumanTransfer
+            Boolean needHumanTransfer,
+            String toolExecutionChainJson
     ) {}
 }
 
