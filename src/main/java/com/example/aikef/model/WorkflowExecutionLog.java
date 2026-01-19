@@ -31,6 +31,9 @@ public class WorkflowExecutionLog {
     @JoinColumn(name = "session_id")
     private ChatSession session;
 
+    @Column(name = "message_id")
+    private UUID messageId;
+
     /**
      * 执行状态: SUCCESS, FAILED, TIMEOUT
      */
@@ -55,6 +58,13 @@ public class WorkflowExecutionLog {
      */
     @Column(name = "node_details", columnDefinition = "LONGTEXT")
     private String nodeDetails;
+
+    /**
+     * 工具执行链 (JSON)
+     * 记录 Agent 和 LLM 节点的工具调用详情
+     */
+    @Column(name = "tool_execution_chain", columnDefinition = "LONGTEXT")
+    private String toolExecutionChain;
 
     /**
      * 错误信息
@@ -117,6 +127,14 @@ public class WorkflowExecutionLog {
         this.session = session;
     }
 
+    public UUID getMessageId() {
+        return messageId;
+    }
+
+    public void setMessageId(UUID messageId) {
+        this.messageId = messageId;
+    }
+
     public String getStatus() {
         return status;
     }
@@ -147,6 +165,14 @@ public class WorkflowExecutionLog {
 
     public void setNodeDetails(String nodeDetails) {
         this.nodeDetails = nodeDetails;
+    }
+
+    public String getToolExecutionChain() {
+        return toolExecutionChain;
+    }
+
+    public void setToolExecutionChain(String toolExecutionChain) {
+        this.toolExecutionChain = toolExecutionChain;
     }
 
     public String getErrorMessage() {

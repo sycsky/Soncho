@@ -178,7 +178,7 @@ public class EventService {
         if (!event.isEnabled()) {
             log.warn("事件已禁用，不执行: eventName={}", eventName);
             return new AiWorkflowService.WorkflowExecutionResult(
-                    false, null, "事件已禁用: " + eventName, null, false);
+                    false, null, "事件已禁用: " + eventName, null, false, null);
         }
 
         // 验证会话是否存在
