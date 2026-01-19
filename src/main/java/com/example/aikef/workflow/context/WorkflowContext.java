@@ -115,6 +115,12 @@ public class WorkflowContext {
     private Map<String, Object> customerInfo = new HashMap<>();
 
     /**
+     * 工具执行链记录
+     * 记录 Agent 和 LLM 节点的工具调用详情
+     */
+    private List<Map<String, Object>> toolExecutionChain = new ArrayList<>();
+
+    /**
      * 工具调用状态
      */
     private ToolCallState toolCallState;
@@ -147,6 +153,38 @@ public class WorkflowContext {
      * 暂停时需要返回给用户的消息
      */
     private String pauseMessage;
+
+    /**
+     * 临时存储各节点的工具执行记录
+     * key: nodeId, value: 工具执行记录列表
+     */
+    private Map<String, List<Map<String, Object>>> nodeToolExecutions = new HashMap<>();
+
+    /**
+     * 添加工具执行记录
+     */
+    public void addToolExecution(String nodeId, String nodeType, String toolName, String args, String result, String error, long durationMs, boolean success) {
+        Map<String, Object> execution = new HashMap<>();
+        execution.put("nodeId", nodeId);
+        execution.put("nodeType", nodeType);
+        execution.put("toolName", toolName);
+        execution.put("args", args);
+        execution.put("result", result);
+        execution.put("error", error);
+        execution.put("durationMs", durationMs);
+        execution.put("success", success);
+        execution.put("timestamp", System.currentTimeMillis());
+        
+        // 添加到全局执行链（为了兼容性保留）
+        this.toolExecutionChain.add(execution);
+        
+        // 添加到节点特定的执行记录
+        this.nodeToolExecutions.computeIfAbsent(nodeId, k -> new ArrayList<>()).add(execution);
+    }
+
+    public List<Map<String, Object>> getToolExecutionChain() {
+        return toolExecutionChain;
+    }
 
     // ========== 辅助方法 ==========
 
@@ -211,6 +249,11 @@ public class WorkflowContext {
      * 添加节点执行详情
      */
     public void addNodeExecutionDetail(NodeExecutionDetail detail) {
+        // 检查该节点是否有工具执行记录
+        List<Map<String, Object>> tools = nodeToolExecutions.get(detail.getNodeId());
+        if (tools != null && !tools.isEmpty()) {
+            detail.setToolExecutions(new ArrayList<>(tools));
+        }
         nodeExecutionDetails.add(detail);
     }
 
@@ -498,6 +541,11 @@ public class WorkflowContext {
         private long durationMs;
         private boolean success;
         private String errorMessage;
+        
+        /**
+         * 节点内的工具执行记录
+         */
+        private List<Map<String, Object>> toolExecutions;
 
         public String getNodeId() {
             return nodeId;
@@ -586,6 +634,14 @@ public class WorkflowContext {
         public void setNodeLabel(String nodeLabel) {
             this.nodeLabel = nodeLabel;
         }
+
+        public List<Map<String, Object>> getToolExecutions() {
+            return toolExecutions;
+        }
+
+        public void setToolExecutions(List<Map<String, Object>> toolExecutions) {
+            this.toolExecutions = toolExecutions;
+        }
     }
 
     /**
@@ -629,4 +685,3 @@ public class WorkflowContext {
         }
     }
 }
-

@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -149,8 +150,10 @@ public class TemplateEngine {
                     String.valueOf(ctx.isNeedHumanTransfer());
             case "humantransferreason", "human_transfer_reason" -> 
                     nullToEmpty(ctx.getHumanTransferReason());
-            case "now", "date", "currentdate", "current_date" -> 
+            case "now", "date", "currentdate", "current_date" ->
                     LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            case "nowTime" ->
+                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
             default -> {
                 log.warn("未知的系统变量: {}", key);
                 yield "";

@@ -195,6 +195,14 @@ public class AiWorkflowController {
     }
 
     /**
+     * 根据消息ID获取工作流执行日志
+     */
+    @GetMapping("/execution-log")
+    public Map<String, Object> getExecutionLogByMessageId(@RequestParam UUID messageId) {
+        return workflowService.getExecutionLogByMessageId(messageId);
+    }
+
+    /**
      * 验证工作流结构
      */
     @PostMapping("/validate")

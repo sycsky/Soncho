@@ -65,6 +65,9 @@ public class AgentNode extends BaseWorkflowNode {
     @Resource
     private com.example.aikef.repository.ChatSessionRepository chatSessionRepository;
 
+    @Resource
+    private com.example.aikef.tool.repository.AiToolRepository aiToolRepository;
+
     @Autowired
     private AiToolService aiToolService;
 
@@ -93,6 +96,31 @@ public class AgentNode extends BaseWorkflowNode {
 
             // Tools
             List<UUID> toolIds = getToolIds(config);
+
+            // Auto-inject 'getWorkflowContext' tool
+            try {
+                aiToolRepository.findByName("getWorkflowContext").ifPresent(tool -> {
+                    if (!toolIds.contains(tool.getId())) {
+                        toolIds.add(tool.getId());
+                        log.info("Auto-injected tool: getWorkflowContext ({})", tool.getId());
+                    }
+                });
+            } catch (Exception e) {
+                log.warn("Failed to auto-inject getWorkflowContext tool", e);
+            }
+
+            // Auto-inject 'transferToCustomerService' tool
+            try {
+                aiToolRepository.findByName("transferToCustomerService").ifPresent(tool -> {
+                    if (!toolIds.contains(tool.getId())) {
+                        toolIds.add(tool.getId());
+                        log.info("Auto-injected tool: transferToCustomerService ({})", tool.getId());
+                    }
+                });
+            } catch (Exception e) {
+                log.warn("Failed to auto-inject transferToCustomerService tool", e);
+            }
+
             List<ToolSpecification> toolSpecs = Collections.emptyList();
             if (!toolIds.isEmpty()) {
                 toolSpecs = toolCallProcessor.buildToolSpecifications(toolIds);
@@ -153,7 +181,7 @@ public class AgentNode extends BaseWorkflowNode {
             }
 
             setOutput(finalOutput);
-            recordExecution(goal, finalOutput, startTime, true, null);
+            recordExecution(messages.get(0), finalOutput, startTime, true, null);
 
         } catch (Exception e) {
             log.error("Agent Node execution failed", e);
@@ -166,22 +194,18 @@ public class AgentNode extends BaseWorkflowNode {
     }
 
     private ToolExecutionOutcome executeTool(ToolExecutionRequest request, WorkflowContext ctx) {
+        long startTime = System.currentTimeMillis();
+        String toolName = request.name();
+        String arguments = request.arguments();
+        
         try {
-            String toolName = request.name();
             UUID toolId = toolCallProcessor.getToolIdByName(toolName);
 
-
-            // Create a temporary state for execution
-            // ToolCallState state = new ToolCallState();
-            // state.setToolId(toolId);
-            
             // Parse arguments
             Map<String, Object> params = new HashMap<>();
-            String arguments = request.arguments();
             if (arguments != null && !arguments.isEmpty()) {
                  params = objectMapper.readValue(arguments, new TypeReference<Map<String, Object>>() {});
             }
-            // state.setCollectedParams(params);
 
             // Execute
             ToolCallProcessor.ToolCallProcessResult result = toolCallProcessor.executeToolDirectly(
@@ -191,15 +215,24 @@ public class AgentNode extends BaseWorkflowNode {
                     toolId, 
                     params
                 ), 
-                ctx.getSessionId()
+                ctx
             );
+
+            long duration = System.currentTimeMillis() - startTime;
             
             if (result.isSuccess()) {
-                return new ToolExecutionOutcome(true, result.getResult().getResult(), null);
+                String output = result.getResult().getResult();
+                ctx.addToolExecution(getActualNodeId(), "agent", toolName, arguments, output, null, duration, true);
+                return new ToolExecutionOutcome(true, output, null);
             }
-            return new ToolExecutionOutcome(false, "Tool Execution Failed: " + result.getErrorMessage(), result.getErrorMessage());
+            
+            String errorMessage = result.getResult().getErrorMessage();
+            ctx.addToolExecution(getActualNodeId(), "agent", toolName, arguments, null, errorMessage, duration, false);
+            return new ToolExecutionOutcome(false, "Tool Execution Failed: " + errorMessage, errorMessage);
         } catch (Exception e) {
             log.error("Tool execution error", e);
+            long duration = System.currentTimeMillis() - startTime;
+            ctx.addToolExecution(getActualNodeId(), "agent", toolName, arguments, null, e.getMessage(), duration, false);
             return new ToolExecutionOutcome(false, "Tool Execution Error: " + e.getMessage(), e.getMessage());
         }
     }
@@ -307,7 +340,7 @@ public class AgentNode extends BaseWorkflowNode {
 
         // History
         if (useHistory && ctx.getSessionId() != null) {
-            int readCount = config != null && config.has("readCount") ? config.get("readCount").asInt(10) : 10;
+            int readCount = config != null && config.has("readCount") ? config.get("readCount").asInt(0) : 10;
             if (readCount > 0) {
                 List<ChatMessage> historyMessages = historyMessageLoader.loadChatMessages(ctx.getSessionId(), readCount, ctx.getMessageId());
                 messages.addAll(historyMessages);

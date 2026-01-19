@@ -244,7 +244,7 @@ public class WorkflowTestService {
         } catch (Exception e) {
             log.error("工作流执行异常: testSessionId={}", testSessionId, e);
             result = new AiWorkflowService.WorkflowExecutionResult(
-                    false, null, e.getMessage(), null, false);
+                    false, null, e.getMessage() != null ? e.getMessage() : e.toString(), null, false, null);
         }
         
         long durationMs = System.currentTimeMillis() - startTime;

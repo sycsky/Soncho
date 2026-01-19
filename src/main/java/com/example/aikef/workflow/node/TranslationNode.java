@@ -71,8 +71,11 @@ public class TranslationNode extends BaseWorkflowNode {
                         ctx.getSessionId(), historyCount, ctx.getMessageId());
                 
                 for (Message msg : historyMessages) {
-                    String role = msg.getSenderType() == SenderType.USER ? "User" : "Assistant";
-                    historyLines.add(role + ": " + msg.getText());
+
+                    if(msg.getSenderType() == SenderType.USER){
+                        historyLines.add("User: " + msg.getText());
+                    }
+
                 }
             }
             String historyContext = String.join("\n", historyLines);

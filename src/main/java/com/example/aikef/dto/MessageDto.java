@@ -16,5 +16,6 @@ public record MessageDto(
         Map<String, Object> translationData,
         List<String> mentions,
         List<AttachmentDto> attachments,
+        Map<String, Object> agentMetadata,
         Instant createdAt) {
 }

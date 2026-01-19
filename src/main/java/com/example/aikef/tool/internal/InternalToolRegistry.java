@@ -1,6 +1,7 @@
 package com.example.aikef.tool.internal;
 
 import com.example.aikef.extraction.model.ExtractionSchema;
+import com.example.aikef.workflow.context.WorkflowContext;
 import com.example.aikef.extraction.model.FieldDefinition;
 import com.example.aikef.extraction.repository.ExtractionSchemaRepository;
 import com.example.aikef.tool.model.AiTool;
@@ -23,6 +24,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.*;
@@ -158,6 +160,10 @@ public class InternalToolRegistry {
     }
 
     public Object execute(String toolName, Map<String, Object> params, String body) throws Exception {
+        return execute(toolName, params, body, null);
+    }
+
+    public Object execute(String toolName, Map<String, Object> params, String body, WorkflowContext ctx) throws Exception {
         ToolMethod toolMethod = toolMethods.get(toolName);
         if (toolMethod == null) {
             throw new IllegalArgumentException("Internal tool not found in registry: " + toolName);
@@ -186,22 +192,29 @@ public class InternalToolRegistry {
                  try {
                      Map<String, Object> bodyParams = objectMapper.readValue(body, new TypeReference<Map<String, Object>>(){});
                      // Use bodyParams as the effective params for invocation
-                     return invokeMethod(toolMethod.bean, toolMethod.method, bodyParams);
+                     return invokeMethod(toolMethod.bean, toolMethod.method, bodyParams, ctx);
                  } catch (Exception e) {
                      log.warn("Tool {} has bodyTemplate but method has {} parameters, and body could not be parsed as JSON Map. Ignoring body.", toolName, toolMethod.method.getParameterCount());
                  }
              }
         }
         
-        return invokeMethod(toolMethod.bean, toolMethod.method, params);
+        return invokeMethod(toolMethod.bean, toolMethod.method, params, ctx);
     }
 
-    private Object invokeMethod(Object bean, Method method, Map<String, Object> params) throws Exception {
+    private Object invokeMethod(Object bean, Method method, Map<String, Object> params, WorkflowContext ctx) throws Exception {
         Parameter[] parameters = method.getParameters();
         Object[] args = new Object[parameters.length];
 
         for (int i = 0; i < parameters.length; i++) {
             Parameter parameter = parameters[i];
+            
+            // Inject WorkflowContext if parameter type matches
+            if (WorkflowContext.class.isAssignableFrom(parameter.getType())) {
+                args[i] = ctx;
+                continue;
+            }
+
             String paramName = parameter.getName(); // Requires -parameters compiler flag or distinct mapping
             // Note: LangChain4j might generate arg0, arg1 if not compiled with parameters.
             // However, the ToolSpecification also uses those names. 
@@ -225,7 +238,16 @@ public class InternalToolRegistry {
             }
         }
 
-        return method.invoke(bean, args);
+        try {
+            return method.invoke(bean, args);
+        } catch (InvocationTargetException e) {
+            // Unwrap the underlying exception
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception) {
+                throw (Exception) cause;
+            }
+            throw e;
+        }
     }
 
     // --- Schema Conversion Logic ---
