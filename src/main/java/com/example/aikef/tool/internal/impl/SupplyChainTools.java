@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -44,11 +45,11 @@ public class SupplyChainTools {
     public String createPurchaseOrder(
             @P(value = "Initiator Customer ID", required = true) String initiatorId,
             @P(value = "List of items to purchase (must include supplierId)", required = true) List<OrderItemRequest> items,
-            @P(value = "Delivery date (yyyy-MM-dd)", required = true) String deliveryDate
+            @P(value = "Delivery date (yyyy-MM-dd HH:mm:ss)", required = true) String deliveryDate
     ) {
-        LocalDate parsedDeliveryDate = null;
+        LocalDateTime parsedDeliveryDate = null;
         if (deliveryDate != null && !deliveryDate.isBlank()) {
-            parsedDeliveryDate = LocalDate.parse(deliveryDate.trim());
+            parsedDeliveryDate = LocalDateTime.parse(deliveryDate.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         }
 
         // Group items by supplierId
@@ -146,7 +147,7 @@ public class SupplyChainTools {
                 order.getTotalAmount(),
                 order.getInitiator().getName(),
                 order.getSupplier().getName(),
-                order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ISO_LOCAL_DATE) : "",
+                order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : "",
                 items
         );
     }
@@ -176,7 +177,7 @@ public class SupplyChainTools {
                 order.getTotalAmount(),
                 order.getInitiator().getName(),
                 order.getSupplier().getName(),
-                order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ISO_LOCAL_DATE) : "",
+                order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : "",
                 items
         );
     }
@@ -217,9 +218,9 @@ public class SupplyChainTools {
     @Tool("Update purchase order delivery date")
     public String updatePurchaseOrderDeliveryDate(
             @P(value = "Order ID", required = true) String orderId,
-            @P(value = "Delivery date (yyyy-MM-dd)", required = true) String deliveryDate
+            @P(value = "Delivery date (yyyy-MM-dd HH:mm:ss)", required = true) String deliveryDate
     ) {
-        purchaseOrderService.updateDeliveryDate(orderId, LocalDate.parse(deliveryDate.trim()));
+        purchaseOrderService.updateDeliveryDate(orderId, LocalDateTime.parse(deliveryDate.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         return "Delivery date updated to " + deliveryDate;
     }
 
@@ -280,7 +281,7 @@ public class SupplyChainTools {
         }
         String formattedDeliveryDate = "";
         if (po.getDeliveryDate() != null) {
-            formattedDeliveryDate = po.getDeliveryDate().format(DateTimeFormatter.ISO_LOCAL_DATE);
+            formattedDeliveryDate = po.getDeliveryDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         }
         return new PurchaseOrderDto(
                 po.getId(), 

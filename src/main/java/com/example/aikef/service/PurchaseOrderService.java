@@ -17,7 +17,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -39,7 +39,7 @@ public class PurchaseOrderService {
     }
 
     @Transactional
-    public PurchaseOrder createOrder(UUID initiatorId, UUID supplierId, List<PurchaseOrderItem> items, LocalDate deliveryDate) {
+    public PurchaseOrder createOrder(UUID initiatorId, UUID supplierId, List<PurchaseOrderItem> items, LocalDateTime deliveryDate) {
         Customer initiator = customerRepository.findById(initiatorId)
                 .orElseThrow(() -> new EntityNotFoundException("Initiator not found"));
         Customer supplier = customerRepository.findById(supplierId)
@@ -182,7 +182,7 @@ public class PurchaseOrderService {
     }
 
     @Transactional
-    public void updateDeliveryDate(String orderId, LocalDate deliveryDate) {
+    public void updateDeliveryDate(String orderId, LocalDateTime deliveryDate) {
         PurchaseOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found"));
         order.setDeliveryDate(deliveryDate);
