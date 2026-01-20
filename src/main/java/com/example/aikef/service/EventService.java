@@ -154,7 +154,7 @@ public class EventService {
 
     /**
      * 为指定客户触发事件（自动查找最近的活跃会话）
-     * 
+     *
      * @param customerId 客户ID
      * @param eventName 事件名称
      * @param eventData 事件数据
@@ -164,13 +164,13 @@ public class EventService {
     public AiWorkflowService.WorkflowExecutionResult triggerEventForCustomer(UUID customerId, String eventName, Map<String, Object> eventData) {
         // 查找客户最近的活跃会话
         ChatSession session = chatSessionRepository.findFirstByCustomer_IdOrderByLastActiveAtDesc(customerId);
-        
+
         if (session == null) {
             log.warn("未找到客户的活跃会话，无法触发事件: customerId={}, eventName={}", customerId, eventName);
             return new AiWorkflowService.WorkflowExecutionResult(
-                    false, null, "未找到客户的活跃会话", null, false);
+                    false, null, "未找到客户的活跃会话", null, false, null);
         }
-        
+
         return triggerEvent(eventName, session.getId(), eventData);
     }
 
