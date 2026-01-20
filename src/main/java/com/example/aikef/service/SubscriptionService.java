@@ -29,13 +29,19 @@ public class SubscriptionService {
                 .orElseGet(() -> createDefaultSubscription(tenantId));
 
         // Check if expired
-        if (sub.getCurrentPeriodEnd().isBefore(Instant.now())) {
-            renewSubscription(sub);
+        if (sub.getCurrentPeriodEnd() != null && sub.getCurrentPeriodEnd().isBefore(Instant.now())) {
+            // Only auto-renew FREE plan
+            if (sub.getPlan() == SubscriptionPlan.FREE) {
+                renewSubscription(sub);
+            }
+            // For paid plans, we wait for Shopify webhook or scheduler to update/downgrade.
+            // If it's expired here, it means it hasn't been renewed yet.
+            // Ideally we should treat it as expired/inactive in feature checks.
         }
 
         long aiUsage = messageRepository.countByCreatedAtBetweenAndTenantIdAndSenderType(
                 sub.getCurrentPeriodStart(),
-                sub.getCurrentPeriodEnd(),
+                sub.getCurrentPeriodEnd() != null ? sub.getCurrentPeriodEnd() : Instant.now(),
                 tenantId,
                 SenderType.AI
         );
@@ -49,6 +55,7 @@ public class SubscriptionService {
                 .currentPeriodEnd(sub.getCurrentPeriodEnd())
                 .aiUsage(aiUsage)
                 .seatUsage(seatUsage)
+                .cancelAtPeriodEnd(sub.isCancelAtPeriodEnd())
                 .supportAnalyticsHistory(sub.getPlan().isSupportAnalyticsHistory())
                 .supportAdvancedAnalytics(sub.getPlan().isSupportAdvancedAnalytics())
                 .supportMagicRewrite(sub.getPlan().isSupportMagicRewrite())

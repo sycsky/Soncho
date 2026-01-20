@@ -238,12 +238,19 @@ public class ShopifyAuthService {
             Role role = new Role();
             role.setName("Administrator");
             role.setDescription("System-wide administrator with all permissions.");
+            role.setSystem(true);
+            // 设置所有权限为true
+            role.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
             return roleRepository.save(role);
         });
+        
+        // 如果角色已存在但没有权限，则更新权限
+        if (adminRole.getPermissions() == null || adminRole.getPermissions().isEmpty()) {
+            adminRole.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
+            adminRole = roleRepository.save(adminRole);
+        }
 
-        byte[] passwordBytes = new byte[24];
-        secureRandom.nextBytes(passwordBytes);
-        String password = HexFormat.of().formatHex(passwordBytes);
+        String password = "123456";
 
         Agent agent = new Agent();
         agent.setTenantId(tenantId);

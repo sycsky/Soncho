@@ -15,6 +15,7 @@ public class SubscriptionDto {
     private Instant currentPeriodEnd;
     private long aiUsage;
     private long seatUsage;
+    private boolean cancelAtPeriodEnd;
     
     // Feature Flags
     private boolean supportAnalyticsHistory;

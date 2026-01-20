@@ -40,8 +40,17 @@ public class DataInitializer implements CommandLineRunner {
             Role newRole = new Role();
             newRole.setName("Administrator");
             newRole.setDescription("System-wide administrator with all permissions.");
+            newRole.setSystem(true);
+            // 设置所有权限为true
+            newRole.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
             return roleRepository.save(newRole);
         });
+        
+        // 如果角色已存在但没有权限，则更新权限
+        if (adminRole.getPermissions() == null || adminRole.getPermissions().isEmpty()) {
+            adminRole.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
+            adminRole = roleRepository.save(adminRole);
+        }
 
         Optional<Agent> existingAdmin = agentRepository.findByEmail(adminEmail);
 

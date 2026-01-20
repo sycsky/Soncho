@@ -69,9 +69,22 @@ public class PublicController {
         String password = "password123";
         String name = "Admin " + tenantId;
         
-        // 查找 ADMIN 角色
-        Role adminRole = roleRepository.findByName("Administrator")
-                .orElseThrow(() -> new EntityNotFoundException("Role ADMIN not found"));
+        // 查找或创建 ADMIN 角色，并确保拥有所有权限
+        Role adminRole = roleRepository.findByName("Administrator").orElseGet(() -> {
+            Role role = new Role();
+            role.setName("Administrator");
+            role.setDescription("System-wide administrator with all permissions.");
+            role.setSystem(true);
+            // 设置所有权限为true
+            role.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
+            return roleRepository.save(role);
+        });
+        
+        // 如果角色已存在但没有权限，则更新权限
+        if (adminRole.getPermissions() == null || adminRole.getPermissions().isEmpty()) {
+            adminRole.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
+            adminRole = roleRepository.save(adminRole);
+        }
         
         CreateTenantAdminRequest request = new CreateTenantAdminRequest(
                 name,

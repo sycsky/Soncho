@@ -29,4 +29,25 @@ public class Subscription extends AuditableEntity {
 
     @Column(name = "shopify_charge_id")
     private String shopifyChargeId;
+
+    @Column(name = "seat_usage")
+    private Integer seatUsage = 0;
+
+    @Column(name = "ai_usage")
+    private Integer aiUsage = 0;
+
+    @Column(name = "cancel_at_period_end")
+    private Boolean cancelAtPeriodEnd = false;
+
+    public int getSeatUsage() {
+        return seatUsage == null ? 0 : seatUsage;
+    }
+
+    public int getAiUsage() {
+        return aiUsage == null ? 0 : aiUsage;
+    }
+
+    public boolean isCancelAtPeriodEnd() {
+        return Boolean.TRUE.equals(cancelAtPeriodEnd);
+    }
 }
