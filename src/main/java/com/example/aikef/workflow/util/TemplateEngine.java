@@ -266,7 +266,7 @@ public class TemplateEngine {
         }
 
         // 1. 尝试系统变量
-        String sysValue = tryResolveSystemVariable(key, ctx);
+        String sysValue = resolveSystemVariable(key, ctx);
         if (sysValue != null) {
             return sysValue;
         }
@@ -299,17 +299,7 @@ public class TemplateEngine {
         return "";
     }
 
-    /**
-     * 尝试解析系统变量（不抛异常）
-     */
-    private static String tryResolveSystemVariable(String key, WorkflowContext ctx) {
-        return switch (key.toLowerCase()) {
-            case "query", "input", "usermessage", "user_message" -> ctx.getQuery();
-            case "lastoutput", "last_output" -> ctx.getLastOutput();
-            case "intent" -> ctx.getIntent();
-            default -> null;
-        };
-    }
+
 
     private static String nullToEmpty(String value) {
         return value != null ? value : "";
