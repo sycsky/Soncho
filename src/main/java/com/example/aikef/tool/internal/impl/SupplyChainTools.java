@@ -157,6 +157,7 @@ public class SupplyChainTools {
     public PurchaseOrderDetailDto getPurchaseOrderDetails(
             @P(value = "Order ID", required = true) String orderId
     ) {
+
         PurchaseOrder order = purchaseOrderService.getOrderDetails(orderId);
 
         List<OrderItemDto> items = order.getItems().stream()
