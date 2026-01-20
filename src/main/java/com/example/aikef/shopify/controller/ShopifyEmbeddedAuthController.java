@@ -14,6 +14,7 @@ import com.example.aikef.shopify.model.ShopifyStore;
 import com.example.aikef.shopify.repository.ShopifyStoreRepository;
 import com.example.aikef.shopify.service.ShopifyAuthService;
 import com.example.aikef.shopify.service.ShopifySessionService;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -170,9 +171,9 @@ public class ShopifyEmbeddedAuthController {
         agent.setName("Shopify Admin (" + shopDomain + ")");
         agent.setEmail(email);
         agent.setPasswordHash(passwordEncoder.encode(password));
-        agent.setStatus(AgentStatus.OFFLINE);
+        agent.setStatus(AgentStatus.ONLINE);
         agent.setRole(adminRole);
-        agent.setLanguage("zh-CN");
+        agent.setLanguage("en");
         return agentRepository.save(agent);
     }
 

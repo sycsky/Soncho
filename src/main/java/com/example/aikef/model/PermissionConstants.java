@@ -16,6 +16,9 @@ public class PermissionConstants {
     public static final String MANAGE_TEAM = "manageTeam";
     public static final String ACCESS_SYSTEM_STATISTICS = "accessSystemStatistics";
     public static final String DESIGN_WORKFLOW = "designWorkflow";
+    public static final String ACCESS_ROLE_CONFIG = "accessRoleConfig";
+    public static final String ACCESS_AI_TOOLS = "accessAiTools";
+    public static final String ACCESS_BILLING = "accessBilling";
     
     /**
      * 获取所有权限键
@@ -28,7 +31,10 @@ public class PermissionConstants {
             ACCESS_CUSTOMER_MANAGEMENT,
             MANAGE_TEAM,
             ACCESS_SYSTEM_STATISTICS,
-            DESIGN_WORKFLOW
+            DESIGN_WORKFLOW,
+            ACCESS_ROLE_CONFIG,
+            ACCESS_AI_TOOLS,
+            ACCESS_BILLING
         };
     }
     
@@ -43,4 +49,5 @@ public class PermissionConstants {
         return permissions;
     }
 }
+
 

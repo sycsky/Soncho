@@ -38,7 +38,7 @@ public class TranslationConfig {
     /**
      * 默认系统语言（客服和AI使用的语言）
      */
-    private String defaultSystemLanguage = "zh-CN";
+    private String defaultSystemLanguage = "en";
 
     @Data
     public static class AwsConfig {

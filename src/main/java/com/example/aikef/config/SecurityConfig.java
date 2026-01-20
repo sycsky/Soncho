@@ -71,6 +71,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/webhook/**").permitAll()
                         .requestMatchers("/api/v1/official-channels/*/webhook").permitAll()
                         .requestMatchers("/api/v1/events/hook/**").permitAll()
+                        .requestMatchers("/api/v1/shopify/auth/agents").permitAll()
                         .requestMatchers("/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/public/**").permitAll()
                         .requestMatchers("/api/v1/shopify/auth/exchange").permitAll()

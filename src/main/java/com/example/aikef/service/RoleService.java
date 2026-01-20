@@ -57,6 +57,9 @@ public class RoleService {
     public RoleDto updateRole(UUID roleId, UpdateRoleRequest request) {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> new EntityNotFoundException("角色不存在"));
+        if (role.isSystem()) {
+            throw new IllegalStateException("System roles cannot be modified.");
+        }
         role.setName(request.name());
         role.setDescription(request.description());
         if (request.permissions() != null) {
@@ -67,8 +70,10 @@ public class RoleService {
 
     @Transactional
     public void deleteRole(UUID roleId) {
-        if (!roleRepository.existsById(roleId)) {
-            throw new EntityNotFoundException("角色不存在");
+        Role role = roleRepository.findById(roleId)
+                .orElseThrow(() -> new EntityNotFoundException("角色不存在"));
+        if (role.isSystem()) {
+            throw new IllegalStateException("System roles cannot be deleted.");
         }
         // TODO: Check if any agent is using this role before deletion
         roleRepository.deleteById(roleId);
