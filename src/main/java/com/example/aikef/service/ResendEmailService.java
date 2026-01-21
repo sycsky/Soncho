@@ -52,7 +52,7 @@ public class ResendEmailService {
 
         try {
             // 构建邮件内容
-            String subject = "邮箱验证码 - Email Verification Code";
+            String subject = "Email Verification Code";
             String htmlContent = buildVerificationEmailHtml(code);
             String textContent = buildVerificationEmailText(code);
 
@@ -137,24 +137,14 @@ public class ResendEmailService {
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h1>邮箱验证码</h1>
-                            <p>Email Verification Code</p>
+                            <h1>Email Verification</h1>
                         </div>
                         <div class="content">
-                            <p>您好！</p>
-                            <p>您正在进行邮箱验证，请使用以下验证码完成验证：</p>
+                            <p>Hello!</p>
+                            <p>You are verifying your email. Please use the following verification code:</p>
                             <div class="code-box">
                                 <div class="code">%s</div>
                             </div>
-                            <p><strong>注意事项：</strong></p>
-                            <ul>
-                                <li>验证码有效期为 10 分钟</li>
-                                <li>请勿将验证码透露给他人</li>
-                                <li>如果这不是您的操作，请忽略此邮件</li>
-                            </ul>
-                            <hr>
-                            <p>Hello!</p>
-                            <p>You are verifying your email. Please use the following verification code:</p>
                             <p><strong>Notes:</strong></p>
                             <ul>
                                 <li>The verification code is valid for 10 minutes</li>
@@ -163,7 +153,6 @@ public class ResendEmailService {
                             </ul>
                         </div>
                         <div class="footer">
-                            <p>此邮件由系统自动发送，请勿回复</p>
                             <p>This is an automated email, please do not reply</p>
                         </div>
                     </div>
@@ -177,19 +166,7 @@ public class ResendEmailService {
      */
     private String buildVerificationEmailText(String code) {
         return """
-                邮箱验证码 / Email Verification Code
-                
-                您好！
-                您正在进行邮箱验证，请使用以下验证码完成验证：
-                
-                验证码：%s
-                
-                注意事项：
-                - 验证码有效期为 10 分钟
-                - 请勿将验证码透露给他人
-                - 如果这不是您的操作，请忽略此邮件
-                
-                ---
+                Email Verification Code
                 
                 Hello!
                 You are verifying your email. Please use the following verification code:
@@ -201,9 +178,10 @@ public class ResendEmailService {
                 - Do not share the verification code with others
                 - If this was not your action, please ignore this email
                 
-                此邮件由系统自动发送，请勿回复
                 This is an automated email, please do not reply
-                """.formatted(code, code);
+                """.formatted(code);
     }
+
+
 }
 
