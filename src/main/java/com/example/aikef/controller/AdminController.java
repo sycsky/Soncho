@@ -48,6 +48,12 @@ public class AdminController {
         return agentService.updateAgent(id, request);
     }
 
+    @DeleteMapping("/agents/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAgent(@PathVariable UUID id) {
+        agentService.deleteAgent(id);
+    }
+
     // --- Role Management ---
     @GetMapping("/roles")
     public List<RoleDto> listRoles() {

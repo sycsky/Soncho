@@ -1,5 +1,7 @@
 package com.example.aikef.tool.internal.impl;
 
+import com.example.aikef.model.Customer;
+import com.example.aikef.repository.CustomerRepository;
 import com.example.aikef.workflow.context.WorkflowContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.P;
@@ -15,6 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -22,6 +25,7 @@ import java.util.Map;
 public class ContextTools {
 
     private final ObjectMapper objectMapper;
+    private final CustomerRepository customerRepository;
 
     @Tool("Get current workflow context variables and state. This tool allows the AI to inspect the current state of the workflow execution.")
     public String getWorkflowContext(
@@ -43,7 +47,18 @@ public class ContextTools {
             result.put("entities", ctx.getEntities());
             result.put("variables", ctx.getVariables());
             result.put("nodeOutputs", ctx.getNodeOutputs());
-            result.put("customerInfo", ctx.getCustomerInfo());
+
+            if (ctx.getCustomerId() != null) {
+                Optional<Customer> customerOpt = customerRepository.findById(ctx.getCustomerId());
+                if (customerOpt.isPresent()) {
+                    result.put("customerInfo", customerOpt.get());
+                } else {
+                    result.put("customerInfo", ctx.getCustomerInfo());
+                }
+            } else {
+                result.put("customerInfo", ctx.getCustomerInfo());
+            }
+
             result.put("sessionMetadata", ctx.getSessionMetadata());
             result.put("nowTime", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
             result.put("files", ctx.getFiles());

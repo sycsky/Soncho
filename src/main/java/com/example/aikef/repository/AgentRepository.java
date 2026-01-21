@@ -23,6 +23,8 @@ public interface AgentRepository extends JpaRepository<Agent, UUID>, JpaSpecific
 
     List<Agent> findByTenantId(String tenantId);
 
+    List<Agent> findByRoleId(UUID roleId);
+
     /**
      * 根据ID查询Agent并预加载Role（避免懒加载问题）
      */

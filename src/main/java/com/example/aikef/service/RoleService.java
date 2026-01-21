@@ -4,7 +4,9 @@ import com.example.aikef.dto.RoleDto;
 import com.example.aikef.dto.request.CreateRoleRequest;
 import com.example.aikef.dto.request.UpdateRoleRequest;
 import com.example.aikef.mapper.EntityMapper;
+import com.example.aikef.model.Agent;
 import com.example.aikef.model.Role;
+import com.example.aikef.repository.AgentRepository;
 import com.example.aikef.repository.RoleRepository;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.List;
@@ -21,10 +23,12 @@ public class RoleService {
 
     private final RoleRepository roleRepository;
     private final EntityMapper entityMapper;
+    private final AgentRepository agentRepository;
 
-    public RoleService(RoleRepository roleRepository, EntityMapper entityMapper) {
+    public RoleService(RoleRepository roleRepository, EntityMapper entityMapper, AgentRepository agentRepository) {
         this.roleRepository = roleRepository;
         this.entityMapper = entityMapper;
+        this.agentRepository = agentRepository;
     }
 
     public List<RoleDto> listRoles() {
@@ -75,7 +79,14 @@ public class RoleService {
         if (role.isSystem()) {
             throw new IllegalStateException("System roles cannot be deleted.");
         }
-        // TODO: Check if any agent is using this role before deletion
+        
+        // Find agents with this role and set their role to null
+        List<Agent> agents = agentRepository.findByRoleId(roleId);
+        for (Agent agent : agents) {
+            agent.setRole(null);
+            agentRepository.save(agent);
+        }
+        
         roleRepository.deleteById(roleId);
     }
 }

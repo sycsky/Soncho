@@ -147,6 +147,18 @@ public class AgentService {
         return entityMapper.toAgentDto(updated);
     }
 
+    @Transactional
+    public void deleteAgent(UUID agentId) {
+        Agent agent = findById(agentId);
+        
+        // Check if agent is Administrator
+        if (agent.getRole() != null && "Administrator".equalsIgnoreCase(agent.getRole().getName())) {
+            throw new IllegalStateException("无法删除管理员角色的客服");
+        }
+        
+        agentRepository.delete(agent);
+    }
+
     public Agent findById(UUID id) {
         // 使用 findById (EntityManager.find) 默认不应用 Hibernate Filter
         // 需要改用 JPA Specification 或 JPQL 查询才能生效
