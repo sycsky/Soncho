@@ -428,7 +428,7 @@ public class IntentNode extends NodeSwitchComponent {
             String role;
             if (msg.getSenderType() == SenderType.USER) {
                 role = "user";
-            } else if(SenderType.AGENT.equals(msg.getSenderType())) {
+            } else if(SenderType.AI.equals(msg.getSenderType()) ||SenderType.AGENT.equals(msg.getSenderType())) {
                 role = "assistant";
             }else{
                 continue;
