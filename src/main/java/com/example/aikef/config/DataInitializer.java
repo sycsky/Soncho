@@ -2,6 +2,7 @@ package com.example.aikef.config;
 
 import com.example.aikef.model.Agent;
 import com.example.aikef.model.Role;
+import com.example.aikef.model.PermissionConstants;
 import com.example.aikef.model.enums.AgentStatus;
 import com.example.aikef.repository.AgentRepository;
 import com.example.aikef.repository.RoleRepository;
@@ -11,6 +12,8 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @Component
@@ -32,25 +35,26 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        logger.info("Checking and initializing admin user...");
-        String adminEmail = "admin@nexus.com";
-        String adminPassword = "Admin@123";
-
+        logger.info("Checking and initializing default roles and admin user...");
+        
+        // 1. 初始化 Administrator 角色
         Role adminRole = roleRepository.findByName("Administrator").orElseGet(() -> {
             Role newRole = new Role();
             newRole.setName("Administrator");
             newRole.setDescription("System-wide administrator with all permissions.");
             newRole.setSystem(true);
-            // 设置所有权限为true
-            newRole.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
+            newRole.setPermissions(PermissionConstants.createAllPermissionsMap());
             return roleRepository.save(newRole);
         });
         
-        // 如果角色已存在但没有权限，则更新权限
         if (adminRole.getPermissions() == null || adminRole.getPermissions().isEmpty()) {
-            adminRole.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
+            adminRole.setPermissions(PermissionConstants.createAllPermissionsMap());
             adminRole = roleRepository.save(adminRole);
         }
+
+        // 2. 初始化 Admin 用户
+        String adminEmail = "admin@nexus.com";
+        String adminPassword = "Admin@123";
 
         Optional<Agent> existingAdmin = agentRepository.findByEmail(adminEmail);
 

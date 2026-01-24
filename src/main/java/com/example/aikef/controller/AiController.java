@@ -13,6 +13,7 @@ import com.example.aikef.dto.response.AiSuggestTagsResponse;
 import com.example.aikef.dto.response.AiSummaryResponse;
 import com.example.aikef.model.enums.SubscriptionPlan;
 import com.example.aikef.security.AgentPrincipal;
+import com.example.aikef.service.AgentService;
 import com.example.aikef.service.AiKnowledgeService;
 import com.example.aikef.service.SubscriptionService;
 import jakarta.validation.Valid;
@@ -27,10 +28,12 @@ public class AiController {
 
     private final AiKnowledgeService aiKnowledgeService;
     private final SubscriptionService subscriptionService;
+    private final AgentService agentService;
 
-    public AiController(AiKnowledgeService aiKnowledgeService, SubscriptionService subscriptionService) {
+    public AiController(AiKnowledgeService aiKnowledgeService, SubscriptionService subscriptionService, AgentService agentService) {
         this.aiKnowledgeService = aiKnowledgeService;
         this.subscriptionService = subscriptionService;
+        this.agentService = agentService;
     }
 
     @PostMapping("/summary")
@@ -42,7 +45,11 @@ public class AiController {
     @PostMapping("/rewrite")
     public AiRewriteResponse rewrite(@Valid @RequestBody AiRewriteRequest request, Authentication authentication) {
         checkFeature(authentication, SubscriptionPlan::isSupportMagicRewrite, "Magic Rewrite");
-        return aiKnowledgeService.rewrite(request.text(), request.tone(), request.sessionId());
+        String language = request.language();
+        if ((language == null || language.isBlank()) && authentication != null && authentication.getPrincipal() instanceof AgentPrincipal principal) {
+            language = agentService.getAgent(principal.getId()).language();
+        }
+        return aiKnowledgeService.rewrite(request.text(), request.tone(), request.sessionId(), language);
     }
 
     @PostMapping("/suggest-tags")

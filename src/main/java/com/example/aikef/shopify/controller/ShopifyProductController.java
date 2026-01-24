@@ -1,5 +1,6 @@
 package com.example.aikef.shopify.controller;
 
+import com.example.aikef.model.PermissionConstants;
 import com.example.aikef.tool.internal.impl.ShopifyCustomerServiceTools;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -27,7 +28,7 @@ public class ShopifyProductController {
      * 获取店铺商品列表（支持关键词搜索和分页），并关联折扣活动
      */
     @GetMapping("/products")
-    @PreAuthorize("hasAnyRole('AGENT', 'ADMINISTRATOR')")
+    @PreAuthorize("hasAuthority('" + PermissionConstants.ACCESS_SHOPIFY_PRODUCTS + "')")
     public JsonNode getProducts(
             @RequestParam(required = false, defaultValue = "") String query,
             @RequestParam(required = false, defaultValue = "10") int limit,
@@ -143,7 +144,7 @@ public class ShopifyProductController {
      * 获取所有活跃的折扣活动
      */
     @GetMapping("/discounts")
-    @PreAuthorize("hasAnyRole('AGENT', 'ADMINISTRATOR')")
+    @PreAuthorize("hasAuthority('" + PermissionConstants.ACCESS_SHOPIFY_DISCOUNTS + "')")
     public JsonNode getActiveDiscounts() {
         try {
             String jsonResult = shopifyTools.getActivePriceRules();
@@ -158,7 +159,7 @@ public class ShopifyProductController {
      * 创建礼品卡
      */
     @PostMapping("/gift-cards")
-    @PreAuthorize("hasAnyRole('AGENT', 'ADMINISTRATOR')")
+    @PreAuthorize("hasAuthority('" + PermissionConstants.MANAGE_SHOPIFY_GIFT_CARDS + "')")
     public JsonNode createGiftCard(@RequestBody Map<String, String> payload) {
         try {
             String amount = payload.get("amount");

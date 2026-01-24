@@ -31,7 +31,7 @@ public class AgentAuthenticationProvider implements AuthenticationProvider {
         if (!passwordEncoder.matches(rawPassword, agent.getPasswordHash())) {
             throw new BadCredentialsException("账号或密码错误");
         }
-        AgentPrincipal principal = new AgentPrincipal(agent, AuthorityUtils.NO_AUTHORITIES);
+        AgentPrincipal principal = new AgentPrincipal(agent, SecurityUtils.getAuthorities(agent));
         return new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
     }
 

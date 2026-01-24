@@ -67,18 +67,18 @@ public class FileUploadService {
         String extension = getFileExtension(originalName);
         UploadedFile.FileCategory category = determineCategory(contentType);
         
-        // 3. 计算MD5（可选，用于去重）
-        String md5Hash = calculateMD5(file.getInputStream());
-        
-        // 4. 检查是否已存在相同文件（可选去重逻辑）
-        // Optional<UploadedFile> existing = fileRepository.findByMd5Hash(md5Hash);
-        // if (existing.isPresent()) { return toDto(existing.get()); }
-        
-        // 5. 生成存储路径
+        // 3. 计算MD5并上传到存储
+        String md5Hash = null;
+        String url = null;
         String storagePath = generateStoragePath(category, extension);
         
-        // 6. 上传到存储
-        String url = storageProvider.upload(storagePath, file.getInputStream(), contentType, fileSize);
+        try (InputStream is = file.getInputStream()) {
+            md5Hash = calculateMD5(is);
+        }
+        
+        try (InputStream is = file.getInputStream()) {
+            url = storageProvider.upload(storagePath, is, contentType, fileSize);
+        }
         
         // 7. 保存文件记录
         UploadedFile uploadedFile = new UploadedFile();
@@ -281,16 +281,17 @@ public class FileUploadService {
     }
     
     private String calculateMD5(InputStream inputStream) {
+        if (inputStream == null) {
+            return null;
+        }
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             byte[] buffer = new byte[8192];
             int read;
             
-            inputStream.mark(Integer.MAX_VALUE);
             while ((read = inputStream.read(buffer)) != -1) {
                 md.update(buffer, 0, read);
             }
-            inputStream.reset();
             
             byte[] digest = md.digest();
             StringBuilder sb = new StringBuilder();

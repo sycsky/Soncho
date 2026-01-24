@@ -19,6 +19,9 @@ public class PermissionConstants {
     public static final String ACCESS_ROLE_CONFIG = "accessRoleConfig";
     public static final String ACCESS_AI_TOOLS = "accessAiTools";
     public static final String ACCESS_BILLING = "accessBilling";
+    public static final String ACCESS_SHOPIFY_PRODUCTS = "accessShopifyProducts";
+    public static final String ACCESS_SHOPIFY_DISCOUNTS = "accessShopifyDiscounts";
+    public static final String MANAGE_SHOPIFY_GIFT_CARDS = "manageShopifyGiftCards";
     
     /**
      * 获取所有权限键
@@ -34,7 +37,10 @@ public class PermissionConstants {
             DESIGN_WORKFLOW,
             ACCESS_ROLE_CONFIG,
             ACCESS_AI_TOOLS,
-            ACCESS_BILLING
+            ACCESS_BILLING,
+            ACCESS_SHOPIFY_PRODUCTS,
+            ACCESS_SHOPIFY_DISCOUNTS,
+            MANAGE_SHOPIFY_GIFT_CARDS
         };
     }
     

@@ -20,19 +20,34 @@ public class ShopifySyncService {
     private final ShopifyStoreRepository storeRepository;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
+    private final ShopifyGdprService gdprService;
 
     public ShopifySyncService(ShopifyObjectRepository objectRepository,
                               ShopifyStoreRepository storeRepository,
                               ObjectMapper objectMapper,
-                              StringRedisTemplate redisTemplate) {
+                              StringRedisTemplate redisTemplate,
+                              ShopifyGdprService gdprService) {
         this.objectRepository = objectRepository;
         this.storeRepository = storeRepository;
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
+        this.gdprService = gdprService;
     }
 
     @Transactional
     public void upsertFromWebhook(String topic, String shopDomain, String webhookId, byte[] body) {
+        // GDPR Webhooks
+        if (topic != null && topic.startsWith("gdpr/")) {
+            String payloadJson = new String(body, StandardCharsets.UTF_8);
+            switch (topic) {
+                case "gdpr/customers/data_request" -> gdprService.handleCustomerDataRequest(shopDomain, payloadJson);
+                case "gdpr/customers/redact" -> gdprService.handleCustomerRedact(shopDomain, payloadJson);
+                case "gdpr/shop/redact" -> gdprService.handleShopRedact(shopDomain);
+                default -> { /* ignore unknown gdpr topics */ }
+            }
+            return;
+        }
+
         if ("app/uninstalled".equals(topic)) {
             redisTemplate.delete(TOKEN_KEY_PREFIX + shopDomain);
             storeRepository.findByShopDomain(shopDomain).ifPresent(store -> {

@@ -38,9 +38,13 @@ public class TenantInterceptor implements HandlerInterceptor {
             "/api/v1/public/**",
             "/api/v1/shopify/auth/exchange",
             "/api/v1/shopify/**",
-            "/api/v1/chat/sessions/**",
+            "//api/v1/files/upload",
+//            "/api/v1/chat/sessions/**",
             "/api/v1/files/image/**",
+            "/api/public/cms/**", // CMS Public API
+            "/api/admin/cms/**", // CMS Admin API (Handled by manual token check)
             "/actuator/**",
+            "/error",
             "/ws/**"
     );
 

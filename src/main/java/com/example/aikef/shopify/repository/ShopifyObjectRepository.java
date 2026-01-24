@@ -13,5 +13,7 @@ public interface ShopifyObjectRepository extends JpaRepository<ShopifyObject, UU
             ShopifyObject.ObjectType objectType,
             String externalId
     );
+
+    void deleteByShopDomain(String shopDomain);
 }
 

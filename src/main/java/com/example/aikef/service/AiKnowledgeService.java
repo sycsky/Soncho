@@ -6,6 +6,7 @@ import com.example.aikef.dto.response.AiSummaryResponse;
 import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.Customer;
 import com.example.aikef.model.Message;
+import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.model.enums.SubscriptionPlan;
 import com.example.aikef.repository.ChatSessionRepository;
 import com.example.aikef.repository.MessageRepository;
@@ -45,19 +46,22 @@ public class AiKnowledgeService {
     private final SubscriptionService subscriptionService;
     private final LangChainChatService langChainChatService;
     private final ObjectMapper objectMapper;
+    private final TranslationService translationService;
 
     public AiKnowledgeService(MessageRepository messageRepository,
                              ChatSessionRepository chatSessionRepository,
                              CustomerTagService customerTagService,
                              SubscriptionService subscriptionService,
                              LangChainChatService langChainChatService,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             TranslationService translationService) {
         this.messageRepository = messageRepository;
         this.chatSessionRepository = chatSessionRepository;
         this.customerTagService = customerTagService;
         this.subscriptionService = subscriptionService;
         this.langChainChatService = langChainChatService;
         this.objectMapper = objectMapper;
+        this.translationService = translationService;
     }
 
     public AiSummaryResponse summarize(String sessionId) {
@@ -72,13 +76,21 @@ public class AiKnowledgeService {
         return new AiSummaryResponse(summary);
     }
 
-    public AiRewriteResponse rewrite(String text, String tone, String sessionId) {
-        String prompt = "You are a professional customer support agent. Rewrite the following draft reply to be more professional, polite, and empathetic.";
-        if (tone != null && !tone.isBlank()) {
-            prompt += " Tone: " + tone + ".";
+    public AiRewriteResponse rewrite(String text, String tone, String sessionId, String language) {
+        String draft = text == null ? "" : text;
+        String prompt;
+        if (draft.isBlank()) {
+            prompt = "You are a professional customer support agent. Generate a professional, polite, and empathetic reply based on the conversation context.";
+            if (tone != null && !tone.isBlank()) {
+                prompt += " Tone: " + tone + ".";
+            }
+        } else {
+            prompt = "You are a professional customer support agent. Rewrite the following draft reply to be more professional, polite, and empathetic.";
+            if (tone != null && !tone.isBlank()) {
+                prompt += " Tone: " + tone + ".";
+            }
+            prompt += "\n\nDraft: " + draft;
         }
-        
-        prompt += "\n\nDraft: " + text;
         
         // Add history context if sessionId is provided
         if (sessionId != null && !sessionId.isBlank()) {
@@ -92,7 +104,12 @@ public class AiKnowledgeService {
                     Collections.reverse(history);
                     
                     String context = history.stream()
-                        .map(m -> (m.getSenderType().name().equals("AGENT") ? "Agent: " : "Customer: ") + m.getText())
+                        .filter(m -> m.getSenderType() == SenderType.AGENT || m.getSenderType() == SenderType.AI || m.getSenderType() == SenderType.USER)
+                        .map(m -> {
+                            SenderType senderType = m.getSenderType();
+                            String prefix = (senderType == SenderType.AGENT || senderType == SenderType.AI) ? "Agent: " : "Customer: ";
+                            return prefix + m.getText();
+                        })
                         .collect(Collectors.joining("\n"));
                         
                     prompt = "Context (Last 10 messages):\n" + context + "\n\n" + prompt;
@@ -102,14 +119,21 @@ public class AiKnowledgeService {
             }
         }
         
+        String resultText;
         try {
-            String rewritten = langChainChatService.simpleChat("You are an expert copywriter for customer service.", prompt);
-            return new AiRewriteResponse(rewritten);
+            resultText = langChainChatService.simpleChat("You are an expert copywriter for customer service.", prompt);
         } catch (Exception e) {
             log.error("AI Rewrite failed", e);
-            // Fallback
-            return new AiRewriteResponse(text);
+            resultText = draft;
         }
+        String targetLanguage = language;
+        if (targetLanguage == null || targetLanguage.isBlank()) {
+            targetLanguage = translationService.getDefaultSystemLanguage();
+        }
+        if (targetLanguage != null && !targetLanguage.isBlank()) {
+            resultText = translationService.translate(resultText, "auto", targetLanguage);
+        }
+        return new AiRewriteResponse(resultText);
     }
 
     @Async

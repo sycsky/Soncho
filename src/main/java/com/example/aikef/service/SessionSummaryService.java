@@ -32,9 +32,10 @@ public class SessionSummaryService {
     private final ChatSessionRepository chatSessionRepository;
     private final LangChainChatService langChainChatService;
     private final SessionMessageGateway messageGateway;
+    private final TranslationService translationService;
 
     private static final String SUMMARY_SYSTEM_PROMPT = """
-            你是一个专业的客服对话总结助手。请根据以下对话记录，生成一份结构清晰的会话总结。
+            你是一个专业的客服对话总结助手。请使用 中文 生成一份结构清晰的会话总结。
             
             【输出格式要求】
             请严格按照以下格式输出，每个部分用空行分隔：
@@ -56,7 +57,7 @@ public class SessionSummaryService {
             【注意事项】
             1. 每个部分都要有内容，不要省略
             2. 语言简洁专业，避免冗余
-            3. 使用中文回复
+            3. 必须使用指定的语言输出整个总结内容
             4. 不要添加其他标题或前缀
             """;
 
@@ -97,9 +98,10 @@ public class SessionSummaryService {
      * 用于预览总结内容
      *
      * @param sessionId 会话ID
+     * @param languageCode 语言代码 (例如: "zh", "en", "ja")
      * @return 总结内容
      */
-    public SummaryResult generateSummary(UUID sessionId) {
+    public SummaryResult generateSummary(UUID sessionId, String languageCode) {
         // 验证会话存在
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new EntityNotFoundException("会话不存在"));
@@ -119,12 +121,27 @@ public class SessionSummaryService {
         // 构建对话记录文本
         String chatHistory = buildChatHistoryText(messages);
 
-        // 调用 LLM 生成总结
+        // 使用固定中文提示词
+        String systemPrompt = SUMMARY_SYSTEM_PROMPT;
+
+        // 调用 LLM 生成总结 (默认中文)
         try {
-            String summary = langChainChatService.simpleChat(SUMMARY_SYSTEM_PROMPT, chatHistory);
+            String summary = langChainChatService.simpleChat(systemPrompt, chatHistory);
             
-            log.info("生成会话总结成功: sessionId={}, messageCount={}, summaryLength={}",
-                    sessionId, messages.size(), summary.length());
+            // 如果目标语言不是中文，则使用 AWS Translate 进行翻译
+            if (languageCode != null && !languageCode.isBlank() && !languageCode.toLowerCase().startsWith("zh")) {
+                try {
+                    String translatedSummary = translationService.translate(summary, "zh", languageCode);
+                    log.info("总结翻译成功: {} -> {}", "zh", languageCode);
+                    summary = translatedSummary;
+                } catch (Exception e) {
+                    log.error("总结翻译失败, 返回原文: {}", e.getMessage());
+                    // 翻译失败降级为返回中文原文
+                }
+            }
+            
+            log.info("生成会话总结成功: sessionId={}, language={}, messageCount={}, summaryLength={}",
+                    sessionId, languageCode, messages.size(), summary.length());
 
             return new SummaryResult(
                     true,
@@ -148,11 +165,12 @@ public class SessionSummaryService {
      * 用于 Resolve 会话时调用
      *
      * @param sessionId 会话ID
+     * @param languageCode 语言代码
      * @return 保存的总结消息
      */
     @Transactional
-    public Message generateAndSaveSummary(UUID sessionId) {
-        SummaryResult result = generateSummary(sessionId);
+    public Message generateAndSaveSummary(UUID sessionId, String languageCode) {
+        SummaryResult result = generateSummary(sessionId, languageCode);
 
         if (!result.success()) {
             throw new RuntimeException("生成总结失败: " + result.errorMessage());
@@ -167,6 +185,22 @@ public class SessionSummaryService {
         log.info("保存会话总结消息: sessionId={}, messageId={}", sessionId, systemMessage.getId());
 
         return systemMessage;
+    }
+
+    private String getLanguageName(String code) {
+        if (code == null) return "中文";
+        String lang = code.toLowerCase();
+        if (lang.startsWith("en")) return "English";
+        if (lang.startsWith("zh")) return "中文";
+        if (lang.startsWith("ja")) return "Japanese";
+        if (lang.startsWith("ko")) return "Korean";
+        if (lang.startsWith("fr")) return "French";
+        if (lang.startsWith("de")) return "German";
+        if (lang.startsWith("es")) return "Spanish";
+        if (lang.startsWith("pt")) return "Portuguese";
+        if (lang.startsWith("ru")) return "Russian";
+        if (lang.startsWith("ar")) return "Arabic";
+        return "中文"; // 默认中文
     }
 
     /**

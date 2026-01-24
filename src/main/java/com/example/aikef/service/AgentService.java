@@ -36,19 +36,22 @@ public class AgentService {
     private final PasswordEncoder passwordEncoder;
     private final CurrentAgentProvider currentAgentProvider;
     private final SubscriptionService subscriptionService;
+    private final SessionGroupService sessionGroupService;
 
     public AgentService(AgentRepository agentRepository,
                         RoleRepository roleRepository,
                         EntityMapper entityMapper,
                         PasswordEncoder passwordEncoder,
                         CurrentAgentProvider currentAgentProvider,
-                        SubscriptionService subscriptionService) {
+                        SubscriptionService subscriptionService,
+                        SessionGroupService sessionGroupService) {
         this.agentRepository = agentRepository;
         this.roleRepository = roleRepository;
         this.entityMapper = entityMapper;
         this.passwordEncoder = passwordEncoder;
         this.currentAgentProvider = currentAgentProvider;
         this.subscriptionService = subscriptionService;
+        this.sessionGroupService = sessionGroupService;
     }
 
     public Page<AgentDto> listAgents(String name, String role, Pageable pageable) {
@@ -114,6 +117,7 @@ public class AgentService {
         }
 
         Agent saved = agentRepository.save(agent);
+        sessionGroupService.ensureDefaultGroups(saved);
         return entityMapper.toAgentDto(saved);
     }
 

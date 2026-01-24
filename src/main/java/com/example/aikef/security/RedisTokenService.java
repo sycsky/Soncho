@@ -89,12 +89,7 @@ public class RedisTokenService implements TokenService {
      * 从 Agent 创建 AgentPrincipal
      */
     private AgentPrincipal createPrincipal(Agent agent) {
-        // 获取角色权限
-        var authorities = agent.getRole() != null 
-                ? Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + agent.getRole().getName().toUpperCase()))
-                : Collections.<SimpleGrantedAuthority>emptyList();
-        
-        return new AgentPrincipal(agent, authorities);
+        return new AgentPrincipal(agent, SecurityUtils.getAuthorities(agent));
     }
 }
 

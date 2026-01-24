@@ -53,9 +53,15 @@ Authorization: Bearer {agent_token}
 结束会话并生成 AI 总结，总结会保存为 SYSTEM 类型的消息。
 
 ```http
-POST /api/v1/chat/sessions/{sessionId}/resolve
+POST /api/v1/chat/sessions/{sessionId}/resolve?language={language_code}
 Authorization: Bearer {agent_token}
 ```
+
+**请求参数：**
+
+| 参数名 | 位置 | 类型 | 必填 | 说明 |
+|---|---|---|---|---|
+| language | Query | string | 否 | 目标语言代码（如 zh, en, ja）。默认生成中文总结，指定其他语言将自动翻译。 |
 
 **处理流程：**
 

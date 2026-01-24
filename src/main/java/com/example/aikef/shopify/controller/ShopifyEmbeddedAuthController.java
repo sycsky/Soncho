@@ -95,12 +95,7 @@ public class ShopifyEmbeddedAuthController {
             }
 
             Agent agent = ensureShopAdminAgent(shopDomain, tenantId);
-            AgentPrincipal principal = new AgentPrincipal(
-                    agent,
-                    agent.getRole() != null
-                            ? Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + agent.getRole().getName().toUpperCase()))
-                            : Collections.emptyList()
-            );
+            AgentPrincipal principal = new AgentPrincipal(agent, com.example.aikef.security.SecurityUtils.getAuthorities(agent));
             String appToken = tokenService.issueToken(principal);
 
             return ResponseEntity.ok(Map.of(

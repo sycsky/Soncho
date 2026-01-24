@@ -13,7 +13,6 @@ import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -52,7 +51,7 @@ public class SessionGroupService {
     /**
      * 确保客服有默认的系统分组
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void ensureDefaultGroups(Agent agent) {
         log.info("🔍 检查客服默认分组: agentId={}, agentName={}", agent.getId(), agent.getName());
         

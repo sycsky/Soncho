@@ -577,6 +577,7 @@ public class AiToolService {
      */
     private ToolExecutionResult executeInternalTool(AiTool tool, Map<String, Object> params, WorkflowContext ctx) {
         try {
+
             // 处理 Body Template (如果存在)
             String body = null;
             if (tool.getApiBodyTemplate() != null && !tool.getApiBodyTemplate().isEmpty()) {

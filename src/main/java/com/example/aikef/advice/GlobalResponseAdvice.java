@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
  * 1. Wraps successful responses in a Result object.
  * 2. Catches exceptions and formats them as a Result object.
  */
-@RestControllerAdvice(basePackages = {"com.example.aikef.controller", "com.example.aikef.shopify.controller"})
+@RestControllerAdvice(basePackages = {"com.example.aikef.controller", "com.example.aikef.shopify.controller", "com.example.aikef.cms.controller"})
 public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalResponseAdvice.class);

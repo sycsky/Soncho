@@ -11,21 +11,33 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.databind.SerializationFeature;
+import org.hibernate.Hibernate;
+import org.hibernate.proxy.HibernateProxy;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ContextTools {
 
     private final ObjectMapper objectMapper;
     private final CustomerRepository customerRepository;
+
+    public ContextTools(ObjectMapper objectMapper, CustomerRepository customerRepository) {
+        this.objectMapper = objectMapper.copy()
+                .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+        this.customerRepository = customerRepository;
+    }
+
+    private Object unproxy(Object entity) {
+        if (entity == null) {
+            return null;
+        }
+        return Hibernate.unproxy(entity);
+    }
 
     @Tool("Get current workflow context variables and state. This tool allows the AI to inspect the current state of the workflow execution.")
     public String getWorkflowContext(
@@ -51,12 +63,12 @@ public class ContextTools {
             if (ctx.getCustomerId() != null) {
                 Optional<Customer> customerOpt = customerRepository.findById(ctx.getCustomerId());
                 if (customerOpt.isPresent()) {
-                    result.put("customerInfo", customerOpt.get());
+                    result.put("customerInfo", unproxy(customerOpt.get()));
                 } else {
-                    result.put("customerInfo", ctx.getCustomerInfo());
+                    result.put("customerInfo", unproxy(ctx.getCustomerInfo()));
                 }
             } else {
-                result.put("customerInfo", ctx.getCustomerInfo());
+                result.put("customerInfo", unproxy(ctx.getCustomerInfo()));
             }
 
             result.put("sessionMetadata", ctx.getSessionMetadata());

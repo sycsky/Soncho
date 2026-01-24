@@ -239,14 +239,16 @@ public class ChatController {
      * 如果没有 SYSTEM 消息，则总结所有会话内容
      * 
      * @param sessionId 会话ID
+     * @param language 语言代码（可选，例如：zh, en）
      * @return 总结预览结果
      */
     @GetMapping("/sessions/{sessionId}/summary/preview")
     public SessionSummaryService.SummaryResult previewSessionSummary(
             @PathVariable UUID sessionId,
+            @RequestParam(required = false) String language,
             Authentication authentication) {
         requireAgentAuth(authentication);
-        return sessionSummaryService.generateSummary(sessionId);
+        return sessionSummaryService.generateSummary(sessionId, language);
     }
 
     /**
@@ -265,16 +267,18 @@ public class ChatController {
      * 每次 Resolve 都会生成新的 SYSTEM 消息作为总结
      * 
      * @param sessionId 会话ID
+     * @param language 语言代码（可选，例如：zh, en）
      * @return 总结消息和更新后的会话信息
      */
     @PostMapping("/sessions/{sessionId}/resolve")
     public ResolveSessionResponse resolveSession(
             @PathVariable UUID sessionId,
+            @RequestParam(required = false) String language,
             Authentication authentication) {
         UUID agentId = requireAgentAuthAndGetId(authentication);
         
         // 1. 生成并保存总结
-        Message summaryMessage = sessionSummaryService.generateAndSaveSummary(sessionId);
+        Message summaryMessage = sessionSummaryService.generateAndSaveSummary(sessionId, language);
         
         // 2. 关闭会话
         chatSessionService.closeSession(sessionId);
