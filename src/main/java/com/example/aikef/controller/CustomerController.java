@@ -7,6 +7,8 @@ import com.example.aikef.dto.request.CreateCustomerRequest;
 import com.example.aikef.dto.request.UpdateCustomerRequest;
 import com.example.aikef.model.Channel;
 import com.example.aikef.service.CustomerService;
+import com.example.aikef.shopify.service.ShopifyGraphQLService;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,10 +25,14 @@ public class CustomerController {
 
     private final CustomerService customerService;
     private final com.example.aikef.service.SpecialCustomerService specialCustomerService;
+    private final ShopifyGraphQLService shopifyGraphQLService;
 
-    public CustomerController(CustomerService customerService, com.example.aikef.service.SpecialCustomerService specialCustomerService) {
+    public CustomerController(CustomerService customerService, 
+                              com.example.aikef.service.SpecialCustomerService specialCustomerService,
+                              ShopifyGraphQLService shopifyGraphQLService) {
         this.customerService = customerService;
         this.specialCustomerService = specialCustomerService;
+        this.shopifyGraphQLService = shopifyGraphQLService;
     }
 
     @GetMapping
@@ -85,5 +91,17 @@ public class CustomerController {
     public CustomerDto assignRole(@PathVariable UUID id, @RequestParam String roleCode) {
         specialCustomerService.assignRole(id, roleCode);
         return customerService.getCustomer(id);
+    }
+
+    /**
+     * Get recent Shopify orders for a customer
+     */
+    @GetMapping("/{id}/shopify-orders")
+    public JsonNode getCustomerShopifyOrders(@PathVariable UUID id) {
+        CustomerDto customer = customerService.getCustomer(id);
+        if (customer.shopifyCustomerId() == null) {
+            return com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.arrayNode();
+        }
+        return shopifyGraphQLService.getOrdersByCustomerId(customer.shopifyCustomerId(), 5);
     }
 }

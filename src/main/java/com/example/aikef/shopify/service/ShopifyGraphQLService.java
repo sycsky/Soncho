@@ -73,6 +73,64 @@ public class ShopifyGraphQLService {
     }
 
     /**
+     * Get recent orders for a specific customer
+     * @param customerId Shopify Customer ID (can be numeric string or GID)
+     * @param limit Number of orders to return
+     * @return List of orders
+     */
+    public JsonNode getOrdersByCustomerId(String customerId, int limit) {
+        String gid = customerId;
+        if (customerId.matches("\\d+")) {
+            gid = "gid://shopify/Customer/" + customerId;
+        }
+
+        String query = """
+            query($id: ID!, $first: Int!) {
+              customer(id: $id) {
+                orders(first: $first, sortKey: CREATED_AT, reverse: true) {
+                  edges {
+                    node {
+                      id
+                      name
+                      createdAt
+                      cancelledAt
+                      displayFulfillmentStatus
+                      totalPriceSet {
+                        shopMoney {
+                          amount
+                          currencyCode
+                        }
+                      }
+                      lineItems(first: 5) {
+                        edges {
+                          node {
+                            title
+                            quantity
+                            variant {
+                              title
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """;
+            
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("id", gid);
+        variables.put("first", limit);
+        
+        JsonNode data = execute(query, variables);
+        if (data.has("customer") && !data.get("customer").isNull()) {
+             return data.get("customer").get("orders").get("edges");
+        }
+        return objectMapper.createArrayNode();
+    }
+
+    /**
      * Use REST API to get policies as they are not easily accessible via Admin GraphQL API
      */
     public JsonNode getPolicies() {

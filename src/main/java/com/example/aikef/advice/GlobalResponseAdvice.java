@@ -154,6 +154,16 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
         return Result.error(ex.getCode(), ex.getMessage());
     }
 
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleDataIntegrityViolation(org.springframework.dao.DataIntegrityViolationException ex) {
+        logger.warn("Data integrity violation: {}", ex.getMessage());
+        if (ex.getMessage() != null && ex.getMessage().contains("Duplicate entry")) {
+             return Result.error(HttpStatus.BAD_REQUEST.value(), "Duplicate entry detected");
+        }
+        return Result.error(HttpStatus.BAD_REQUEST.value(), "Data integrity violation");
+    }
+
     // --- Legacy Exceptions (Treated as Business Exceptions for backward compatibility) ---
     @ExceptionHandler(EntityNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
