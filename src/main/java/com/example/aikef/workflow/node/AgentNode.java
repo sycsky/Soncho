@@ -47,6 +47,12 @@ public class AgentNode extends BaseWorkflowNode {
 
     private static final Logger log = LoggerFactory.getLogger(AgentNode.class);
 
+    private static final String DEFAULT_SYSTEM_PROMPT = """
+
+1. You can only answer user questions through dialogue context, tools, and knowledge base content. Do not imagine or create some non-existent data or content that is not present in the dialogue. 
+2. For unanswerable questions, try to use knowledge base tools for querying
+""";
+
     @Resource
     private LangChainChatService langChainChatService;
 
@@ -90,6 +96,12 @@ public class AgentNode extends BaseWorkflowNode {
                 goal = ctx.getQuery();
             }
 
+            // Append default system prompt
+            if (goal == null) {
+                goal = "";
+            }
+            goal = goal + "\n\n" + DEFAULT_SYSTEM_PROMPT;
+
             Integer maxIterations = getConfigInt("maxIterations", 10);
             Boolean useHistory = getConfigBoolean("useHistory", true);
             Double temperature = getConfigDouble("temperature", 0.7); // Default to creative for agents
@@ -119,6 +131,18 @@ public class AgentNode extends BaseWorkflowNode {
                 });
             } catch (Exception e) {
                 log.warn("Failed to auto-inject transferToCustomerService tool", e);
+            }
+
+            // Auto-inject 'searchKnowledgeBaseByKeyword' tool
+            try {
+                aiToolRepository.findByName("searchKnowledgeBaseByKeyword").ifPresent(tool -> {
+                    if (!toolIds.contains(tool.getId())) {
+                        toolIds.add(tool.getId());
+                        log.info("Auto-injected tool: searchKnowledgeBaseByKeyword ({})", tool.getId());
+                    }
+                });
+            } catch (Exception e) {
+                log.warn("Failed to auto-inject searchKnowledgeBaseByKeyword tool", e);
             }
 
             List<ToolSpecification> toolSpecs = Collections.emptyList();
