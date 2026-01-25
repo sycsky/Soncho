@@ -146,6 +146,15 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
         return Result.error(HttpStatus.BAD_REQUEST.value(), errorMsg);
     }
 
+    // --- Business Exception ---
+    @ExceptionHandler(com.example.aikef.exception.BusinessException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleBusinessException(com.example.aikef.exception.BusinessException ex) {
+        logger.warn("Business exception: {}", ex.getMessage());
+        return Result.error(ex.getCode(), ex.getMessage());
+    }
+
+    // --- Legacy Exceptions (Treated as Business Exceptions for backward compatibility) ---
     @ExceptionHandler(EntityNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public Result<Void> handleEntityNotFound(EntityNotFoundException ex) {
@@ -160,6 +169,7 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
         return Result.error(HttpStatus.BAD_REQUEST.value(), ex.getMessage());
     }
 
+    // --- Security Exceptions (Must be kept) ---
     @ExceptionHandler({AuthenticationException.class})
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public Result<Void> handleAuthenticationException(AuthenticationException ex) {
@@ -174,10 +184,11 @@ public class GlobalResponseAdvice implements ResponseBodyAdvice<Object> {
         return Result.error(HttpStatus.FORBIDDEN.value(), "Access denied");
     }
 
+    // --- System Errors ---
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleAllUncaughtException(Exception ex) {
-        logger.error("An unexpected error occurred", ex);
-        return Result.error(HttpStatus.INTERNAL_SERVER_ERROR.value(), ex.getMessage());
+        logger.error("System Error", ex);
+        return Result.error(HttpStatus.INTERNAL_SERVER_ERROR.value(), "System Error");
     }
 }

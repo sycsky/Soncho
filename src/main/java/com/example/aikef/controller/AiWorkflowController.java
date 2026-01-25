@@ -51,6 +51,7 @@ public class AiWorkflowController {
      */
     @GetMapping
     public List<AiWorkflowDto> getAllWorkflows() {
+        List<AiWorkflow> s =workflowService.getAllWorkflows();
         return workflowService.getAllWorkflows().stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());

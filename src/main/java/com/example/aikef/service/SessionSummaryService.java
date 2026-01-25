@@ -111,8 +111,8 @@ public class SessionSummaryService {
 
         if (messages.isEmpty()) {
             return new SummaryResult(
-                    false,
-                    "没有需要总结的消息",
+                    true,
+                    "暂无对话内容",
                     null,
                     0
             );
@@ -120,6 +120,15 @@ public class SessionSummaryService {
 
         // 构建对话记录文本
         String chatHistory = buildChatHistoryText(messages);
+
+        if (chatHistory.isBlank()) {
+            return new SummaryResult(
+                    true,
+                    "暂无有效对话内容",
+                    null,
+                    messages.size()
+            );
+        }
 
         // 使用固定中文提示词
         String systemPrompt = SUMMARY_SYSTEM_PROMPT;
@@ -166,18 +175,26 @@ public class SessionSummaryService {
      *
      * @param sessionId 会话ID
      * @param languageCode 语言代码
+     * @param customSummary 自定义总结内容（可选）
      * @return 保存的总结消息
      */
     @Transactional
-    public Message generateAndSaveSummary(UUID sessionId, String languageCode) {
-        SummaryResult result = generateSummary(sessionId, languageCode);
+    public Message generateAndSaveSummary(UUID sessionId, String languageCode, String customSummary) {
+        String summaryContent;
 
-        if (!result.success()) {
-            throw new RuntimeException("生成总结失败: " + result.errorMessage());
+        if (customSummary != null && !customSummary.isBlank()) {
+            // 使用自定义总结
+            summaryContent = customSummary;
+            log.info("使用自定义会话总结: sessionId={}", sessionId);
+        } else {
+            // 生成 AI 总结
+            SummaryResult result = generateSummary(sessionId, languageCode);
+
+            if (!result.success()) {
+                throw new RuntimeException("生成总结失败: " + result.errorMessage());
+            }
+            summaryContent = result.summary();
         }
-
-        // 直接使用格式化后的总结内容
-        String summaryContent = result.summary();
 
         // 保存为 SYSTEM 消息
         Message systemMessage = messageGateway.sendSystemMessage(sessionId, summaryContent);

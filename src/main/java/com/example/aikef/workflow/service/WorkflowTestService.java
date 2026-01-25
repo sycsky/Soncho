@@ -193,7 +193,7 @@ public class WorkflowTestService {
     /**
      * 发送测试消息
      */
-    public WorkflowTestSessionDto sendTestMessage(String testSessionId, String userMessage) {
+    public WorkflowTestSessionDto sendTestMessage(String testSessionId, String userMessage, UUID workflowId) {
         TestSession session = testSessions.get(testSessionId);
         if (session == null) {
             throw new IllegalArgumentException("测试会话不存在或已过期: " + testSessionId);
@@ -238,9 +238,16 @@ public class WorkflowTestService {
         AiWorkflowService.WorkflowExecutionResult result;
         
         try {
-            // 使用executeForSession执行工作流，会自动匹配分类绑定的工作流
-            // 传递消息ID用于历史记录查询
-            result = workflowService.executeForSession(session.sessionId, userMessage, messageId);
+            // 如果前端传入了 workflowId，则强制执行指定的工作流
+            // 否则使用 executeForSession 自动匹配
+            if (workflowId != null) {
+                // 强制执行指定工作流
+                result = workflowService.executeWorkflow(workflowId, session.sessionId, userMessage, session.variables);
+            } else {
+                // 使用executeForSession执行工作流，会自动匹配分类绑定的工作流
+                // 传递消息ID用于历史记录查询
+                result = workflowService.executeForSession(session.sessionId, userMessage, messageId);
+            }
         } catch (Exception e) {
             log.error("工作流执行异常: testSessionId={}", testSessionId, e);
             result = new AiWorkflowService.WorkflowExecutionResult(

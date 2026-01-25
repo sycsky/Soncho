@@ -38,11 +38,11 @@ public class WorkflowTestController {
     /**
      * 发送测试消息
      */
-        @PostMapping("/sessions/{testSessionId}/messages")
+    @PostMapping("/sessions/{testSessionId}/messages")
     public WorkflowTestSessionDto sendMessage(
             @PathVariable String testSessionId,
             @Valid @RequestBody SendTestMessageRequest request) {
-        return testService.sendTestMessage(testSessionId, request.message());
+        return testService.sendTestMessage(testSessionId, request.message(), request.workflowId());
     }
 
     /**
@@ -96,7 +96,8 @@ public class WorkflowTestController {
     ) {}
 
     public record SendTestMessageRequest(
-            @NotBlank String message
+            @NotBlank String message,
+            UUID workflowId
     ) {}
 }
 

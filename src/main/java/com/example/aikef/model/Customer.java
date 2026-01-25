@@ -50,6 +50,13 @@ public class Customer extends AuditableEntity {
     @Column(columnDefinition = "json", name = "custom_fields")
     private Map<String, Object> customFields = new HashMap<>();
 
+    @Column(name = "shopify_customer_id", length = 50)
+    private String shopifyCustomerId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "json", name = "shopify_customer_info")
+    private Map<String, Object> shopifyCustomerInfo = new HashMap<>();
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -202,5 +209,21 @@ public class Customer extends AuditableEntity {
 
     public void setAiTags(List<String> aiTags) {
         this.aiTags = aiTags;
+    }
+
+    public String getShopifyCustomerId() {
+        return shopifyCustomerId;
+    }
+
+    public void setShopifyCustomerId(String shopifyCustomerId) {
+        this.shopifyCustomerId = shopifyCustomerId;
+    }
+
+    public Map<String, Object> getShopifyCustomerInfo() {
+        return shopifyCustomerInfo;
+    }
+
+    public void setShopifyCustomerInfo(Map<String, Object> shopifyCustomerInfo) {
+        this.shopifyCustomerInfo = shopifyCustomerInfo;
     }
 }

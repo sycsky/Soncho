@@ -106,6 +106,10 @@ public class CustomerService {
         customer.setAvatarUrl(request.avatarUrl());
         customer.setLocation(request.location());
         customer.setNotes(request.notes());
+        customer.setShopifyCustomerId(request.shopifyCustomerId());
+        if (request.shopifyCustomerInfo() != null) {
+            customer.setShopifyCustomerInfo(request.shopifyCustomerInfo());
+        }
         
         if (request.customFields() != null) {
             customer.setCustomFields(request.customFields());
@@ -175,6 +179,14 @@ public class CustomerService {
         
         if (request.customFields() != null) {
             customer.setCustomFields(request.customFields());
+        }
+
+        if (request.shopifyCustomerId() != null) {
+            customer.setShopifyCustomerId(request.shopifyCustomerId());
+        }
+
+        if (request.shopifyCustomerInfo() != null) {
+            customer.setShopifyCustomerInfo(request.shopifyCustomerInfo());
         }
         
         if (request.active() != null) {
@@ -249,7 +261,16 @@ public class CustomerService {
      * @return 客户对象
      */
     @Transactional
-    public Customer findOrCreateByChannel(Channel channel, String name, String email, String phone, String channelUserId) {
+    public Customer findOrCreateByChannel(
+            Channel channel,
+            String name,
+            String email,
+            String phone,
+            String channelUserId,
+            String shopifyCustomerId,
+            Map<String, Object> shopifyCustomerInfo,
+            boolean forceOverrideContact
+    ) {
         Customer customer = null;
         
         // 优先根据渠道用户ID查找
@@ -276,7 +297,17 @@ public class CustomerService {
         
         // 如果找到了客户，更新信息并返回
         if (customer != null) {
-            updateCustomerInfo(customer, name, email, phone, channelUserId, channel);
+            updateCustomerInfo(
+                    customer,
+                    name,
+                    email,
+                    phone,
+                    channelUserId,
+                    channel,
+                    shopifyCustomerId,
+                    shopifyCustomerInfo,
+                    forceOverrideContact
+            );
             return customerRepository.save(customer);
         }
         
@@ -286,6 +317,10 @@ public class CustomerService {
         customer.setPrimaryChannel(channel);
         customer.setEmail(email);
         customer.setPhone(phone);
+        customer.setShopifyCustomerId(shopifyCustomerId);
+        if (shopifyCustomerInfo != null) {
+            customer.setShopifyCustomerInfo(shopifyCustomerInfo);
+        }
         
         // 设置渠道用户ID
         if (channelUserId != null && !channelUserId.isBlank()) {
@@ -301,20 +336,48 @@ public class CustomerService {
         return customerRepository.save(customer);
     }
     
-    private void updateCustomerInfo(Customer customer, String name, String email, String phone, String channelUserId, Channel channel) {
+    private void updateCustomerInfo(
+            Customer customer,
+            String name,
+            String email,
+            String phone,
+            String channelUserId,
+            Channel channel,
+            String shopifyCustomerId,
+            Map<String, Object> shopifyCustomerInfo,
+            boolean forceOverrideContact
+    ) {
         // 更新名称（如果提供了新名称）
-        if (name != null && !name.isBlank() && !name.equals(customer.getName())) {
+        if (name != null && !name.isBlank() && (forceOverrideContact || !name.equals(customer.getName()))) {
             customer.setName(name);
         }
         
         // 更新邮箱（如果提供了且不冲突）
-        if (email != null && !email.isBlank() && customer.getEmail() == null) {
-            customer.setEmail(email);
+        if (email != null && !email.isBlank()) {
+            if (email.equals(customer.getEmail())) {
+                customer.setEmail(email);
+            } else if (forceOverrideContact || customer.getEmail() == null) {
+                boolean emailUsed = customerRepository.findByEmail(email)
+                        .map(existing -> !existing.getId().equals(customer.getId()))
+                        .orElse(false);
+                if (!emailUsed) {
+                    customer.setEmail(email);
+                }
+            }
         }
         
         // 更新手机号（如果提供了且不冲突）
-        if (phone != null && !phone.isBlank() && customer.getPhone() == null) {
-            customer.setPhone(phone);
+        if (phone != null && !phone.isBlank()) {
+            if (phone.equals(customer.getPhone())) {
+                customer.setPhone(phone);
+            } else if (forceOverrideContact || customer.getPhone() == null) {
+                boolean phoneUsed = customerRepository.findByPhone(phone)
+                        .map(existing -> !existing.getId().equals(customer.getId()))
+                        .orElse(false);
+                if (!phoneUsed) {
+                    customer.setPhone(phone);
+                }
+            }
         }
         
         // 更新渠道用户ID
@@ -346,6 +409,14 @@ public class CustomerService {
                     }
                     break;
             }
+        }
+
+        if (shopifyCustomerId != null && !shopifyCustomerId.isBlank()) {
+            customer.setShopifyCustomerId(shopifyCustomerId);
+        }
+
+        if (shopifyCustomerInfo != null) {
+            customer.setShopifyCustomerInfo(shopifyCustomerInfo);
         }
     }
 }

@@ -89,6 +89,8 @@ public class CustomerManagementTools {
                     location,
                     null, // notes
                     null, // customFields
+                    null, // shopifyCustomerId
+                    null, // shopifyCustomerInfo
                     null  // active
             );
 

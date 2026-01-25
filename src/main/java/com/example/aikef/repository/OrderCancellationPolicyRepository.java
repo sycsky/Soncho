@@ -21,6 +21,9 @@ public interface OrderCancellationPolicyRepository extends JpaRepository<OrderCa
      */
     Optional<OrderCancellationPolicy> findByIsDefaultTrueAndEnabledTrue();
 
+    @Override
+    List<OrderCancellationPolicy> findAll();
+
     /**
      * 查找所有政策（按排序顺序）
      */

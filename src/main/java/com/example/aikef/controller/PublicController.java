@@ -136,7 +136,10 @@ public class PublicController {
                     request.name(),
                     request.email(),
                     request.phone(),
-                    request.channelUserId()
+                    request.channelUserId(),
+                    request.shopifyCustomerId(),
+                    request.shopifyCustomerInfo(),
+                    request.shopifyCustomerId() != null && !request.shopifyCustomerId().isBlank()
             );
 
             // 生成 Token 并创建会话（带 metadata）

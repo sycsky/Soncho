@@ -2,6 +2,7 @@ package com.example.aikef.saas.aspect;
 
 import com.example.aikef.saas.context.TenantContext;
 import jakarta.persistence.EntityManager;
+import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.hibernate.Filter;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 @Aspect
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 50)
+@Slf4j
 public class TenantHibernateFilterAspect {
 
     @Value("${app.saas.enabled:false}")

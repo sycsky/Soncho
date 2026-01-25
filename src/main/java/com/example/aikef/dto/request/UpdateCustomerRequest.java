@@ -18,6 +18,8 @@ public record UpdateCustomerRequest(
         String location,
         String notes,
         Map<String, Object> customFields,
+        String shopifyCustomerId,
+        Map<String, Object> shopifyCustomerInfo,
         Boolean active
 ) {
 }

@@ -4,6 +4,7 @@ import com.example.aikef.model.base.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.Filter;
 
 import java.math.BigDecimal;
 
@@ -14,6 +15,7 @@ import java.math.BigDecimal;
 @Table(name = "order_cancellation_policies")
 @Getter
 @Setter
+@Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
 public class OrderCancellationPolicy extends AuditableEntity {
 
     /**

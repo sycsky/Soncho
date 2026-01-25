@@ -274,11 +274,14 @@ public class ChatController {
     public ResolveSessionResponse resolveSession(
             @PathVariable UUID sessionId,
             @RequestParam(required = false) String language,
+            @RequestBody(required = false) ResolveSessionRequest request,
             Authentication authentication) {
         UUID agentId = requireAgentAuthAndGetId(authentication);
         
+        String customSummary = request != null ? request.customSummary() : null;
+
         // 1. 生成并保存总结
-        Message summaryMessage = sessionSummaryService.generateAndSaveSummary(sessionId, language);
+        Message summaryMessage = sessionSummaryService.generateAndSaveSummary(sessionId, language, customSummary);
         
         // 2. 关闭会话
         chatSessionService.closeSession(sessionId);
@@ -291,6 +294,11 @@ public class ChatController {
                 entityMapper.toMessageDto(summaryMessage)
         );
     }
+
+    /**
+     * Resolve 会话请求
+     */
+    public record ResolveSessionRequest(String customSummary) {}
 
     /**
      * Resolve 会话响应

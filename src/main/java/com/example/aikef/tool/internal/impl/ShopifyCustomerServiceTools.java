@@ -147,6 +147,92 @@ public class ShopifyCustomerServiceTools {
         }
     }
 
+    @Tool("Get recent orders by Shopify customer id")
+    public String getOrdersByShopifyCustomerId(
+            @P(value = "Shopify customer numeric id (e.g. 1234567890)", required = true) String customerId
+    ) {
+        if (customerId == null || customerId.isBlank()) {
+            return "Customer id is required.";
+        }
+
+        String trimmed = customerId.trim();
+        String gid;
+        if (trimmed.startsWith("gid://shopify/Customer/")) {
+            gid = trimmed;
+        } else if (trimmed.startsWith("Customer/")) {
+            gid = "gid://shopify/Customer/" + trimmed.substring("Customer/".length());
+        } else if (trimmed.matches("\\d+")) {
+            gid = "gid://shopify/Customer/" + trimmed;
+        } else {
+            return "Invalid customer id format.";
+        }
+
+        String gql = """
+            query ($id: ID!) {
+              customer(id: $id) {
+                id
+                firstName
+                lastName
+                email
+                orders(first: 5, sortKey: CREATED_AT, reverse: true) {
+                  edges {
+                    node {
+                      id
+                      name
+                      createdAt
+                      displayFinancialStatus
+                      displayFulfillmentStatus
+                      totalPriceSet {
+                        shopMoney {
+                          amount
+                          currencyCode
+                        }
+                      }
+                      lineItems(first: 50) {
+                        edges {
+                          node {
+                            title
+                            quantity
+                            currentQuantity
+                            variantTitle
+                            variant {
+                              id
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """;
+
+        try {
+            JsonNode data = graphQLService.execute(gql, Map.of("id", gid));
+            JsonNode customerNode = data.path("customer");
+            if (customerNode.isMissingNode() || customerNode.isNull()) {
+                return "Customer not found.";
+            }
+
+            JsonNode edges = customerNode.path("orders").path("edges");
+            if (edges.isArray()) {
+                for (JsonNode edge : edges) {
+                    filterOrderLineItems(edge.path("node"));
+                }
+            }
+
+            if (!edges.isArray() || edges.size() == 0) {
+                return "No orders found for this customer.";
+            }
+
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(edges);
+        } catch (Exception e) {
+            log.error("Query orders by customer id failed", e);
+            return "Query failed: " + e.getMessage();
+        }
+    }
+
     @Tool("Get detailed information about a specific order by Order Number with email verification")
     public String getOrderDetails(
             @P(value = "The Shopify Order Number (e.g., #1001 or 1001)", required = true) String orderNumber,

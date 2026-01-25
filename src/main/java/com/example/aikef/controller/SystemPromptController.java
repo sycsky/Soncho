@@ -11,7 +11,7 @@ import java.util.UUID;
  * SystemPrompt 美化控制器
  */
 @RestController
-@RequestMapping("/api/system-prompt")
+@RequestMapping("/api/v1/system-prompt")
 public class SystemPromptController {
 
     @Resource

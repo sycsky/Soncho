@@ -19,6 +19,8 @@ public record CreateCustomerRequest(
         String avatarUrl,
         String location,
         String notes,
-        Map<String, Object> customFields
+        Map<String, Object> customFields,
+        String shopifyCustomerId,
+        Map<String, Object> shopifyCustomerInfo
 ) {
 }

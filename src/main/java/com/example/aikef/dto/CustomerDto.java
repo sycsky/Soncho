@@ -23,6 +23,8 @@ public record CustomerDto(
         String location,
         String notes,
         @JsonProperty("metadata") Map<String, Object> customFields,
+        String shopifyCustomerId,
+        Map<String, Object> shopifyCustomerInfo,
         boolean active,
         Instant lastInteractionAt,
         Instant createdAt,
