@@ -31,6 +31,7 @@ public class KnowledgeBaseService {
     private final KnowledgeDocumentRepository documentRepository;
     private final VectorStoreService vectorStoreService;
     private final AgentRepository agentRepository;
+    private final com.example.aikef.repository.LlmModelRepository llmModelRepository;
 
     // ==================== 知识库 CRUD ====================
 
@@ -67,7 +68,19 @@ public class KnowledgeBaseService {
         KnowledgeBase kb = new KnowledgeBase();
         kb.setName(request.name());
         kb.setDescription(request.description());
-        kb.setEmbeddingModelId(request.embeddingModelId());
+
+        // 自动设定 Embedding 模型
+        UUID embeddingModelId = request.embeddingModelId();
+        if (embeddingModelId == null) {
+            List<com.example.aikef.model.LlmModel> embeddingModels = llmModelRepository.findByModelTypeAndEnabledTrueOrderBySortOrderAsc(com.example.aikef.model.LlmModel.ModelType.EMBEDDING);
+            if (!embeddingModels.isEmpty()) {
+                embeddingModelId = embeddingModels.get(0).getId();
+            } else {
+                log.warn("未找到可用的 EMBEDDING 模型，知识库将无法进行向量化");
+            }
+        }
+        kb.setEmbeddingModelId(embeddingModelId);
+        
         kb.setVectorDimension(request.vectorDimension() != null ? request.vectorDimension() : 1536);
         kb.setEnabled(true);
 
