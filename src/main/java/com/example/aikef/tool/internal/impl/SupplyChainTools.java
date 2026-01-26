@@ -150,6 +150,10 @@ public class SupplyChainTools {
                 ))
                 .collect(Collectors.toList());
 
+        String hasReturn = order.getItems().stream()
+                .anyMatch(item -> (item.getQuantityRequested() == null ? 0 : item.getQuantityRequested()) > (item.getQuantityReceived() == null ? 0 : item.getQuantityReceived()))
+                ? "YES" : "NO";
+
         return new PurchaseOrderDetailDto(
                 order.getId(),
                 order.getStatus(),
@@ -157,6 +161,7 @@ public class SupplyChainTools {
                 order.getInitiator().getName(),
                 order.getSupplier().getName(),
                 order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : "",
+                hasReturn,
                 items
         );
     }
@@ -181,6 +186,10 @@ public class SupplyChainTools {
                 ))
                 .collect(Collectors.toList());
 
+        String hasReturn = order.getItems().stream()
+                .anyMatch(item -> (item.getQuantityRequested() == null ? 0 : item.getQuantityRequested()) > (item.getQuantityReceived() == null ? 0 : item.getQuantityReceived()))
+                ? "YES" : "NO";
+
         return new PurchaseOrderDetailDto(
                 order.getId(),
                 order.getStatus(),
@@ -188,6 +197,7 @@ public class SupplyChainTools {
                 order.getInitiator().getName(),
                 order.getSupplier().getName(),
                 order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : "",
+                hasReturn,
                 items
         );
     }
@@ -279,6 +289,7 @@ public class SupplyChainTools {
         String initiatorName, 
         String supplierName,
         String deliveryDate,
+        String hasReturn,
         List<OrderItemDto> items
     ) {}
 
