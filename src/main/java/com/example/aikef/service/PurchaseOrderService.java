@@ -88,6 +88,13 @@ public class PurchaseOrderService {
         return orderRepository.findBySupplier_Id(supplierId);
     }
     
+    public List<PurchaseOrder> getAllOrders(String status) {
+        if (status != null && !status.isBlank()) {
+            return orderRepository.findByStatus(status);
+        }
+        return orderRepository.findAll();
+    }
+    
     public PurchaseOrder getOrderDetails(String orderId) {
         return orderRepository.findById(orderId)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + orderId));
@@ -187,6 +194,36 @@ public class PurchaseOrderService {
                 .orElseThrow(() -> new EntityNotFoundException("Order not found"));
         order.setDeliveryDate(deliveryDate);
         orderRepository.save(order);
+    }
+
+    @Transactional
+    public void cancelOrder(String orderId, String reason, UUID operatorId) {
+        PurchaseOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found"));
+
+        if ("CANCELLED".equalsIgnoreCase(order.getStatus())) {
+            throw new IllegalStateException("Order is already cancelled.");
+        }
+
+        if (!"ORDERED".equalsIgnoreCase(order.getStatus())) {
+            throw new IllegalStateException("Cannot cancel order in status: " + order.getStatus());
+        }
+
+        order.setStatus("CANCELLED");
+        orderRepository.save(order);
+
+        Map<String, Object> eventData = Map.of(
+                "orderId", order.getId(),
+                "reason", reason != null ? reason : "No reason provided",
+                "cancelledBy", operatorId,
+                "message", "Order #" + order.getId() + " has been CANCELLED."
+        );
+
+        // Notify Initiator
+        triggerEventForCustomer(order.getInitiator().getId(), "EVENT_PO_ORDER_CANCEL", eventData);
+
+        // Notify Supplier
+        triggerEventForCustomer(order.getSupplier().getId(), "EVENT_PO_ORDER_CANCEL", eventData);
     }
     
     // 修改原方法，支持 multiplier

@@ -123,6 +123,15 @@ public class SupplyChainTools {
                 .collect(Collectors.toList());
     }
 
+    @Tool("Get all purchase orders (Admin view) with optional status filter")
+    public List<PurchaseOrderDto> getAllPurchaseOrders(
+            @P(value = "Status (ORDERED, SHIPPED, RECEIVED, CANCELLED)", required = false) String status
+    ) {
+        return purchaseOrderService.getAllOrders(status).stream()
+                .map(this::toDto)
+                .collect(Collectors.toList());
+    }
+
     @Tool("Get supply order details including items")
     public PurchaseOrderDetailDto getSupplyOrderDetails(
             @P(value = "Order ID", required = true) String orderId
@@ -223,6 +232,16 @@ public class SupplyChainTools {
     ) {
         purchaseOrderService.updateDeliveryDate(orderId, LocalDateTime.parse(deliveryDate.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         return "Delivery date updated to " + deliveryDate;
+    }
+
+    @Tool("Cancel purchase order")
+    public String cancelPurchaseOrder(
+            @P(value = "Order ID", required = true) String orderId,
+            @P(value = "Cancellation Reason", required = false) String reason,
+            @P(value = "Operator Customer ID", required = true) String operatorId
+    ) {
+        purchaseOrderService.cancelOrder(orderId, reason, UUID.fromString(operatorId));
+        return "Order " + orderId + " has been cancelled.";
     }
 
     @Tool("Manually adjust inventory for purchase order (Sync or Revert)")

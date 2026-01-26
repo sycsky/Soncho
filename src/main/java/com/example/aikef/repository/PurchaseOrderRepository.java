@@ -14,4 +14,7 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, St
     // Support status filtering
     List<PurchaseOrder> findByInitiator_IdAndStatus(UUID initiatorId, String status);
     List<PurchaseOrder> findBySupplier_IdAndStatus(UUID supplierId, String status);
+    
+    // Find all by status
+    List<PurchaseOrder> findByStatus(String status);
 }
