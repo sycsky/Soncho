@@ -17,4 +17,10 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, St
     
     // Find all by status
     List<PurchaseOrder> findByStatus(String status);
+    
+    // Find by supplier and date range
+    List<PurchaseOrder> findBySupplier_IdAndCreatedAtBetween(UUID supplierId, java.time.Instant start, java.time.Instant end);
+    
+    // Find by supplier, status and date range
+    List<PurchaseOrder> findBySupplier_IdAndStatusAndCreatedAtBetween(UUID supplierId, String status, java.time.Instant start, java.time.Instant end);
 }

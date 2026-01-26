@@ -95,6 +95,14 @@ public class PurchaseOrderService {
         return orderRepository.findAll();
     }
     
+    public List<PurchaseOrder> getOrdersBySupplierAndDateRange(UUID supplierId, java.time.Instant start, java.time.Instant end) {
+        return orderRepository.findBySupplier_IdAndCreatedAtBetween(supplierId, start, end);
+    }
+    
+    public List<PurchaseOrder> getOrdersBySupplierAndStatusAndDateRange(UUID supplierId, String status, java.time.Instant start, java.time.Instant end) {
+        return orderRepository.findBySupplier_IdAndStatusAndCreatedAtBetween(supplierId, status, start, end);
+    }
+    
     public PurchaseOrder getOrderDetails(String orderId) {
         return orderRepository.findById(orderId)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + orderId));
@@ -104,6 +112,11 @@ public class PurchaseOrderService {
     public void updateItemShipped(String itemId, int quantity) {
         PurchaseOrderItem item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new EntityNotFoundException("Item not found"));
+        
+        if (quantity > item.getQuantityRequested()) {
+            throw new IllegalArgumentException("Shipped quantity cannot exceed requested quantity (" + item.getQuantityRequested() + ")");
+        }
+        
         item.setQuantityShipped(quantity);
         itemRepository.save(item);
     }
@@ -112,6 +125,13 @@ public class PurchaseOrderService {
     public void updateItemReceived(String itemId, int quantity) {
         PurchaseOrderItem item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new EntityNotFoundException("Item not found"));
+        
+        // Ensure quantity shipped is set before validating received
+        int shipped = item.getQuantityShipped() != null ? item.getQuantityShipped() : 0;
+        if (quantity > shipped) {
+            throw new IllegalArgumentException("Received quantity cannot exceed shipped quantity (" + shipped + ")");
+        }
+        
         item.setQuantityReceived(quantity);
         itemRepository.save(item);
     }
