@@ -18,7 +18,6 @@ public record WebhookMessageRequest(
         /**
          * 消息内容（必填）
          */
-        @NotBlank(message = "消息内容不能为空")
         String content,
 
         /**

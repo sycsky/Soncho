@@ -2,6 +2,7 @@ package com.example.aikef.workflow.node;
 
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
+import com.example.aikef.exception.BusinessException;
 import com.example.aikef.llm.LangChainChatService;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.SenderType;
@@ -211,6 +212,7 @@ public class AgentNode extends BaseWorkflowNode {
             log.error("Agent Node execution failed", e);
             setOutput("Error: " + e.getMessage());
             recordExecution(ctx.getQuery(), "Error", startTime, false, e.getMessage());
+            throw new BusinessException("The system has sent an error. Please try again later", e);
         }
     }
 

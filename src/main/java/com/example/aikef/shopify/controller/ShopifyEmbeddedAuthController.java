@@ -169,7 +169,11 @@ public class ShopifyEmbeddedAuthController {
         agent.setStatus(AgentStatus.ONLINE);
         agent.setRole(adminRole);
         agent.setLanguage("en");
-        return agentRepository.save(agent);
+        Agent saved = agentRepository.save(agent);
+        
+
+        
+        return saved;
     }
 
     private String extractBearer(String authorization) {

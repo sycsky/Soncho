@@ -97,7 +97,7 @@ public class AiKnowledgeService {
             try {
                 UUID id = UUID.fromString(sessionId);
                 // Fetch last 10 messages
-                List<Message> history = messageRepository.findBySession_IdOrderByCreatedAtDesc(id, PageRequest.of(0, 10)).getContent();
+                List<Message> history = new ArrayList<>(messageRepository.findBySession_IdOrderByCreatedAtDesc(id, PageRequest.of(0, 10)).getContent());
                 
                 if (!history.isEmpty()) {
                     // Reverse to chronological order

@@ -25,6 +25,8 @@ import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 @Transactional(readOnly = true)
@@ -37,6 +39,10 @@ public class AgentService {
     private final CurrentAgentProvider currentAgentProvider;
     private final SubscriptionService subscriptionService;
     private final SessionGroupService sessionGroupService;
+
+    @Autowired
+    @Lazy
+    private com.example.aikef.workflow.service.AiWorkflowService aiWorkflowService;
 
     public AgentService(AgentRepository agentRepository,
                         RoleRepository roleRepository,
@@ -118,6 +124,8 @@ public class AgentService {
 
         Agent saved = agentRepository.save(agent);
         sessionGroupService.ensureDefaultGroups(saved);
+
+
         return entityMapper.toAgentDto(saved);
     }
 

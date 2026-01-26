@@ -9,7 +9,7 @@ import java.util.Map;
 public record ChannelInboundRequest(
         @NotBlank String conversationId,
         @NotBlank String senderId,
-        @NotBlank String content,
+        String content,
         Map<String, Object> metadata,
         List<String> mentions) {
 

@@ -163,7 +163,7 @@ public class AiWorkflowService {
         copy.setEdgesJson(original.getEdgesJson());
         copy.setLiteflowEl(original.getLiteflowEl());
         copy.setSubChainsJson(original.getSubChainsJson());
-        copy.setEnabled(false); // 复制的工作流默认禁用
+        copy.setEnabled(true); // 复制的工作流默认禁用
         copy.setVersion(1);
         copy.setTriggerType(original.getTriggerType());
         copy.setTriggerConfig(original.getTriggerConfig());
@@ -175,6 +175,60 @@ public class AiWorkflowService {
         }
 
         return workflowRepository.save(copy);
+    }
+
+    /**
+     * 复制所有默认工作流给指定 Agent
+     */
+    @Transactional
+    public void copyDefaultWorkflowsToAgent(UUID agentId) {
+        String tenantId = TenantContext.getTenantId();
+        List<AiWorkflow> defaultWorkflows;
+        
+        // 使用原生查询获取系统默认和当前租户的默认工作流，绕过 Hibernate Filter
+        if (saasEnabled && tenantId != null) {
+            defaultWorkflows = workflowRepository.findSystemAndTenantDefaultWorkflows(tenantId);
+        } else {
+            defaultWorkflows = workflowRepository.findByIsDefaultTrue();
+        }
+
+        if (defaultWorkflows.isEmpty()) {
+            return;
+        }
+
+        Agent agent = agentService.findById(agentId);
+
+        for (AiWorkflow original : defaultWorkflows) {
+            AiWorkflow copy = new AiWorkflow();
+
+            // 构造新名称，确保唯一
+            String baseName = original.getName() + " - " + agent.getName();
+            String newName = baseName;
+
+            int counter = 1;
+            while (workflowRepository.existsByName(newName)) {
+                newName = baseName + " (" + counter + ")";
+                counter++;
+            }
+
+            copy.setName(newName);
+            copy.setDescription(original.getDescription());
+            copy.setNodesJson(original.getNodesJson());
+            copy.setEdgesJson(original.getEdgesJson());
+            copy.setLiteflowEl(original.getLiteflowEl());
+            copy.setSubChainsJson(original.getSubChainsJson());
+
+            // 保持原工作流的启用状态
+            copy.setEnabled(original.getEnabled());
+            copy.setVersion(1);
+            copy.setTriggerType(original.getTriggerType());
+            copy.setTriggerConfig(original.getTriggerConfig());
+            copy.setIsDefault(false); // 复制品不是系统默认
+            copy.setCreatedByAgent(agent);
+
+            workflowRepository.save(copy);
+            log.info("已为 Agent {} 复制默认工作流: {} -> {}", agent.getName(), original.getName(), newName);
+        }
     }
 
     /**

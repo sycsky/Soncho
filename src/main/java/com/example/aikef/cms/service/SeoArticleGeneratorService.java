@@ -46,7 +46,7 @@ public class SeoArticleGeneratorService {
             String systemPrompt = """
                     You are an expert technical content writer and SEO specialist for an AI Agent platform.
                     Your goal is to write a high-quality, engaging, and educational blog post about AI Agents, Workflow Automation, or Customer Service AI.
-                    The content should be in Chinese (Simplified).
+                    The content should be in English.
                     Make sure the tone is professional yet accessible.
                     Use Markdown formatting.
                     """;

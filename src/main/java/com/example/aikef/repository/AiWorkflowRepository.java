@@ -30,9 +30,14 @@ public interface AiWorkflowRepository extends JpaRepository<AiWorkflow, UUID> {
     List<AiWorkflow> findByEnabledTrueOrderByCreatedAtDesc();
 
     /**
-     * 查找默认工作流
+     * 查找默认工作流（单个）
      */
     Optional<AiWorkflow> findByIsDefaultTrueAndEnabledTrue();
+
+    /**
+     * 查找所有默认工作流
+     */
+    List<AiWorkflow> findByIsDefaultTrue();
 
     /**
      * 根据触发类型查找启用的工作流
@@ -57,5 +62,11 @@ public interface AiWorkflowRepository extends JpaRepository<AiWorkflow, UUID> {
            "AND w.triggerType = 'CATEGORY' " +
            "AND w.triggerConfig LIKE %:categoryId%")
     List<AiWorkflow> findByCategoryId(@Param("categoryId") String categoryId);
+
+    /**
+     * 查找系统默认和指定租户的默认工作流 (忽略租户过滤器)
+     */
+    @Query(value = "SELECT * FROM ai_workflows WHERE is_default = 1 AND (tenant_id IS NULL OR tenant_id = :tenantId)", nativeQuery = true)
+    List<AiWorkflow> findSystemAndTenantDefaultWorkflows(@Param("tenantId") String tenantId);
 }
 

@@ -39,12 +39,14 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 @Service
+@Transactional
 public class ShopifyAuthService {
 
     private static final Duration STATE_TTL = Duration.ofMinutes(10);
@@ -186,9 +188,7 @@ public class ShopifyAuthService {
     private void initializeTenantData(Agent adminAgent) {
         // 1. 确保默认会话分组存在
         sessionGroupService.ensureDefaultGroups(adminAgent);
-        
-        // 2. 复制模板工作流
-        copyTemplateWorkflows(adminAgent);
+
     }
     
     @SuppressWarnings("unchecked")
@@ -243,7 +243,7 @@ public class ShopifyAuthService {
             role.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
             return roleRepository.save(role);
         });
-        
+
         // 如果角色已存在但没有权限，则更新权限
         if (adminRole.getPermissions() == null || adminRole.getPermissions().isEmpty()) {
             adminRole.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
@@ -257,10 +257,15 @@ public class ShopifyAuthService {
         agent.setName("Shopify Admin");
         agent.setEmail(email);
         agent.setPasswordHash(passwordEncoder.encode(password));
-        agent.setStatus(AgentStatus.OFFLINE);
+        agent.setStatus(AgentStatus.ONLINE);
         agent.setRole(adminRole);
         agent.setLanguage("zh-CN");
-        return agentRepository.save(agent);
+        agent =  agentRepository.save(agent);
+        TenantContext.setTenantId(tenantId);
+        // 2. 复制模板工作流
+        copyTemplateWorkflows(agent);
+
+        return agent;
     }
 
     private TokenResponse exchangeAccessToken(String shopDomain, String code) {

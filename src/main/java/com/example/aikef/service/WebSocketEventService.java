@@ -149,7 +149,17 @@ public class WebSocketEventService {
             
             // 如果是客户发送的消息，检查是否需要触发 AI 工作流
             if (customerId != null && agentId == null) {
-                triggerAiWorkflowIfNeeded(sessionId, request.text(), messageDto.id());
+                // 检查是否为纯图片消息 (文本为空 且 包含图片附件)
+                boolean isImageOnly = (request.text() == null || request.text().isBlank()) &&
+                                      request.attachments() != null && 
+                                      !request.attachments().isEmpty() &&
+                                      request.attachments().stream().allMatch(att -> att.type() == com.example.aikef.model.enums.AttachmentType.IMAGE);
+                
+                if (isImageOnly) {
+                    log.info("消息仅包含图片，跳过 AI 工作流: sessionId={}, messageId={}", sessionId, messageDto.id());
+                } else {
+                    triggerAiWorkflowIfNeeded(sessionId, request.text(), messageDto.id());
+                }
             }
             
             // 如果是客服发送的消息，检查是否需要转发到第三方平台

@@ -2,7 +2,6 @@ package com.example.aikef.dto;
 
 import com.example.aikef.model.Channel;
 import com.example.aikef.channel.MessageDirection;
-import com.example.aikef.model.Channel;
 
 import java.util.Collections;
 import java.util.List;
@@ -28,8 +27,9 @@ public record ChannelMessage(
         if (senderId == null || senderId.isBlank()) {
             senderId = "anonymous";
         }
-        if (content == null || content.isBlank()) {
-            throw new IllegalArgumentException("content不能为空");
+        // 允许 content 为空 (例如纯附件消息)
+        if (content == null) {
+            content = "";
         }
         content = content.trim();
         metadata = metadata == null ? Collections.emptyMap() : Map.copyOf(metadata);
