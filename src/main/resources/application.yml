@@ -99,6 +99,13 @@ translation:
       name: 한국어
   default-system-language: zh-CN
 
+app:
+  unreplied-reminder:
+    enabled: true
+    threshold-minutes: 5
+    max-age-minutes: 60
+    interval-ms: 60000
+
 # Resend 邮件服务配置
 resend:
   api:

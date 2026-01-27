@@ -13,6 +13,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Component
 public class EntityMapper {
@@ -25,19 +26,22 @@ public class EntityMapper {
     private final ObjectMapper objectMapper;
     private final com.example.aikef.repository.SpecialCustomerRepository specialCustomerRepository;
     private final com.example.aikef.repository.WorkflowExecutionLogRepository workflowExecutionLogRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public EntityMapper(SessionGroupMappingRepository sessionGroupMappingRepository,
                         com.example.aikef.repository.MessageRepository messageRepository,
                         AgentRepository agentRepository,
                         ObjectMapper objectMapper,
                         com.example.aikef.repository.SpecialCustomerRepository specialCustomerRepository,
-                        com.example.aikef.repository.WorkflowExecutionLogRepository workflowExecutionLogRepository) {
+                        com.example.aikef.repository.WorkflowExecutionLogRepository workflowExecutionLogRepository,
+                        PasswordEncoder passwordEncoder) {
         this.sessionGroupMappingRepository = sessionGroupMappingRepository;
         this.messageRepository = messageRepository;
         this.agentRepository = agentRepository;
         this.objectMapper = objectMapper;
         this.specialCustomerRepository = specialCustomerRepository;
         this.workflowExecutionLogRepository = workflowExecutionLogRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public AgentDto toAgentDto(Agent agent) {
@@ -53,7 +57,10 @@ public class EntityMapper {
                 agent.getStatus(),
                 role != null ? role.getId() : null,
                 role != null ? role.getName() : null,
-                agent.getLanguage());
+                agent.getLanguage(),
+                // Check if password is "123456"
+                passwordEncoder.matches("123456", agent.getPasswordHash())
+        );
     }
 
     public RoleDto toRoleDto(Role role) {

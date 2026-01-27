@@ -130,6 +130,41 @@ public class AgentService {
     }
 
     @Transactional
+    public void updatePassword(UUID agentId, String oldPassword, String newPassword) {
+        Agent agent = findById(agentId);
+        
+        if (!passwordEncoder.matches(oldPassword, agent.getPasswordHash())) {
+            throw new IllegalArgumentException("旧密码错误");
+        }
+        
+        agent.setPasswordHash(passwordEncoder.encode(newPassword));
+        agentRepository.save(agent);
+    }
+
+    @Transactional
+    public AgentDto updateProfile(UUID agentId, String newEmail, String avatarUrl, String name) {
+        Agent agent = findById(agentId);
+        
+        if (newEmail != null && !newEmail.equals(agent.getEmail())) {
+            if (agentRepository.findByEmail(newEmail).isPresent()) {
+                throw new IllegalArgumentException("该邮箱已被使用");
+            }
+            agent.setEmail(newEmail);
+        }
+        
+        if (avatarUrl != null) {
+            agent.setAvatarUrl(avatarUrl);
+        }
+        
+        if (name != null && !name.isBlank()) {
+            agent.setName(name);
+        }
+        
+        Agent updated = agentRepository.save(agent);
+        return entityMapper.toAgentDto(updated);
+    }
+
+    @Transactional
     public AgentDto updateAgent(UUID agentId, UpdateAgentRequest request) {
         Agent agent = findById(agentId);
         

@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.sockjs.SockJsTransportFailureException;
 
 import java.io.IOException;
 import java.util.*;
@@ -81,8 +82,12 @@ public class WebSocketSessionManager {
                 try {
                     session.sendMessage(new TextMessage(message));
                     log.debug("✉️ 发送消息给客服: agentId={}, sessionId={}", agentId, session.getId());
-                } catch (IOException e) {
-                    log.error("❌ 发送消息失败: agentId={}, sessionId={}", agentId, session.getId(), e);
+                } catch (SockJsTransportFailureException e) {
+                    log.debug("SockJS 发送失败，移除异常连接: agentId={}, sessionId={}", agentId, session.getId());
+                    removeSession(session);
+                } catch (Exception e) {
+                    log.warn("⚠️ 发送消息给客服失败，移除异常连接: agentId={}, sessionId={}", agentId, session.getId(), e);
+                    removeSession(session);
                 }
             }
         });
@@ -103,8 +108,12 @@ public class WebSocketSessionManager {
                 try {
                     session.sendMessage(new TextMessage(message));
                     log.debug("✉️ 发送消息给客户: customerId={}, sessionId={}", customerId, session.getId());
-                } catch (IOException e) {
-                    log.error("❌ 发送消息失败: customerId={}, sessionId={}", customerId, session.getId(), e);
+                } catch (SockJsTransportFailureException e) {
+                    log.debug("SockJS 发送失败，移除异常连接: customerId={}, sessionId={}", customerId, session.getId());
+                    removeSession(session);
+                } catch (Exception e) {
+                    log.warn("⚠️ 发送消息给客户失败，移除异常连接: customerId={}, sessionId={}", customerId, session.getId(), e);
+                    removeSession(session);
                 }
             }
         });

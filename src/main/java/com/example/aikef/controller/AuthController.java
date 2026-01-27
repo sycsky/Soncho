@@ -1,7 +1,9 @@
 package com.example.aikef.controller;
 
 import com.example.aikef.dto.AgentDto;
+import com.example.aikef.dto.request.ChangePasswordRequest;
 import com.example.aikef.dto.request.LoginRequest;
+import com.example.aikef.dto.request.UpdateProfileRequest;
 import com.example.aikef.dto.response.LoginResponse;
 import com.example.aikef.model.Agent;
 import com.example.aikef.repository.AgentRepository;
@@ -15,11 +17,9 @@ import jakarta.validation.Valid;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -87,5 +87,17 @@ public class AuthController {
     @GetMapping("/me")
     public AgentDto me() {
         return agentService.currentAgent();
+    }
+
+    @PostMapping("/change-password")
+    public void changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        UUID agentId = agentService.currentAgent().id();
+        agentService.updatePassword(agentId, request.oldPassword(), request.newPassword());
+    }
+
+    @PutMapping("/profile")
+    public AgentDto updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
+        UUID agentId = agentService.currentAgent().id();
+        return agentService.updateProfile(agentId, request.email(), request.avatarUrl(), request.name());
     }
 }

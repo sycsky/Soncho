@@ -11,5 +11,6 @@ public record AgentDto(
         AgentStatus status,
         UUID roleId,
         String roleName,
-        String language) {  // 客服使用的语言代码
+        String language,
+        boolean hasDefaultPassword) {
 }
