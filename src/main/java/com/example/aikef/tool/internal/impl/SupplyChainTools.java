@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@Transactional
 public class SupplyChainTools {
 
     private final SpecialCustomerService specialCustomerService;
@@ -305,6 +307,7 @@ public class SupplyChainTools {
 
                 items.add(new SettlementItemDto(
                         item.getProductName(),
+                        order.getSupplier().getName(),
                         requested,
                         shipped,
                         received,
@@ -340,6 +343,7 @@ public class SupplyChainTools {
                 .map(item -> new OrderItemDto(
                         item.getId().toString(),
                         item.getProductName(),
+                        order.getSupplier().getName(),
                         item.getQuantityRequested(),
                         item.getQuantityShipped(),
                         item.getQuantityReceived(),
@@ -380,6 +384,7 @@ public class SupplyChainTools {
     
     public record SettlementItemDto(
             String productName,
+            String supplierName,
             int quantityRequested,
             int quantityShipped,
             int quantityReceived,
@@ -400,6 +405,7 @@ public class SupplyChainTools {
     public record OrderItemDto(
         String id,
         String productName,
+        String supplierName,
         int quantityRequested,
         int quantityShipped,
         int quantityReceived,
