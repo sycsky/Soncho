@@ -69,6 +69,7 @@ public class ShopifyAuthController {
                 hmac
         );
 
+
         boolean wantsJson = "json".equalsIgnoreCase(format);
         String accept = request.getHeader("Accept");
         if (!wantsJson && accept != null && accept.toLowerCase().contains("application/json")) {
