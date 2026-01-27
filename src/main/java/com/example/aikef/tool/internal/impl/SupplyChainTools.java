@@ -323,7 +323,8 @@ public class SupplyChainTools {
                         requested,
                         shipped,
                         received,
-                        returned
+                        returned,
+                        item.getUnitPrice()
                 ));
             }
             
@@ -372,7 +373,8 @@ public class SupplyChainTools {
             int quantityRequested,
             int quantityShipped,
             int quantityReceived,
-            int quantityReturned
+            int quantityReturned,
+            BigDecimal unitPrice
     ) {}
     
     public record PurchaseOrderDetailDto(
