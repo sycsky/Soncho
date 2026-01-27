@@ -235,7 +235,8 @@ public class SupplyChainTools {
     @Tool("Get all suppliers settlement statistics (Admin)")
     public SupplierSettlementDto getAllSettlementStats(
             @P(value = "Start Date (yyyy-MM-dd)", required = true) String startDate,
-            @P(value = "End Date (yyyy-MM-dd)", required = true) String endDate
+            @P(value = "End Date (yyyy-MM-dd)", required = true) String endDate,
+            @P(value = "Status (ORDERED, SHIPPED, RECEIVED)", required = true) String status
     ) {
         // Parse dates to Instant (assuming start of day for start date, end of day for end date in system zone)
         LocalDate start = LocalDate.parse(startDate);
@@ -244,8 +245,8 @@ public class SupplyChainTools {
         java.time.Instant startInstant = start.atStartOfDay(ZoneId.systemDefault()).toInstant();
         java.time.Instant endInstant = end.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant();
 
-        // Only include RECEIVED orders
-        List<PurchaseOrder> orders = purchaseOrderService.getOrdersByStatusAndDateRange("RECEIVED", startInstant, endInstant);
+        // Only include orders with specified status
+        List<PurchaseOrder> orders = purchaseOrderService.getOrdersByStatusAndDateRange(status, startInstant, endInstant);
 
         return calculateSettlement(orders);
     }
@@ -254,7 +255,8 @@ public class SupplyChainTools {
     public SupplierSettlementDto getSupplierSettlementStats(
             @P(value = "Supplier Customer ID", required = true) String supplierId,
             @P(value = "Start Date (yyyy-MM-dd)", required = true) String startDate,
-            @P(value = "End Date (yyyy-MM-dd)", required = true) String endDate
+            @P(value = "End Date (yyyy-MM-dd)", required = true) String endDate,
+            @P(value = "Status (ORDERED, SHIPPED, RECEIVED)", required = true) String status
     ) {
         // Parse dates to Instant (assuming start of day for start date, end of day for end date in system zone)
         LocalDate start = LocalDate.parse(startDate);
@@ -263,8 +265,8 @@ public class SupplyChainTools {
         java.time.Instant startInstant = start.atStartOfDay(ZoneId.systemDefault()).toInstant();
         java.time.Instant endInstant = end.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant();
         
-        // Only include RECEIVED orders
-        List<PurchaseOrder> orders = purchaseOrderService.getOrdersBySupplierAndStatusAndDateRange(UUID.fromString(supplierId), "RECEIVED", startInstant, endInstant);
+        // Only include orders with specified status
+        List<PurchaseOrder> orders = purchaseOrderService.getOrdersBySupplierAndStatusAndDateRange(UUID.fromString(supplierId), status, startInstant, endInstant);
         
         return calculateSettlement(orders);
     }
