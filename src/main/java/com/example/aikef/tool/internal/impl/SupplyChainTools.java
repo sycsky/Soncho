@@ -132,34 +132,21 @@ public class SupplyChainTools {
                 .collect(Collectors.toList());
     }
 
+    @Tool("Get all purchase orders details (Admin view) with items")
+    public List<PurchaseOrderDetailDto> getAllPurchaseOrderDetails(
+            @P(value = "Status (ORDERED, SHIPPED, RECEIVED, CANCELLED)", required = false) String status
+    ) {
+        return purchaseOrderService.getAllOrders(status).stream()
+                .map(this::toDetailDto)
+                .collect(Collectors.toList());
+    }
+
     @Tool("Get supply order details including items")
     public PurchaseOrderDetailDto getSupplyOrderDetails(
             @P(value = "Order ID", required = true) String orderId
     ) {
         PurchaseOrder order = purchaseOrderService.getOrderDetails(orderId);
-        
-        List<OrderItemDto> items = order.getItems().stream()
-                .map(item -> new OrderItemDto(
-                        item.getId().toString(),
-                        item.getProductName(),
-                        item.getQuantityRequested(),
-                        item.getQuantityShipped(),
-                        item.getQuantityReceived(),
-                        item.getUnitPrice(),
-                        item.getTotalAmount(),
-                        (item.getQuantityRequested() == null ? 0 : item.getQuantityRequested()) > (item.getQuantityReceived() == null ? 0 : item.getQuantityReceived()) ? "YES" : "NO"
-                ))
-                .collect(Collectors.toList());
-
-        return new PurchaseOrderDetailDto(
-                order.getId(),
-                order.getStatus(),
-                order.getTotalAmount(),
-                order.getInitiator().getName(),
-                order.getSupplier().getName(),
-                order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : "",
-                items
-        );
+        return toDetailDto(order);
     }
 
 
@@ -167,31 +154,8 @@ public class SupplyChainTools {
     public PurchaseOrderDetailDto getPurchaseOrderDetails(
             @P(value = "Order ID", required = true) String orderId
     ) {
-
         PurchaseOrder order = purchaseOrderService.getOrderDetails(orderId);
-
-        List<OrderItemDto> items = order.getItems().stream()
-                .map(item -> new OrderItemDto(
-                        item.getId().toString(),
-                        item.getProductName(),
-                        item.getQuantityRequested(),
-                        item.getQuantityShipped(),
-                        item.getQuantityReceived(),
-                        item.getUnitPrice(),
-                        item.getTotalAmount(),
-                        (item.getQuantityRequested() == null ? 0 : item.getQuantityRequested()) > (item.getQuantityReceived() == null ? 0 : item.getQuantityReceived()) ? "YES" : "NO"
-                ))
-                .collect(Collectors.toList());
-
-        return new PurchaseOrderDetailDto(
-                order.getId(),
-                order.getStatus(),
-                order.getTotalAmount(),
-                order.getInitiator().getName(),
-                order.getSupplier().getName(),
-                order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : "",
-                items
-        );
+        return toDetailDto(order);
     }
 
     @Tool("Update shipped quantity for items (Supplier)")
@@ -268,6 +232,24 @@ public class SupplyChainTools {
         }
     }
 
+    @Tool("Get all suppliers settlement statistics (Admin)")
+    public SupplierSettlementDto getAllSettlementStats(
+            @P(value = "Start Date (yyyy-MM-dd)", required = true) String startDate,
+            @P(value = "End Date (yyyy-MM-dd)", required = true) String endDate
+    ) {
+        // Parse dates to Instant (assuming start of day for start date, end of day for end date in system zone)
+        LocalDate start = LocalDate.parse(startDate);
+        LocalDate end = LocalDate.parse(endDate);
+
+        java.time.Instant startInstant = start.atStartOfDay(ZoneId.systemDefault()).toInstant();
+        java.time.Instant endInstant = end.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant();
+
+        // Only include RECEIVED orders
+        List<PurchaseOrder> orders = purchaseOrderService.getOrdersByStatusAndDateRange("RECEIVED", startInstant, endInstant);
+
+        return calculateSettlement(orders);
+    }
+
     @Tool("Get supplier settlement statistics")
     public SupplierSettlementDto getSupplierSettlementStats(
             @P(value = "Supplier Customer ID", required = true) String supplierId,
@@ -284,40 +266,41 @@ public class SupplyChainTools {
         // Only include RECEIVED orders
         List<PurchaseOrder> orders = purchaseOrderService.getOrdersBySupplierAndStatusAndDateRange(UUID.fromString(supplierId), "RECEIVED", startInstant, endInstant);
         
+        return calculateSettlement(orders);
+    }
+
+    private SupplierSettlementDto calculateSettlement(List<PurchaseOrder> orders) {
         int orderCount = orders.size();
         int totalQuantityRequested = 0;
         int totalQuantityShipped = 0;
         int totalQuantityReceived = 0;
         BigDecimal totalReceivedAmount = BigDecimal.ZERO;
-        
+
         List<SettlementItemDto> items = new ArrayList<>();
         List<String> returnOrderIds = new ArrayList<>();
-        
+
         for (PurchaseOrder order : orders) {
             boolean hasReturnInOrder = false;
-            
+
             for (PurchaseOrderItem item : order.getItems()) {
                 int requested = item.getQuantityRequested() != null ? item.getQuantityRequested() : 0;
                 int shipped = item.getQuantityShipped() != null ? item.getQuantityShipped() : 0;
                 int received = item.getQuantityReceived() != null ? item.getQuantityReceived() : 0;
-                int returned = Math.max(0, requested - received); 
-                
+                int returned = Math.max(0, requested - received);
+
                 // Check if this item has return (received != shipped) as per user requirement: "清单item实收数!=实发数"
-                // Note: user said "实收数!=实发数" -> listed as return order.
-                // It also implies return count logic?
-                // The prompt says "只要其中订单，里面的清单item实收数!=实发数，则把这个单列为包含退货商品的订单"
                 if (received != shipped) {
                     hasReturnInOrder = true;
                 }
-                
+
                 totalQuantityRequested += requested;
                 totalQuantityShipped += shipped;
                 totalQuantityReceived += received;
-                
+
                 // Calculate amount for received items
                 BigDecimal itemTotal = item.getUnitPrice().multiply(BigDecimal.valueOf(received));
                 totalReceivedAmount = totalReceivedAmount.add(itemTotal);
-                
+
                 items.add(new SettlementItemDto(
                         item.getProductName(),
                         requested,
@@ -327,16 +310,16 @@ public class SupplyChainTools {
                         item.getUnitPrice()
                 ));
             }
-            
+
             if (hasReturnInOrder) {
                 returnOrderIds.add(order.getId());
             }
         }
-        
+
         BigDecimal taxRate = new BigDecimal("0.10");
         BigDecimal taxAmount = totalReceivedAmount.multiply(taxRate);
         BigDecimal totalBillAmount = totalReceivedAmount.add(taxAmount);
-        
+
         return new SupplierSettlementDto(
                 orderCount,
                 totalQuantityRequested,
@@ -347,6 +330,31 @@ public class SupplyChainTools {
                 totalBillAmount,
                 items,
                 returnOrderIds
+        );
+    }
+
+    private PurchaseOrderDetailDto toDetailDto(PurchaseOrder order) {
+        List<OrderItemDto> items = order.getItems().stream()
+                .map(item -> new OrderItemDto(
+                        item.getId().toString(),
+                        item.getProductName(),
+                        item.getQuantityRequested(),
+                        item.getQuantityShipped(),
+                        item.getQuantityReceived(),
+                        item.getUnitPrice(),
+                        item.getTotalAmount(),
+                        (item.getQuantityRequested() == null ? 0 : item.getQuantityRequested()) > (item.getQuantityReceived() == null ? 0 : item.getQuantityReceived()) ? "YES" : "NO"
+                ))
+                .collect(Collectors.toList());
+
+        return new PurchaseOrderDetailDto(
+                order.getId(),
+                order.getStatus(),
+                order.getTotalAmount(),
+                order.getInitiator().getName(),
+                order.getSupplier().getName(),
+                order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : "",
+                items
         );
     }
 

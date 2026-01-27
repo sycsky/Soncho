@@ -102,6 +102,10 @@ public class PurchaseOrderService {
     public List<PurchaseOrder> getOrdersBySupplierAndStatusAndDateRange(UUID supplierId, String status, java.time.Instant start, java.time.Instant end) {
         return orderRepository.findBySupplier_IdAndStatusAndCreatedAtBetween(supplierId, status, start, end);
     }
+
+    public List<PurchaseOrder> getOrdersByStatusAndDateRange(String status, java.time.Instant start, java.time.Instant end) {
+        return orderRepository.findByStatusAndCreatedAtBetween(status, start, end);
+    }
     
     public PurchaseOrder getOrderDetails(String orderId) {
         return orderRepository.findById(orderId)
