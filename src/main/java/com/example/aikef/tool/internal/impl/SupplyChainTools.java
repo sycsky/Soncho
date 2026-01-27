@@ -355,7 +355,7 @@ public class SupplyChainTools {
 
         return new PurchaseOrderDetailDto(
                 order.getId(),
-                order.getStatus(),
+                formatStatusInChinese(order.getStatus()),
                 order.getTotalAmount(),
                 order.getInitiator().getName(),
                 order.getSupplier().getName(),
@@ -427,11 +427,22 @@ public class SupplyChainTools {
         }
         return new PurchaseOrderDto(
                 po.getId(), 
-                po.getStatus(), 
+                formatStatusInChinese(po.getStatus()), 
                 po.getTotalAmount(), 
                 po.getSupplier().getName(),
                 formattedDate,
                 formattedDeliveryDate
         );
+    }
+
+    private String formatStatusInChinese(String status) {
+        if (status == null) return "";
+        return switch (status.toUpperCase()) {
+            case "ORDERED" -> "已下单";
+            case "SHIPPED" -> "已发货";
+            case "RECEIVED" -> "已收货";
+            case "CANCELLED" -> "已取消";
+            default -> status;
+        };
     }
 }
