@@ -62,6 +62,16 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     long countBySession_IdAndCreatedAtAfter(UUID sessionId, java.time.Instant after);
 
     /**
+     * 统计会话在指定时间之后且排除特定类型的消息数
+     */
+    long countBySession_IdAndCreatedAtAfterAndSenderTypeNot(UUID sessionId, java.time.Instant after, SenderType senderType);
+
+    /**
+     * 统计会话中排除特定类型的消息总数
+     */
+    long countBySession_IdAndSenderTypeNot(UUID sessionId, SenderType senderType);
+
+    /**
      * 查询会话的非内部消息（客户可见，按创建时间正序）
      */
     Page<Message> findBySession_IdAndInternalFalseOrderByCreatedAtAsc(UUID sessionId, Pageable pageable);

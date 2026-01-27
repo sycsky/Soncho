@@ -9,7 +9,9 @@ import com.example.aikef.repository.ChatSessionRepository;
 import com.example.aikef.repository.SessionCategoryRepository;
 import com.example.aikef.repository.SessionGroupMappingRepository;
 import com.example.aikef.repository.SessionGroupRepository;
+import com.example.aikef.dto.websocket.ServerEvent;
 import com.example.aikef.service.strategy.AgentAssignmentStrategy;
+import com.example.aikef.websocket.WebSocketSessionManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
@@ -22,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,6 +48,7 @@ public class ChatSessionService {
     private final ReadRecordService readRecordService;
     private final SessionCategoryRepository sessionCategoryRepository;
     private final ObjectMapper objectMapper;
+    private final WebSocketSessionManager webSocketSessionManager;
 
     public ChatSessionService(ChatSessionRepository chatSessionRepository,
                              AgentAssignmentStrategy agentAssignmentStrategy,
@@ -55,7 +59,8 @@ public class ChatSessionService {
                              EntityMapper entityMapper,
                              @Lazy ReadRecordService readRecordService,
                              SessionCategoryRepository sessionCategoryRepository,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             @Lazy WebSocketSessionManager webSocketSessionManager) {
         this.chatSessionRepository = chatSessionRepository;
         this.agentAssignmentStrategy = agentAssignmentStrategy;
         this.sessionGroupMappingRepository = sessionGroupMappingRepository;
@@ -66,6 +71,7 @@ public class ChatSessionService {
         this.readRecordService = readRecordService;
         this.sessionCategoryRepository = sessionCategoryRepository;
         this.objectMapper = objectMapper;
+        this.webSocketSessionManager = webSocketSessionManager;
     }
 
     /** 为客户创建聊天会话并分配客服（无元数据） */
@@ -373,7 +379,43 @@ public class ChatSessionService {
         // 将会话移动到所有参与客服的 Resolved 分组
         moveSessionToResolvedGroupForAllAgents(session);
         
+        // 广播会话更新事件
+        broadcastSessionUpdate(session);
+        
         log.info("会话已关闭: {}", sessionId);
+    }
+    
+    private void broadcastSessionUpdate(ChatSession session) {
+        try {
+            // 构建 payload
+            Map<String, Object> sessionMap = new HashMap<>();
+            sessionMap.put("id", session.getId());
+            sessionMap.put("status", session.getStatus());
+            sessionMap.put("primaryAgentId", session.getPrimaryAgent() != null ? session.getPrimaryAgent().getId() : null);
+            sessionMap.put("lastActive", session.getLastActiveAt().toEpochMilli());
+            
+            // 添加 customer 信息，前端 sessionUpdated 处理需要 customer 对象来显示 Transfer notification
+            if (session.getCustomer() != null) {
+                sessionMap.put("customer", entityMapper.toCustomerDto(session.getCustomer()));
+            }
+            
+            // 注意：这里我们不放 sessionGroupId，因为它是特定于接收者的
+            // 前端收到 status=RESOLVED 会自动处理分组移动
+            
+            ServerEvent serverEvent = new ServerEvent("sessionUpdated", Map.of("session", sessionMap));
+            String message = objectMapper.writeValueAsString(serverEvent);
+
+            webSocketSessionManager.broadcastToSession(
+                    session.getId(),
+                    session.getPrimaryAgent() != null ? session.getPrimaryAgent().getId() : null,
+                    session.getSupportAgentIds(),
+                    session.getCustomer().getId(),
+                    null, // senderId 为 null，表示系统发送
+                    message
+            );
+        } catch (Exception e) {
+            log.error("广播会话更新失败: sessionId={}", session.getId(), e);
+        }
     }
     
     /**

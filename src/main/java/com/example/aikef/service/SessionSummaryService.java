@@ -112,7 +112,7 @@ public class SessionSummaryService {
         if (messages.isEmpty()) {
             return new SummaryResult(
                     true,
-                    "暂无对话内容",
+                    "",
                     null,
                     0
             );
@@ -124,7 +124,7 @@ public class SessionSummaryService {
         if (chatHistory.isBlank()) {
             return new SummaryResult(
                     true,
-                    "暂无有效对话内容",
+                    "",
                     null,
                     messages.size()
             );

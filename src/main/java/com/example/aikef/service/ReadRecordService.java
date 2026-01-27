@@ -3,6 +3,7 @@ package com.example.aikef.service;
 import com.example.aikef.model.Agent;
 import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.ReadRecord;
+import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.repository.AgentMentionRepository;
 import com.example.aikef.repository.MessageRepository;
 import com.example.aikef.repository.ReadRecordRepository;
@@ -68,20 +69,22 @@ public class ReadRecordService {
     /**
      * 获取会话的未读消息数
      * 计算逻辑: messages.created_at > read_record.last_read_time
+     * 注意：排除 SYSTEM 类型的消息（如会话总结、系统通知）
      */
     public int getUnreadCount(UUID sessionId, UUID agentId) {
         Optional<ReadRecord> recordOpt = readRecordRepository
                 .findBySessionIdAndAgentId(sessionId, agentId);
 
         if (recordOpt.isEmpty()) {
-            // 没有已读记录,所有消息都是未读的
-            return (int) messageRepository.countBySession_Id(sessionId);
+            // 没有已读记录,所有消息都是未读的 (排除 SYSTEM)
+            return (int) messageRepository.countBySession_IdAndSenderTypeNot(sessionId, SenderType.SYSTEM);
         }
 
         Instant lastReadTime = recordOpt.get().getLastReadTime();
         
-        // 统计在最后已读时间之后创建的消息数
-        return (int) messageRepository.countBySession_IdAndCreatedAtAfter(sessionId, lastReadTime);
+        // 统计在最后已读时间之后创建的消息数 (排除 SYSTEM)
+        return (int) messageRepository.countBySession_IdAndCreatedAtAfterAndSenderTypeNot(
+                sessionId, lastReadTime, SenderType.SYSTEM);
     }
 
     /**
