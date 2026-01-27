@@ -188,7 +188,6 @@ public class ShopifyAuthService {
     private void initializeTenantData(Agent adminAgent) {
         // 1. 确保默认会话分组存在
         sessionGroupService.ensureDefaultGroups(adminAgent);
-
     }
     
     @SuppressWarnings("unchecked")
