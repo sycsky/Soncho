@@ -355,6 +355,7 @@ public class SupplyChainTools {
 
         return new PurchaseOrderDetailDto(
                 order.getId(),
+                order.getStatus(),
                 formatStatusInChinese(order.getStatus()),
                 order.getTotalAmount(),
                 order.getInitiator().getName(),
@@ -368,7 +369,7 @@ public class SupplyChainTools {
     public record SupplierDto(String id, String name, String email) {}
     public record OrderItemRequest(String supplierId, String productName, String shopifyVariantId, int quantity, BigDecimal unitPrice) {}
     public record ItemUpdate(String itemId, int quantity) {}
-    public record PurchaseOrderDto(String id, String status, BigDecimal totalAmount, String supplierName, String createdAt, String deliveryDate) {}
+    public record PurchaseOrderDto(String id, String status, String statusDescription, BigDecimal totalAmount, String supplierName, String createdAt, String deliveryDate) {}
     
     public record SupplierSettlementDto(
             int orderCount,
@@ -395,6 +396,7 @@ public class SupplyChainTools {
     public record PurchaseOrderDetailDto(
         String id, 
         String status, 
+        String statusDescription,
         BigDecimal totalAmount, 
         String initiatorName, 
         String supplierName,
@@ -427,6 +429,7 @@ public class SupplyChainTools {
         }
         return new PurchaseOrderDto(
                 po.getId(), 
+                po.getStatus(), 
                 formatStatusInChinese(po.getStatus()), 
                 po.getTotalAmount(), 
                 po.getSupplier().getName(),
