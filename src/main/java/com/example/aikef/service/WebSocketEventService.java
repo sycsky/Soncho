@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,6 +131,23 @@ public class WebSocketEventService {
             // 保存消息并获取完整的消息数据
             MessageDto messageDto = conversationService.sendMessage(request, agentId);
 
+
+            // 如果是客户发送的消息，检查是否需要触发 AI 工作流
+            if (customerId != null && agentId == null) {
+                // 检查是否为纯图片消息 (文本为空 且 包含图片附件)
+                boolean isImageOnly = (request.text() == null || request.text().isBlank()) &&
+                        request.attachments() != null &&
+                        !request.attachments().isEmpty() &&
+                        request.attachments().stream().allMatch(att -> att.type() == com.example.aikef.model.enums.AttachmentType.IMAGE);
+
+                if (isImageOnly) {
+                    log.info("消息仅包含图片，跳过 AI 工作流: sessionId={}, messageId={}", sessionId, messageDto.id());
+                } else {
+                    triggerAiWorkflowIfNeeded(sessionId, request.text(), messageDto.id());
+                }
+            }
+
+
             // 如果有被@的客服，创建@记录
             if (request.mentions() != null && !request.mentions().isEmpty()) {
                 // 获取消息实体
@@ -146,21 +164,7 @@ public class WebSocketEventService {
             
             // 广播消息给会话的所有参与者（除了发送者）
             broadcastMessageToSession(sessionId, messageDto, senderId);
-            
-            // 如果是客户发送的消息，检查是否需要触发 AI 工作流
-            if (customerId != null && agentId == null) {
-                // 检查是否为纯图片消息 (文本为空 且 包含图片附件)
-                boolean isImageOnly = (request.text() == null || request.text().isBlank()) &&
-                                      request.attachments() != null && 
-                                      !request.attachments().isEmpty() &&
-                                      request.attachments().stream().allMatch(att -> att.type() == com.example.aikef.model.enums.AttachmentType.IMAGE);
-                
-                if (isImageOnly) {
-                    log.info("消息仅包含图片，跳过 AI 工作流: sessionId={}, messageId={}", sessionId, messageDto.id());
-                } else {
-                    triggerAiWorkflowIfNeeded(sessionId, request.text(), messageDto.id());
-                }
-            }
+
             
             // 如果是客服发送的消息，检查是否需要转发到第三方平台
             if (agentId != null) {
@@ -305,30 +309,48 @@ public class WebSocketEventService {
     /**
      * 广播消息给会话的所有参与者（除了发送者）
      */
-    private void broadcastMessageToSession(UUID chatSessionId, MessageDto messageDto, UUID senderId) throws JsonProcessingException {
-        // 从 ConversationService 获取会话信息
-        ChatSession session = conversationService.getChatSession(chatSessionId);
+    private void broadcastMessageToSession(UUID chatSessionId, MessageDto messageDto, UUID senderId) {
+        // 获取当前线程的租户ID，以便在异步线程中使用
+        String currentTenantId = TenantContext.getTenantId();
 
-        
-        if (session == null) {
-            return;
-        }
-        
-        // 构建广播事件
-        ServerEvent broadcastEvent = new ServerEvent("newMessage", Map.of(
-                "sessionId", messageDto.sessionId(),
-                "message", messageDto));
-        
-        String broadcastMessage = objectMapper.writeValueAsString(broadcastEvent);
-        
-        // 广播给会话的所有参与者（除了发送者）
-        sessionManager.broadcastToSession(
-                chatSessionId,
-                session.getPrimaryAgent() != null ? session.getPrimaryAgent().getId() : null,
-                session.getSupportAgentIds() != null ? session.getSupportAgentIds().stream().toList() : null,
-                session.getCustomer() != null ? session.getCustomer().getId() : null,
-                senderId,  // 发送者ID（可能是客服或客户）
-                broadcastMessage
-        );
+        CompletableFuture.runAsync(() -> {
+            try {
+                // 在新线程中设置租户上下文
+                if (currentTenantId != null) {
+                    TenantContext.setTenantId(currentTenantId);
+                }
+
+                // 从 ConversationService 获取会话信息
+                ChatSession session = conversationService.getChatSession(chatSessionId);
+
+                if (session == null) {
+                    return;
+                }
+
+                // 构建广播事件
+                ServerEvent broadcastEvent = new ServerEvent("newMessage", Map.of(
+                        "sessionId", messageDto.sessionId(),
+                        "message", messageDto));
+
+                String broadcastMessage = objectMapper.writeValueAsString(broadcastEvent);
+
+                // 广播给会话的所有参与者（除了发送者）
+                sessionManager.broadcastToSession(
+                        chatSessionId,
+                        session.getPrimaryAgent() != null ? session.getPrimaryAgent().getId() : null,
+                        session.getSupportAgentIds() != null ? session.getSupportAgentIds().stream().toList() : null,
+                        session.getCustomer() != null ? session.getCustomer().getId() : null,
+                        senderId,  // 发送者ID（可能是客服或客户）
+                        broadcastMessage
+                );
+            } catch (Exception e) {
+                log.error("异步广播消息失败: sessionId={}, messageId={}", chatSessionId, messageDto.id(), e);
+            } finally {
+                // 清理租户上下文
+                if (currentTenantId != null) {
+                    TenantContext.clear();
+                }
+            }
+        });
     }
 }
