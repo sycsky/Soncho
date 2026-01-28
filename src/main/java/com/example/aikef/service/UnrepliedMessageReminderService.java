@@ -49,7 +49,7 @@ public class UnrepliedMessageReminderService {
         }
 
         Instant now = Instant.now();
-        Instant cutoff = now.minus(Duration.ofMinutes(1));
+        Instant cutoff = now.minus(Duration.ofMinutes(thresholdMinutes));
         Instant maxAgeCutoff = now.minus(Duration.ofMinutes(maxAgeMinutes));
         List<ChatSession> sessions = chatSessionRepository.findByLastActiveAtBefore(cutoff);
         if (sessions.isEmpty()) {

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -35,6 +36,8 @@ class EntityMapperWorkflowTest {
     private SpecialCustomerRepository specialCustomerRepository;
     @Mock
     private WorkflowExecutionLogRepository workflowExecutionLogRepository;
+    @Mock
+    private PasswordEncoder passwordEncoder;
 
     private EntityMapper entityMapper;
     private ObjectMapper objectMapper;
@@ -49,12 +52,13 @@ class EntityMapperWorkflowTest {
                 agentRepository,
                 objectMapper,
                 specialCustomerRepository,
-                workflowExecutionLogRepository
+                workflowExecutionLogRepository,
+                passwordEncoder
         );
     }
 
     @Test
-    void toMessageDto_ShouldIncludeWorkflowExecutionDetails_WhenLogExists() {
+    void toMessageDto_ShouldNotIncludeWorkflowExecutionDetails_EvenIfLogExists() {
         // Arrange
         UUID messageId = UUID.randomUUID();
         Message message = new Message();
@@ -70,6 +74,7 @@ class EntityMapperWorkflowTest {
         log.setToolExecutionChain("[]");
         log.setDurationMs(100L);
 
+        // Even if we mock the repository to return a log
         when(workflowExecutionLogRepository.findByMessageId(messageId)).thenReturn(Optional.of(log));
 
         // Act
@@ -78,33 +83,7 @@ class EntityMapperWorkflowTest {
         // Assert
         assertNotNull(dto);
         assertNotNull(dto.agentMetadata());
-        assertTrue(dto.agentMetadata().containsKey("workflowExecution"));
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> workflowInfo = (Map<String, Object>) dto.agentMetadata().get("workflowExecution");
-        assertEquals(log.getId(), workflowInfo.get("executionId"));
-        assertEquals("SUCCESS", workflowInfo.get("status"));
-        assertEquals(100L, workflowInfo.get("durationMs"));
-    }
-
-    @Test
-    void toMessageDto_ShouldNotIncludeWorkflowExecutionDetails_WhenLogDoesNotExist() {
-        // Arrange
-        UUID messageId = UUID.randomUUID();
-        Message message = new Message();
-        message.setId(messageId);
-        message.setText("Test message");
-        message.setAttachments(new java.util.ArrayList<>());
-        message.setAgentMetadata(new HashMap<>());
-
-        when(workflowExecutionLogRepository.findByMessageId(messageId)).thenReturn(Optional.empty());
-
-        // Act
-        MessageDto dto = entityMapper.toMessageDto(message);
-
-        // Assert
-        assertNotNull(dto);
-        assertNotNull(dto.agentMetadata());
+        // The current implementation explicitly removed this injection
         assertFalse(dto.agentMetadata().containsKey("workflowExecution"));
     }
 }

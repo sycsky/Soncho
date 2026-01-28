@@ -29,24 +29,33 @@ public class RandomAgentAssignmentStrategy extends AgentAssignmentStrategy {
 
     @Override
     public Agent assignPrimaryAgent(Customer customer, Channel channel) {
-        // 查询所有在线客服
-        List<Agent> onlineAgents = agentRepository.findByStatus(AgentStatus.ONLINE);
+        // 1. 优先分配在线客服 (ONLINE)
+        List<Agent> candidates = agentRepository.findByStatus(AgentStatus.ONLINE);
         
-        if (onlineAgents.isEmpty()) {
-            // 如果没有在线客服，查询所有活跃客服
-            onlineAgents = agentRepository.findAll().stream()
-                    .filter(agent -> agent.getStatus() != AgentStatus.OFFLINE)
-                    .toList();
+        // 2. 如果没有在线客服，分配忙碌客服 (BUSY)
+        if (candidates.isEmpty()) {
+            candidates = agentRepository.findByStatus(AgentStatus.BUSY);
         }
         
-        if (onlineAgents.isEmpty()) {
-            log.warn("没有可用的客服进行分配");
+        // 3. 如果也没有忙碌客服，分配离线客服 (OFFLINE)
+        if (candidates.isEmpty()) {
+             candidates = agentRepository.findByStatus(AgentStatus.OFFLINE);
+        }
+
+        // 4. 兜底：如果上述都为空（可能状态值不匹配或无数据），获取所有客服
+        if (candidates.isEmpty()) {
+             candidates = agentRepository.findAll();
+        }
+        
+        if (candidates.isEmpty()) {
+            log.warn("系统没有任何客服数据，无法进行分配");
             throw new IllegalStateException("当前没有可用的客服");
         }
         
         // 随机选择一个客服
-        Agent selectedAgent = onlineAgents.get(random.nextInt(onlineAgents.size()));
-        log.info("为客户 {} 分配客服: {} (策略: 随机分配)", customer.getName(), selectedAgent.getName());
+        Agent selectedAgent = candidates.get(random.nextInt(candidates.size()));
+        log.info("为客户 {} 分配客服: {} (状态: {}, 策略: 随机分配)", 
+                customer.getName(), selectedAgent.getName(), selectedAgent.getStatus());
         
         return selectedAgent;
     }
