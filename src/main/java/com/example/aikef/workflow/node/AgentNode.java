@@ -143,16 +143,16 @@ If a user asks for discounts/promotions and you cannot find any general ones:
             List<UUID> toolIds = getToolIds(config);
 
             // Auto-inject 'getWorkflowContext' tool
-            try {
-                aiToolRepository.findByName("getWorkflowContext").ifPresent(tool -> {
-                    if (!toolIds.contains(tool.getId())) {
-                        toolIds.add(tool.getId());
-                        log.info("Auto-injected tool: getWorkflowContext ({})", tool.getId());
-                    }
-                });
-            } catch (Exception e) {
-                log.warn("Failed to auto-inject getWorkflowContext tool", e);
-            }
+//            try {
+//                aiToolRepository.findByName("getWorkflowContext").ifPresent(tool -> {
+//                    if (!toolIds.contains(tool.getId())) {
+//                        toolIds.add(tool.getId());
+//                        log.info("Auto-injected tool: getWorkflowContext ({})", tool.getId());
+//                    }
+//                });
+//            } catch (Exception e) {
+//                log.warn("Failed to auto-inject getWorkflowContext tool", e);
+//            }
 
             // Auto-inject 'transferToCustomerService' tool
             try {
