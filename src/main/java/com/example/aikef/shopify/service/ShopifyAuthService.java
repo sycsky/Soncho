@@ -35,6 +35,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -130,7 +131,8 @@ public class ShopifyAuthService {
         }
 
         TokenResponse tokenResponse = exchangeAccessToken(shop, code);
-        ShopifyStore store = upsertStore(shop, tokenResponse.access_token(), tokenResponse.scope());
+        String shopEmail = fetchShopEmail(shop, tokenResponse.access_token());
+        ShopifyStore store = upsertStore(shop, tokenResponse.access_token(), tokenResponse.scope(), shopEmail);
         redisTemplate.opsForValue().set(TOKEN_KEY_PREFIX + shop, store.getAccessToken(), TOKEN_CACHE_TTL);
         webhookRegistrationService.registerAll(shop, store.getAccessToken());
 
@@ -164,7 +166,7 @@ public class ShopifyAuthService {
         }
     }
 
-    private ShopifyStore upsertStore(String shopDomain, String accessToken, String scope) {
+    private ShopifyStore upsertStore(String shopDomain, String accessToken, String scope, String shopEmail) {
         String tenantId = generateTenantId(shopDomain);
         TenantContext.setTenantId(tenantId);
         try {
@@ -177,7 +179,7 @@ public class ShopifyAuthService {
             store.setUninstalledAt(null);
             store.setTenantId(tenantId);
             ShopifyStore saved = storeRepository.save(store);
-            Agent adminAgent = ensureShopAdminAgent(shopDomain, tenantId);
+            Agent adminAgent = ensureShopAdminAgent(shopDomain, tenantId, shopEmail);
             initializeTenantData(adminAgent);
             return saved;
         } finally {
@@ -226,8 +228,8 @@ public class ShopifyAuthService {
         }
     }
 
-    private Agent ensureShopAdminAgent(String shopDomain, String tenantId) {
-        String email = "shopify-admin@" + shopDomain;
+    private Agent ensureShopAdminAgent(String shopDomain, String tenantId, String shopEmail) {
+        String email = (shopEmail != null && !shopEmail.isBlank()) ? shopEmail : "shopify-admin@" + shopDomain;
         Optional<Agent> existing = agentRepository.findByEmailIgnoreCase(email);
         if (existing.isPresent()) {
             return existing.get();
@@ -369,4 +371,23 @@ public class ShopifyAuthService {
     public record OAuthCallbackResult(String shopDomain, String tenantId) {}
 
     public record TokenResponse(String access_token, String scope) {}
+
+    private String fetchShopEmail(String shopDomain, String accessToken) {
+        String url = "https://" + shopDomain + "/admin/api/2024-01/shop.json";
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Shopify-Access-Token", accessToken);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        try {
+            ResponseEntity<ShopResponse> response = restTemplate.exchange(url, HttpMethod.GET, entity, ShopResponse.class);
+            if (response.getBody() != null && response.getBody().shop() != null) {
+                return response.getBody().shop().email();
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to fetch shop email: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private record ShopResponse(ShopDto shop) {}
+    private record ShopDto(String email) {}
 }

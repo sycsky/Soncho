@@ -1,7 +1,7 @@
-# NexusSupport AI 后端技术设计
+# SonCho AI 后端技术设计
 
 ## 1. 系统概览
-NexusSupport AI 是一个聚合多渠道消息、AI 辅助客服与团队协作能力的一体化工作台。本后端以 Spring Boot 3 为核心，结合 REST API + WebSocket 的混合通信模式，支撑坐席从登录、收件箱管理、AI 能力调用到团队协同的全链路体验。系统可同时接入网页、WhatsApp、LINE、微信、公众号、Email 等渠道，并能将平台内回复回推至对应渠道。
+SonCho AI 是一个聚合多渠道消息、AI 辅助客服与团队协作能力的一体化工作台。本后端以 Spring Boot 3 为核心，结合 REST API + WebSocket 的混合通信模式，支撑坐席从登录、收件箱管理、AI 能力调用到团队协同的全链路体验。系统可同时接入网页、WhatsApp、LINE、微信、公众号、Email 等渠道，并能将平台内回复回推至对应渠道。
 
 ## 2. 技术栈
 - Spring Boot 3.2（Web、WebSocket、Validation、Actuator）
