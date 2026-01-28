@@ -118,7 +118,8 @@ public class WebSocketEventService {
             UUID agentId = agentPrincipal != null ? agentPrincipal.getId() : null;
             UUID customerId = customerPrincipal != null ? customerPrincipal.getId() : null;
             UUID senderId = agentId != null ? agentId : customerId;
-
+            log.info("处理发送消息事件: sessionId={}, agentId={}, customerId={}, senderId={}",
+                    sessionId, agentId, customerId, senderId);
             if (agentId != null) {
                 readRecordService.updateReadTime(sessionId, agentId);
             }
@@ -131,7 +132,8 @@ public class WebSocketEventService {
             // 保存消息并获取完整的消息数据
             MessageDto messageDto = conversationService.sendMessage(request, agentId);
 
-
+            log.info("保存消息成功: sessionId={}, messageId={}", sessionId, messageDto.id());
+            
             // 如果是客户发送的消息，检查是否需要触发 AI 工作流
             if (customerId != null && agentId == null) {
                 // 检查是否为纯图片消息 (文本为空 且 包含图片附件)
