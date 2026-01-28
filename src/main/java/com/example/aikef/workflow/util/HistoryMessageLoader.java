@@ -114,7 +114,7 @@ public class HistoryMessageLoader {
                         readCount--;
                     }
 
-
+                    candidateMessages.add(msg);
 
                     // 为什么不是0,因为读取到最后一个普通消息后，它之前可能不是普通消息，可能是调用的工具记录，所以继续往前读取，尽量取把数据读取完整，包括完整的调用环
                     if(readCount<-1){
@@ -122,7 +122,6 @@ public class HistoryMessageLoader {
                         break;
                     }
 
-                    candidateMessages.add(msg);
                     
 
                 }
