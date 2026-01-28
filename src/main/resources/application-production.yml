@@ -69,11 +69,26 @@ knowledge:
     password: ${PGVECTOR_PASSWORD}
 
 # 文件存储 - 暂时使用本地存储
+resend:
+  api:
+    key: ${RESEND_APIKEY:KEY}  # 从环境变量获取 API Key
+  from:
+    email: send@son-cho.com
+    name: AutoReplai
 storage:
-  type: local
+  type: ${STORAGE_TYPE:s3} # 切换为 's3' 即可启用 S3 存储
   local:
     base-path: ./uploads
-    base-url: ${LOCAL_STORAGE_BASE_URL:/api/v1/files}
+    base-url: http://api.son-cho.com/api/v1/files
+  s3:
+    access-key: ${S3_API_KEY:KEY}
+    secret-key: ${S3_API_SECRET:SECRET}
+    region: ${STORAGE_S3_REGION:us-east-1}
+    bucket: ${STORAGE_S3_BUCKET:soncho-shopify}
+    # 方案 B 配置：填入你的 S3 公共访问域名
+    public-url: https://${STORAGE_S3_BUCKET:soncho-shopify}.s3.${STORAGE_S3_REGION:us-east-1}.amazonaws.com
+
+
 
 # 翻译服务 - 生产环境启用
 translation:
