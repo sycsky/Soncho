@@ -28,7 +28,7 @@ public class WorkflowExecutionScheduler {
     private final SessionMessageGateway messageGateway;
 
     // 防抖时间（秒），默认3秒
-    @Value("${workflow.debounce.seconds:3}")
+    @Value("${workflow.debounce.seconds:0}")
     private int debounceSeconds;
 
     // 每个会话的执行状态
