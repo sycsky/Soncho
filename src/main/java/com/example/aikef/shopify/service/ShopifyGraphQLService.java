@@ -154,7 +154,7 @@ public class ShopifyGraphQLService {
         }
     }
 
-    private ShopifyStore getCurrentStore() {
+    public ShopifyStore getCurrentStore() {
         // 由于 TenantHibernateFilterAspect 的存在，findAll 只会返回当前租户的 store
         List<ShopifyStore> stores = shopifyStoreRepository.findAll();
         if (stores.isEmpty()) {

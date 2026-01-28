@@ -6,6 +6,7 @@ import com.example.aikef.exception.BusinessException;
 import com.example.aikef.llm.LangChainChatService;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.SenderType;
+import com.example.aikef.tool.internal.impl.ContextTools;
 import com.example.aikef.tool.model.AiTool;
 import com.example.aikef.tool.service.AiToolService;
 import com.example.aikef.workflow.context.WorkflowContext;
@@ -74,7 +75,9 @@ If a user asks for discounts/promotions and you cannot find any general ones:
 # Attention
 1. You can only answer user questions through dialogue context, tools, and knowledge base content. Do not imagine or create some non-existent data or content that is not present in the dialogue. 
 2. For unanswerable questions, try to use knowledge base tools for querying
-
+3. ***Do not fabricate data. Do not fabricate data. Do not fabricate data that is not found in the context or tools***
+4. Do not mention any professional terms such as code, ID, etc. that you are aware of
+5. ***Respond to the user in a customer service tone, rather than using descriptive language to present data you are aware of*** ***Respond to the user in a customer service tone, rather than using descriptive language to present data you are aware of***
 
 """;
 
@@ -102,6 +105,8 @@ If a user asks for discounts/promotions and you cannot find any general ones:
     @Autowired
     private AiToolService aiToolService;
 
+    @Autowired
+    private ContextTools contextTools;
     @Override
     public void process() {
         long startTime = System.currentTimeMillis();
@@ -126,6 +131,9 @@ If a user asks for discounts/promotions and you cannot find any general ones:
                 goal = "";
             }
             goal = goal + "\n\n" + DEFAULT_SYSTEM_PROMPT;
+            String contextRs = contextTools.getWorkflowContext(null,ctx);
+
+            goal = goal + "\n\n" + "contextData:"+contextRs;
 
             Integer maxIterations = getConfigInt("maxIterations", 10);
             Boolean useHistory = getConfigBoolean("useHistory", true);
