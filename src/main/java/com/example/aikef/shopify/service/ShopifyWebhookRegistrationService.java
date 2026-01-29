@@ -57,10 +57,24 @@ public class ShopifyWebhookRegistrationService {
         Map<String, String> m = new LinkedHashMap<>();
         m.put("orders/create", webhooksBase + "/orders/create");
         m.put("orders/updated", webhooksBase + "/orders/updated");
+        m.put("orders/cancelled", webhooksBase + "/orders/cancelled");
         m.put("customers/create", webhooksBase + "/customers/create");
         m.put("customers/update", webhooksBase + "/customers/update");
         m.put("products/create", webhooksBase + "/products/create");
         m.put("products/update", webhooksBase + "/products/update");
+        m.put("inventory_levels/update", webhooksBase + "/inventory_levels/update");
+        m.put("refunds/create", webhooksBase + "/refunds/create");
+        m.put("fulfillments/create", webhooksBase + "/fulfillments/create");
+        m.put("fulfillments/update", webhooksBase + "/fulfillments/update");
+        m.put("checkouts/create", webhooksBase + "/checkouts/create");
+        m.put("checkouts/update", webhooksBase + "/checkouts/update");
+        m.put("checkouts/delete", webhooksBase + "/checkouts/delete");
+        m.put("draft_orders/create", webhooksBase + "/draft_orders/create");
+        m.put("draft_orders/update", webhooksBase + "/draft_orders/update");
+        m.put("collections/create", webhooksBase + "/collections/create");
+        m.put("collections/update", webhooksBase + "/collections/update");
+        m.put("themes/publish", webhooksBase + "/themes/publish");
+        m.put("fulfillment_events/create", webhooksBase + "/fulfillment_events/create");
         m.put("app/uninstalled", webhooksBase + "/app/uninstalled");
         m.put("customers/data_request", gdprBase + "/customers/data_request");
         m.put("customers/redact", gdprBase + "/customers/redact");
@@ -110,7 +124,7 @@ public class ShopifyWebhookRegistrationService {
     }
 
     private void createWebhook(String shopDomain, String accessToken, String topic, String address) {
-        if (topic.contains("data_request") || topic.contains("redact") || topic.equals("orders/create") || topic.equals("customers/create") || topic.equals("customers/update")) {
+        if (topic.contains("data_request") || topic.contains("redact")) {
             return;
         }
 

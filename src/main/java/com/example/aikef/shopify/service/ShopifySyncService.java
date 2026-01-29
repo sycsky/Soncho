@@ -97,9 +97,17 @@ public class ShopifySyncService {
             return null;
         }
         return switch (topic) {
-            case "orders/create", "orders/updated" -> ShopifyObject.ObjectType.ORDER;
+            case "orders/create", "orders/updated", "orders/cancelled" -> ShopifyObject.ObjectType.ORDER;
             case "customers/create", "customers/update" -> ShopifyObject.ObjectType.CUSTOMER;
             case "products/create", "products/update" -> ShopifyObject.ObjectType.PRODUCT;
+            case "inventory_levels/update" -> ShopifyObject.ObjectType.INVENTORY_LEVEL;
+            case "refunds/create" -> ShopifyObject.ObjectType.REFUND;
+            case "fulfillments/create", "fulfillments/update" -> ShopifyObject.ObjectType.FULFILLMENT;
+            case "checkouts/create", "checkouts/update", "checkouts/delete" -> ShopifyObject.ObjectType.CHECKOUT;
+            case "draft_orders/create", "draft_orders/update" -> ShopifyObject.ObjectType.DRAFT_ORDER;
+            case "collections/create", "collections/update" -> ShopifyObject.ObjectType.COLLECTION;
+            case "themes/publish" -> ShopifyObject.ObjectType.THEME;
+            case "fulfillment_events/create" -> ShopifyObject.ObjectType.FULFILLMENT_EVENT;
             default -> null;
         };
     }
@@ -108,10 +116,16 @@ public class ShopifySyncService {
         try {
             JsonNode root = objectMapper.readTree(payloadJson);
             JsonNode idNode = root.get("id");
-            if (idNode == null || idNode.isNull()) {
-                return null;
+            if (idNode != null && !idNode.isNull()) {
+                return idNode.asText();
             }
-            return idNode.asText();
+            // Fallback for inventory levels
+            JsonNode itemId = root.get("inventory_item_id");
+            JsonNode locId = root.get("location_id");
+            if (itemId != null && locId != null) {
+                return itemId.asText() + "_" + locId.asText();
+            }
+            return null;
         } catch (Exception e) {
             return null;
         }

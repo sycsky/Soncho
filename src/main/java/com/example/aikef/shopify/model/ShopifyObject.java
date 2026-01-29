@@ -31,7 +31,15 @@ public class ShopifyObject extends AuditableEntity {
     public enum ObjectType {
         ORDER,
         CUSTOMER,
-        PRODUCT
+        PRODUCT,
+        INVENTORY_LEVEL,
+        REFUND,
+        FULFILLMENT,
+        CHECKOUT,
+        DRAFT_ORDER,
+        COLLECTION,
+        THEME,
+        FULFILLMENT_EVENT
     }
 
     @Column(name = "shop_domain", nullable = false, length = 255)

@@ -48,6 +48,174 @@ public class ShopifyWebhookController {
         return verifyIngestAndOk("orders/updated", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
     }
 
+    @PostMapping("/orders/cancelled")
+    public ResponseEntity<Map<String, Object>> ordersCancelled(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("orders/cancelled", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/inventory_levels/update")
+    public ResponseEntity<Map<String, Object>> inventoryLevelsUpdate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("inventory_levels/update", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/refunds/create")
+    public ResponseEntity<Map<String, Object>> refundsCreate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("refunds/create", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/fulfillments/create")
+    public ResponseEntity<Map<String, Object>> fulfillmentsCreate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("fulfillments/create", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/fulfillments/update")
+    public ResponseEntity<Map<String, Object>> fulfillmentsUpdate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("fulfillments/update", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/checkouts/create")
+    public ResponseEntity<Map<String, Object>> checkoutsCreate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("checkouts/create", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/checkouts/update")
+    public ResponseEntity<Map<String, Object>> checkoutsUpdate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("checkouts/update", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/checkouts/delete")
+    public ResponseEntity<Map<String, Object>> checkoutsDelete(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("checkouts/delete", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/draft_orders/create")
+    public ResponseEntity<Map<String, Object>> draftOrdersCreate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("draft_orders/create", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/draft_orders/update")
+    public ResponseEntity<Map<String, Object>> draftOrdersUpdate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("draft_orders/update", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/collections/create")
+    public ResponseEntity<Map<String, Object>> collectionsCreate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("collections/create", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/collections/update")
+    public ResponseEntity<Map<String, Object>> collectionsUpdate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("collections/update", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/themes/publish")
+    public ResponseEntity<Map<String, Object>> themesPublish(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("themes/publish", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/fulfillment_events/create")
+    public ResponseEntity<Map<String, Object>> fulfillmentEventsCreate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("fulfillment_events/create", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
     @PostMapping("/customers/create")
     public ResponseEntity<Map<String, Object>> customersCreate(
             @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,

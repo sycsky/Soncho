@@ -43,6 +43,9 @@ public class ShopifyEmbeddedAuthController {
     private final ShopifySessionService shopifySessionService;
     private final EntityMapper entityMapper;
 
+    @org.springframework.beans.factory.annotation.Value("${shopify.scopes:read_orders,read_customers,read_products,read_discounts,write_price_rules,write_gift_cards,write_orders,write_order_edits,read_inventory,read_checkouts,read_draft_orders,read_themes,read_shipping}")
+    private String requiredScopes;
+
     public ShopifyEmbeddedAuthController(TokenService tokenService,
                                         ShopifyStoreRepository storeRepository,
                                         AgentRepository agentRepository,
@@ -68,9 +71,11 @@ public class ShopifyEmbeddedAuthController {
             Optional<ShopifyStore> storeOpt = storeRepository.findByShopDomain(shop);
             if (storeOpt.isEmpty() || !storeOpt.get().isActive()) {
                 return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "Shop not installed"));
-            }else{
-                return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "installed"));
             }
+            if (!hasAllRequiredScopes(storeOpt.get().getScopes(), requiredScopes)) {
+                return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "Shop not installed"));
+            }
+            return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "installed"));
         }
 
         String token = extractBearer(authorization);
@@ -93,6 +98,9 @@ public class ShopifyEmbeddedAuthController {
             if (storeOpt.isEmpty() || !storeOpt.get().isActive()) {
                 return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "Shop not installed"));
             }
+            if (!hasAllRequiredScopes(storeOpt.get().getScopes(), requiredScopes)) {
+                return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "Shop not installed"));
+            }
 
             Agent agent = ensureShopAdminAgent(shopDomain, tenantId);
             AgentPrincipal principal = new AgentPrincipal(agent, com.example.aikef.security.SecurityUtils.getAuthorities(agent));
@@ -107,6 +115,22 @@ public class ShopifyEmbeddedAuthController {
         } finally {
             TenantContext.clear();
         }
+    }
+
+    private boolean hasAllRequiredScopes(String storeScopes, String requiredScopes) {
+        if (storeScopes == null || storeScopes.isBlank()) {
+            return false;
+        }
+        if (requiredScopes == null || requiredScopes.isBlank()) {
+            return true;
+        }
+        java.util.Set<String> storeSet = java.util.Arrays.stream(storeScopes.split(","))
+                .map(String::trim)
+                .collect(java.util.stream.Collectors.toSet());
+
+        return java.util.Arrays.stream(requiredScopes.split(","))
+                .map(String::trim)
+                .allMatch(storeSet::contains);
     }
 
     @GetMapping("/agents")
