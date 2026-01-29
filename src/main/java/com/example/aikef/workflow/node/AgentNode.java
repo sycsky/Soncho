@@ -367,6 +367,12 @@ You are a friendly, professional, and empathetic Customer Support Specialist. Do
         List<ChatMessage> messages = new ArrayList<>();
 
 
+        // System Prompt / Goal
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            // Render template if needed
+            systemPrompt = renderTemplate(systemPrompt);
+            messages.add(SystemMessage.from(systemPrompt));
+        }
 
         messages.add(SystemMessage.from(systemPrompt));
 
