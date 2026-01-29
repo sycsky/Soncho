@@ -366,14 +366,9 @@ You are a friendly, professional, and empathetic Customer Support Specialist. Do
     private List<ChatMessage> buildMessages(WorkflowContext ctx, JsonNode config, String systemPrompt, Boolean useHistory) {
         List<ChatMessage> messages = new ArrayList<>();
 
-        // System Prompt / Goal
-        String combinedSystemPrompt = DEFAULT_AGENT_INSTRUCTIONS;
-        if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            // Render template if needed
-            systemPrompt = renderTemplate(systemPrompt);
-            combinedSystemPrompt = combinedSystemPrompt + "\n\n# Goal & Instructions\n" + systemPrompt;
-        }
-        messages.add(SystemMessage.from(combinedSystemPrompt));
+
+
+        messages.add(SystemMessage.from(systemPrompt));
 
         // History
         if (useHistory && ctx.getSessionId() != null) {
