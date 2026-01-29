@@ -9,6 +9,8 @@ import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class ChatResponseThinkingExtractor {
 
@@ -25,17 +27,37 @@ public final class ChatResponseThinkingExtractor {
             return null;
         }
 
+        String text = aiMessage.text();
         String thinking = aiMessage.thinking();
+        boolean textModified = false;
+
+        // 1. Try to extract from text
+        if (StringUtils.hasText(text)) {
+            Pattern pattern = Pattern.compile("<think>(.*?)</think>", Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
+            Matcher matcher = pattern.matcher(text);
+            if (matcher.find()) {
+                String extractedThinking = matcher.group(1);
+                if (StringUtils.hasText(extractedThinking)) {
+                    thinking = extractedThinking.trim();
+                    text = matcher.replaceFirst("").trim();
+                    textModified = true;
+                }
+            }
+        }
+
+        // 2. If no thinking yet, try metadata
         if (!StringUtils.hasText(thinking)) {
             thinking = extractThinkingFromMetadata(response, objectMapper);
         }
 
-        if (!StringUtils.hasText(thinking) || StringUtils.hasText(aiMessage.thinking())) {
+        boolean thinkingChanged = StringUtils.hasText(thinking) && !thinking.equals(aiMessage.thinking());
+
+        if (!textModified && !thinkingChanged) {
             return aiMessage;
         }
 
         return AiMessage.builder()
-                .text(aiMessage.text())
+                .text(text)
                 .thinking(thinking)
                 .toolExecutionRequests(aiMessage.toolExecutionRequests() != null ? aiMessage.toolExecutionRequests() : Collections.emptyList())
                 .attributes(aiMessage.attributes())

@@ -190,7 +190,13 @@ You are a friendly, professional, and empathetic Customer Support Specialist. Do
                 // Call LLM
                 ChatResponse response = langChainChatService.chatWithTools(modelId, messages, toolSpecs, temperature, null);
                 AiMessage aiMessage = ChatResponseThinkingExtractor.enrichAiMessage(response, objectMapper);
-                messages.add(aiMessage); // Add AI response to history
+                
+                // Create a clean message for history (without thinking) to avoid sending it back to LLM
+                AiMessage historyMessage = AiMessage.builder()
+                        .text(aiMessage.text())
+                        .toolExecutionRequests(aiMessage.toolExecutionRequests())
+                        .build();
+                messages.add(historyMessage); // Add AI response to history
 
 
 
