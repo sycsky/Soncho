@@ -48,11 +48,6 @@ public class AgentNode extends BaseWorkflowNode {
 
     private static final Logger log = LoggerFactory.getLogger(AgentNode.class);
 
-    private static final String DEFAULT_SYSTEM_PROMPT = """
-
-1. You can only answer user questions through dialogue context, tools, and knowledge base content. Do not imagine or create some non-existent data or content that is not present in the dialogue. 
-2. For unanswerable questions, try to use knowledge base tools for querying
-""";
 
     @Resource
     private LangChainChatService langChainChatService;
@@ -124,11 +119,6 @@ You are a friendly, professional, and empathetic Customer Support Specialist. Do
 
             goal = goal + "\n\n" + "contextData:"+contextRs;
 
-            // Append default system prompt
-            if (goal == null) {
-                goal = "";
-            }
-            goal = goal + "\n\n" + DEFAULT_SYSTEM_PROMPT;
 
             Integer maxIterations = getConfigInt("maxIterations", 10);
             Boolean useHistory = getConfigBoolean("useHistory", true);
