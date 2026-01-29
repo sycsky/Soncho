@@ -1,0 +1,57 @@
+name: Cascade Merge
+
+on:
+  push:
+    branches:
+      - '**'
+
+permissions:
+  contents: write
+
+jobs:
+  cascade-merge:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./ # Adjust if repository root is different
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for all branches and tags
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Run cascade merge script
+        run: |
+          if [ -f .github/scripts/cascade_merge.py ]; then
+            python .github/scripts/cascade_merge.py
+          else
+            echo "Script not found at .github/scripts/cascade_merge.py"
+            exit 1
+          fi
+
+      - name: Send mail on conflict
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_PORT }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Git Cascade Merge Conflict Detected"
+          to: ${{ secrets.MAIL_TO }}
+          from: "GitHub Actions <${{ secrets.MAIL_USERNAME }}>"
+          body: |
+            Cascade merge failed due to conflicts.
+            
+            Please check the attached report or the Actions log for details.
+            
+            Repository: ${{ github.repository }}
+            Workflow: ${{ github.workflow }}
+            Run ID: ${{ github.run_id }}
+          html_body: file://merge_report.txt
