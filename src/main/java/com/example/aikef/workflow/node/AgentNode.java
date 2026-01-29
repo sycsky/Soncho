@@ -5,6 +5,7 @@ import cn.hutool.json.JSONObject;
 import com.example.aikef.llm.LangChainChatService;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.SenderType;
+import com.example.aikef.tool.internal.impl.ContextTools;
 import com.example.aikef.tool.model.AiTool;
 import com.example.aikef.tool.service.AiToolService;
 import com.example.aikef.workflow.context.WorkflowContext;
@@ -77,6 +78,29 @@ public class AgentNode extends BaseWorkflowNode {
     @Autowired
     private AiToolService aiToolService;
 
+    private static final String DEFAULT_SYSTEM_PROMPT = """
+
+# Role
+You are a friendly, professional, and empathetic Customer Support Specialist. Do not refer to yourself as an AI, a language model, or a robot. Speak as a helpful human assistant would.
+
+# Tone & Style guidelines
+1.  **Conversational**: Use natural English. Avoid technical jargon like "retrieved," "database," "current information," or "input."
+2.  **Soft Negatives**: If you cannot find information (e.g., about a discount), do not say "No information retrieved." Instead, say "I'm not seeing any current promotions right now" or "I just checked, and..."
+3.  **Active Assistance**: Always follow up a negative (no info found) with a helpful alternative or a question to guide the user.
+4.  **No Robotic Lists**: Avoid using bullet points (1. 2. 3.) in a chat context unless absolutely necessary. Use flowing sentences with connecting words like "however," "alternatively," or "also."
+
+# Attention
+1. You can only answer user questions through dialogue context, tools, and knowledge base content. Do not imagine or create some non-existent data or content that is not present in the dialogue. 
+2. For unanswerable questions, try to use knowledge base tools for querying
+3. ***Do not fabricate data. Do not fabricate data. Do not fabricate data that is not found in the contextData or tools***
+4. Do not mention any professional terms such as code, ID, etc. that you are aware of
+5. ***Respond to users in a customer service tone, rather than describing the data you know*** ***Respond to users in a customer service tone, rather than describing the data you know***
+
+""";
+
+    @Autowired
+    private ContextTools contextTools;
+
     @Override
     public void process() {
         long startTime = System.currentTimeMillis();
@@ -95,6 +119,10 @@ public class AgentNode extends BaseWorkflowNode {
             if (goal.isEmpty()) {
                 goal = ctx.getQuery();
             }
+            goal = goal + "\n\n" + DEFAULT_SYSTEM_PROMPT;
+            String contextRs = contextTools.getWorkflowContext(null,ctx);
+
+            goal = goal + "\n\n" + "contextData:"+contextRs;
 
             // Append default system prompt
             if (goal == null) {
@@ -110,16 +138,16 @@ public class AgentNode extends BaseWorkflowNode {
             List<UUID> toolIds = getToolIds(config);
 
             // Auto-inject 'getWorkflowContext' tool
-            try {
-                aiToolRepository.findByName("getWorkflowContext").ifPresent(tool -> {
-                    if (!toolIds.contains(tool.getId())) {
-                        toolIds.add(tool.getId());
-                        log.info("Auto-injected tool: getWorkflowContext ({})", tool.getId());
-                    }
-                });
-            } catch (Exception e) {
-                log.warn("Failed to auto-inject getWorkflowContext tool", e);
-            }
+//            try {
+//                aiToolRepository.findByName("getWorkflowContext").ifPresent(tool -> {
+//                    if (!toolIds.contains(tool.getId())) {
+//                        toolIds.add(tool.getId());
+//                        log.info("Auto-injected tool: getWorkflowContext ({})", tool.getId());
+//                    }
+//                });
+//            } catch (Exception e) {
+//                log.warn("Failed to auto-inject getWorkflowContext tool", e);
+//            }
 
             // Auto-inject 'transferToCustomerService' tool
             try {
