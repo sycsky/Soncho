@@ -205,9 +205,9 @@ public class HistoryMessageLoader {
                         dev.langchain4j.data.message.AiMessage.Builder aiBuilder = dev.langchain4j.data.message.AiMessage.builder()
                                 .text(aiText)
                                 .toolExecutionRequests(requests);
-                        if (aiThinking != null) {
-                            aiBuilder.thinking(aiThinking);
-                        }
+//                        if (aiThinking != null) {
+//                            aiBuilder.thinking(aiThinking);
+//                        }
                         historyMessages.add(aiBuilder.build());
 
                         Object resultsObj = toolCallData.get("results");
