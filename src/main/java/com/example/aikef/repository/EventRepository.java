@@ -29,9 +29,9 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     List<Event> findByEnabledTrueOrderBySortOrder();
 
     /**
-     * 根据工作流ID查找所有事件
+     * 根据工作流名称查找所有事件
      */
-    List<Event> findByWorkflow_Id(UUID workflowId);
+    List<Event> findByWorkflowName(String workflowName);
 }
 
 

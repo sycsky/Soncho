@@ -46,7 +46,7 @@ public class ShopifyObject extends AuditableEntity {
     private String shopDomain;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "object_type", nullable = false, length = 20)
+    @Column(name = "object_type", nullable = false, length = 50)
     private ObjectType objectType;
 
     @Column(name = "external_id", nullable = false, length = 60)

@@ -7,31 +7,58 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Map;
+import java.util.HashMap;
+import com.example.aikef.service.EventService;
+import com.example.aikef.model.Customer;
+import com.example.aikef.repository.CustomerRepository;
+import java.util.Set;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Optional;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import org.springframework.context.annotation.Lazy;
 
 @Service
 public class ShopifySyncService {
 
     private static final String TOKEN_KEY_PREFIX = "shopify:access_token:";
 
+    private static final Set<String> CUSTOMER_RELATED_TOPICS = new HashSet<>(Arrays.asList(
+            "orders/create", "orders/updated", "orders/cancelled",
+            "customers/create", "customers/update",
+            "checkouts/create", "checkouts/update", "checkouts/delete",
+            "draft_orders/create", "draft_orders/update",
+            "refunds/create",
+            "fulfillments/create", "fulfillments/update",
+            "fulfillment_events/create"
+    ));
+
     private final ShopifyObjectRepository objectRepository;
     private final ShopifyStoreRepository storeRepository;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
     private final ShopifyGdprService gdprService;
+    private final EventService eventService;
+    private final CustomerRepository customerRepository;
 
     public ShopifySyncService(ShopifyObjectRepository objectRepository,
                               ShopifyStoreRepository storeRepository,
                               ObjectMapper objectMapper,
                               StringRedisTemplate redisTemplate,
-                              ShopifyGdprService gdprService) {
+                              ShopifyGdprService gdprService,
+                              @Lazy EventService eventService,
+                              CustomerRepository customerRepository) {
         this.objectRepository = objectRepository;
         this.storeRepository = storeRepository;
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
         this.gdprService = gdprService;
+        this.eventService = eventService;
+        this.customerRepository = customerRepository;
     }
 
     @Transactional
@@ -90,6 +117,97 @@ public class ShopifySyncService {
             store.setLastSyncedAt(Instant.now());
             storeRepository.save(store);
         });
+
+        // Trigger Event
+        try {
+            String eventName = "shopify." + topic.replace("/", ".");
+            Map<String, Object> eventData = new HashMap<>();
+            
+            try {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> payloadMap = objectMapper.readValue(payloadJson, Map.class);
+                if (payloadMap != null) {
+                    eventData.putAll(payloadMap);
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+            
+            eventData.put("topic", topic);
+            eventData.put("shopDomain", shopDomain);
+            eventData.put("webhookId", webhookId);
+            
+            if (CUSTOMER_RELATED_TOPICS.contains(topic)) {
+                Customer customer = findAssociatedCustomer(topic, shopDomain, payloadJson);
+                if (customer != null) {
+                    eventService.triggerEventForCustomer(customer.getId(), eventName, eventData);
+                } else {
+                    // Log but do NOT trigger event as per requirement
+                    // System.out.println("Skipping customer-related event " + eventName + " because no associated customer found.");
+                }
+            } else {
+                // Non-customer related events: trigger with generic method (mock session)
+                eventService.triggerEvent(eventName, null, eventData);
+            }
+        } catch (Exception e) {
+            // Log error but continue
+            System.err.println("Failed to trigger event: " + e.getMessage());
+        }
+    }
+
+    private Customer findAssociatedCustomer(String topic, String shopDomain, String payloadJson) {
+        try {
+            JsonNode root = objectMapper.readTree(payloadJson);
+            String shopifyCustomerId = null;
+            String email = null;
+
+            if (topic.startsWith("customers/")) {
+                if (root.has("id")) shopifyCustomerId = root.get("id").asText();
+                if (root.has("email")) email = root.get("email").asText();
+            } else if (topic.startsWith("orders/") || topic.startsWith("draft_orders/") || topic.startsWith("checkouts/")) {
+                JsonNode customerNode = root.path("customer");
+                if (!customerNode.isMissingNode()) {
+                    if (customerNode.has("id")) shopifyCustomerId = customerNode.get("id").asText();
+                    if (customerNode.has("email")) email = customerNode.get("email").asText();
+                }
+                // Check root email if not found in customer object (common in checkouts)
+                if (email == null && root.has("email")) {
+                    email = root.get("email").asText();
+                }
+            } else if (topic.startsWith("refunds/") || topic.startsWith("fulfillments/") || topic.startsWith("fulfillment_events/")) {
+                // Try to find via order_id
+                String orderId = root.path("order_id").asText(null);
+                if (orderId != null) {
+                    // Look up the order in our DB
+                     Optional<ShopifyObject> orderOpt = objectRepository.findByShopDomainAndObjectTypeAndExternalId(
+                            shopDomain, ShopifyObject.ObjectType.ORDER, orderId);
+                     if (orderOpt.isPresent()) {
+                         try {
+                             JsonNode orderRoot = objectMapper.readTree(orderOpt.get().getPayloadJson());
+                             JsonNode customerNode = orderRoot.path("customer");
+                             if (!customerNode.isMissingNode()) {
+                                 if (customerNode.has("id")) shopifyCustomerId = customerNode.get("id").asText();
+                                 if (customerNode.has("email")) email = customerNode.get("email").asText();
+                             }
+                         } catch (Exception e) {
+                             // ignore parsing error
+                         }
+                     }
+                }
+            }
+
+            if (shopifyCustomerId != null && !shopifyCustomerId.isBlank()) {
+                Optional<Customer> c = customerRepository.findByShopifyCustomerId(shopifyCustomerId);
+                if (c.isPresent()) return c.get();
+            }
+            if (email != null && !email.isBlank()) {
+                Optional<Customer> c = customerRepository.findByEmail(email);
+                if (c.isPresent()) return c.get();
+            }
+        } catch (Exception e) {
+            System.err.println("Error finding associated customer: " + e.getMessage());
+        }
+        return null;
     }
 
     private ShopifyObject.ObjectType mapTopicToObjectType(String topic) {

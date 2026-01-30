@@ -7,7 +7,6 @@ import com.example.aikef.repository.ChatSessionRepository;
 import com.example.aikef.repository.EventRepository;
 import com.example.aikef.service.SessionMessageGateway;
 import com.example.aikef.workflow.service.AiWorkflowService;
-import jakarta.annotation.Resource;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,25 +19,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+
 /**
  * 事件服务
  * 处理事件配置和事件触发逻辑
  */
 @Service
+@Transactional
 public class EventService {
 
     private static final Logger log = LoggerFactory.getLogger(EventService.class);
 
-    @Resource
+    @Autowired
     private EventRepository eventRepository;
 
-    @Resource
+    @Autowired
     private ChatSessionRepository chatSessionRepository;
 
-    @Resource
+    @Autowired
+    @Lazy
     private AiWorkflowService workflowService;
 
-    @Resource
+    @Autowired
+    @Lazy
     private SessionMessageGateway messageGateway;
 
     /**
@@ -87,15 +92,14 @@ public class EventService {
         event.setDescription(request.description());
         
         // 设置绑定的工作流
-        AiWorkflow workflow = workflowService.getWorkflow(request.workflowId());
-        event.setWorkflow(workflow);
+        event.setWorkflowName(request.workflowName());
         
         event.setEnabled(request.enabled() != null ? request.enabled() : true);
         event.setSortOrder(request.sortOrder() != null ? request.sortOrder() : 0);
 
         Event saved = eventRepository.save(event);
-        log.info("创建事件: eventId={}, name={}, workflowId={}", 
-                saved.getId(), saved.getName(), workflow.getId());
+        log.info("创建事件: eventId={}, name={}, workflowName={}", 
+                saved.getId(), saved.getName(), request.workflowName());
         
         return saved;
     }
@@ -123,9 +127,8 @@ public class EventService {
         if (request.description() != null) {
             event.setDescription(request.description());
         }
-        if (request.workflowId() != null) {
-            AiWorkflow workflow = workflowService.getWorkflow(request.workflowId());
-            event.setWorkflow(workflow);
+        if (request.workflowName() != null) {
+            event.setWorkflowName(request.workflowName());
         }
         if (request.enabled() != null) {
             event.setEnabled(request.enabled());
@@ -193,75 +196,105 @@ public class EventService {
 
     @Transactional
     public AiWorkflowService.WorkflowExecutionResult triggerEvent(String eventName, UUID sessionId, Map<String, Object> eventData) {
-        // 查找事件配置
+        // 1. Find Event
         Event event = eventRepository.findByName(eventName)
                 .orElseThrow(() -> new EntityNotFoundException("事件不存在: " + eventName));
 
         if (!event.isEnabled()) {
             log.warn("事件已禁用，不执行: eventName={}", eventName);
             return new AiWorkflowService.WorkflowExecutionResult(
-                    false, null, "事件已禁用: " + eventName, null, false, null);
+                    false, null, "事件已禁用", null, false, null);
         }
 
-        // 验证会话是否存在
-        ChatSession session = chatSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new EntityNotFoundException("会话不存在: " + sessionId));
-
-        log.info("触发事件: eventName={}, eventId={}, sessionId={}, workflowId={}", 
-                eventName, event.getId(), sessionId, event.getWorkflow().getId());
-
-        // 构建工作流变量
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("sessionId", sessionId);
-        if (session.getCustomer() != null) {
-            variables.put("customerId", session.getCustomer().getId());
-            variables.put("customerName", session.getCustomer().getName());
+        if (event.getWorkflowName() == null || event.getWorkflowName().isBlank()) {
+            log.warn("事件未绑定工作流: eventName={}", eventName);
+            return new AiWorkflowService.WorkflowExecutionResult(
+                    false, null, "事件未绑定工作流", null, false, null);
         }
-        if (session.getCategory() != null) {
-            variables.put("categoryId", session.getCategory().getId());
-            variables.put("categoryName", session.getCategory().getName());
+
+        boolean isMockSession = false;
+        ChatSession session = null;
+
+        // 2. Handle Session
+        if (sessionId == null) {
+            log.info("触发事件 {} 时未提供 sessionId，创建模拟会话", eventName);
+            ChatSession mockSession = new ChatSession();
+            mockSession.setNote("System Event Trigger: " + eventName);
+            mockSession.setStatus(com.example.aikef.model.enums.SessionStatus.AI_HANDLING);
+            session = chatSessionRepository.save(mockSession);
+            sessionId = session.getId();
+            isMockSession = true;
+        } else {
+            final UUID lookupId = sessionId;
+            session = chatSessionRepository.findById(lookupId)
+                    .orElseThrow(() -> new EntityNotFoundException("会话不存在: " + lookupId));
         }
-        
-        // 添加事件数据到变量中
-        if (eventData != null) {
-            variables.putAll(eventData);
-            // 同时将整个eventData作为一个对象传递
-            variables.put("eventData", eventData);
-        }
-        
-        // 添加事件信息到变量
-        variables.put("eventName", eventName);
-        variables.put("eventId", event.getId().toString());
 
-        // 执行绑定的工作流
-        // 注意：事件触发时没有用户消息，使用空字符串或事件名称作为触发消息
-        String triggerMessage = eventData != null && eventData.containsKey("message") 
-                ? eventData.get("message").toString() 
-                : "事件触发: " + eventName;
+        try {
+            // 3. Prepare Workflow & Variables
+            com.example.aikef.model.AiWorkflow workflow = workflowService.getWorkflowByName(event.getWorkflowName());
 
-        AiWorkflowService.WorkflowExecutionResult result = workflowService.executeWorkflow(
-                event.getWorkflow().getId(), 
-                sessionId, 
-                triggerMessage, 
-                variables
-        );
+            log.info("触发事件: eventName={}, eventId={}, sessionId={}, workflowName={}, workflowId={}", 
+                    eventName, event.getId(), sessionId, event.getWorkflowName(), workflow.getId());
 
-        // 如果工作流执行成功且有回复，发送 AI 回复消息（类似用户对话工作流）
-        if (result.success() && result.reply() != null && !result.reply().isBlank()) {
-            try {
-                messageGateway.sendAiMessage(sessionId, result.reply());
-                log.info("事件触发工作流执行成功，已发送 AI 回复: eventName={}, sessionId={}, replyLength={}", 
-                        eventName, sessionId, result.reply().length());
-            } catch (Exception e) {
-                log.error("发送 AI 回复失败: eventName={}, sessionId={}", eventName, sessionId, e);
-                // 即使发送失败，也返回工作流执行结果
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("sessionId", sessionId);
+            if (session.getCustomer() != null) {
+                variables.put("customerId", session.getCustomer().getId());
+                variables.put("customerName", session.getCustomer().getName());
             }
-        } else if (!result.success()) {
-            log.warn("事件触发工作流执行失败: eventName={}, sessionId={}, error={}", 
-                    eventName, sessionId, result.errorMessage());
-        }
+            if (session.getCategory() != null) {
+                variables.put("categoryId", session.getCategory().getId());
+                variables.put("categoryName", session.getCategory().getName());
+            }
+            
+            if (eventData != null) {
+                variables.putAll(eventData);
+                variables.put("eventData", eventData);
+            }
+            
+            variables.put("eventName", eventName);
+            variables.put("eventId", event.getId().toString());
 
-        return result;
+            String triggerMessage = eventData != null && eventData.containsKey("message") 
+                    ? eventData.get("message").toString() 
+                    : "事件触发: " + eventName;
+
+            // 4. Execute
+            AiWorkflowService.WorkflowExecutionResult result = workflowService.executeWorkflow(
+                    workflow.getId(), 
+                    sessionId, 
+                    triggerMessage, 
+                    variables
+            );
+
+            // 5. Send Reply (only if not mock session)
+            if (!isMockSession && result.success() && result.reply() != null && !result.reply().isBlank()) {
+                try {
+                    messageGateway.sendAiMessage(sessionId, result.reply());
+                    log.info("事件触发工作流执行成功，已发送 AI 回复: eventName={}, sessionId={}, replyLength={}", 
+                            eventName, sessionId, result.reply().length());
+                } catch (Exception e) {
+                    log.error("发送 AI 回复失败: eventName={}, sessionId={}", eventName, sessionId, e);
+                }
+            } else if (!result.success()) {
+                log.warn("事件触发工作流执行失败: eventName={}, sessionId={}, error={}", 
+                        eventName, sessionId, result.errorMessage());
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            log.error("触发事件失败: eventName={}, sessionId={}", eventName, sessionId, e);
+            return new AiWorkflowService.WorkflowExecutionResult(
+                    false, null, "触发事件失败: " + e.getMessage(), null, false, null);
+        } finally {
+            // 6. Cleanup Mock Session
+            if (isMockSession) {
+                log.info("清理模拟会话: {}", sessionId);
+                chatSessionRepository.deleteById(sessionId);
+            }
+        }
     }
 
     /**
@@ -271,7 +304,7 @@ public class EventService {
             String name,
             String displayName,
             String description,
-            UUID workflowId,
+            String workflowName,
             Boolean enabled,
             Integer sortOrder
     ) {}
@@ -283,7 +316,7 @@ public class EventService {
             String name,
             String displayName,
             String description,
-            UUID workflowId,
+            String workflowName,
             Boolean enabled,
             Integer sortOrder
     ) {}

@@ -25,6 +25,10 @@ import java.util.Optional;
 
 import com.example.aikef.shopify.dto.SubscriptionStatusDto;
 
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import java.util.concurrent.TimeUnit;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -34,6 +38,7 @@ public class ShopifyBillingService {
     private final SubscriptionRepository subscriptionRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final RedissonClient redissonClient;
     
     @Value("${shopify.api.version:2024-01}")
     private String apiVersion;
@@ -44,9 +49,48 @@ public class ShopifyBillingService {
                 .orElse(null);
         
         if (sub == null) {
-            // Check if FREE plan is implicitly active (e.g. new user)
-            // Or return inactive
-            return new SubscriptionStatusDto(false, null, 0, null, null, false);
+            String lockKey = "lock:subscription:" + tenantId;
+            RLock lock = redissonClient.getLock(lockKey);
+            
+            try {
+                // Try to acquire lock, wait up to 500ms, lease time 10s
+                if (lock.tryLock(500, 10000, TimeUnit.MILLISECONDS)) {
+                    try {
+                        // Double check
+                        sub = subscriptionRepository.findByTenantId(tenantId).orElse(null);
+                        if (sub == null) {
+                            log.info("No subscription found for {}. Auto-subscribing to FREE plan.", shopDomain);
+                            sub = new Subscription();
+                            sub.setTenantId(tenantId);
+                            sub.setPlan(SubscriptionPlan.FREE);
+                            sub.setStatus("ACTIVE");
+                            sub.setCurrentPeriodStart(java.time.Instant.now());
+                            sub.setCurrentPeriodEnd(java.time.Instant.now().plus(java.time.Duration.ofDays(365 * 100)));
+                            sub.setCancelAtPeriodEnd(false);
+                            subscriptionRepository.save(sub);
+                        }
+                    } finally {
+                        lock.unlock();
+                    }
+                } else {
+                    // Could not acquire lock, wait briefly and retry fetch
+                    try {
+                        Thread.sleep(200);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    sub = subscriptionRepository.findByTenantId(tenantId).orElse(null);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Interrupted while waiting for lock");
+            }
+        }
+        
+        if (sub == null) {
+             // Fallback if lock wait failed or something went wrong
+             // Just return inactive, frontend will retry or show error
+             return new SubscriptionStatusDto(false, null, 0, null, null, false);
         }
         
         // Check if expired

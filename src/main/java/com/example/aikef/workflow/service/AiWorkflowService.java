@@ -532,6 +532,14 @@ public class AiWorkflowService {
     }
 
     /**
+     * 根据名称获取工作流
+     */
+    public AiWorkflow getWorkflowByName(String name) {
+        return workflowRepository.findByName(name)
+                .orElseThrow(() -> new EntityNotFoundException("工作流不存在: " + name));
+    }
+
+    /**
      * 获取所有工作流
      */
     public List<AiWorkflow> getAllWorkflows() {

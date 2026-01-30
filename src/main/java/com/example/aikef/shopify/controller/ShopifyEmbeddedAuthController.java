@@ -43,7 +43,7 @@ public class ShopifyEmbeddedAuthController {
     private final ShopifySessionService shopifySessionService;
     private final EntityMapper entityMapper;
 
-    @org.springframework.beans.factory.annotation.Value("${shopify.scopes:read_orders,read_customers,read_products,read_discounts,write_price_rules,write_gift_cards,write_orders,write_order_edits,read_inventory,read_checkouts,read_draft_orders,read_themes,read_shipping}")
+    @org.springframework.beans.factory.annotation.Value("${shopify.scopes:read_price_rules,read_discounts_allocator_functions,read_orders,read_customers,read_products,read_discounts,write_price_rules,write_gift_cards,write_orders,write_order_edits,read_inventory,read_checkouts,read_draft_orders,read_themes,read_shipping}")
     private String requiredScopes;
 
     public ShopifyEmbeddedAuthController(TokenService tokenService,
@@ -72,9 +72,9 @@ public class ShopifyEmbeddedAuthController {
             if (storeOpt.isEmpty() || !storeOpt.get().isActive()) {
                 return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "Shop not installed"));
             }
-            if (!hasAllRequiredScopes(storeOpt.get().getScopes(), requiredScopes)) {
-                return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "Shop not installed"));
-            }
+//            if (!hasAllRequiredScopes(storeOpt.get().getScopes(), requiredScopes)) {
+//                return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "Shop not installed"));
+//            }
             return ResponseEntity.status(HttpStatus.OK).body(Map.of("success", false, "error", "installed"));
         }
 

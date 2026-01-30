@@ -3,6 +3,12 @@ package com.example.aikef.model;
 import com.example.aikef.model.base.AuditableEntity;
 import jakarta.persistence.*;
 
+import org.hibernate.annotations.Filter;
+import org.hibernate.annotations.FilterDef;
+import org.hibernate.annotations.ParamDef;
+import jakarta.persistence.EntityListeners;
+import com.example.aikef.saas.listener.TenantEntityListener;
+
 /**
  * 事件配置实体
  * 用于配置外部事件hook，可以绑定到特定的工作流
@@ -13,8 +19,9 @@ public class Event extends AuditableEntity {
 
     /**
      * 事件名称（唯一标识，用于hook接收）
+     * 移除全局唯一约束，改为在租户内唯一
      */
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String name;
 
     /**
@@ -32,9 +39,8 @@ public class Event extends AuditableEntity {
     /**
      * 绑定的工作流ID
      */
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "workflow_id", nullable = false)
-    private AiWorkflow workflow;
+    @Column(name = "workflow_name", length = 255)
+    private String workflowName;
 
     /**
      * 是否启用
@@ -47,6 +53,12 @@ public class Event extends AuditableEntity {
      */
     @Column(name = "sort_order")
     private Integer sortOrder = 0;
+
+    /**
+     * 是否为模板事件
+     */
+    @Column(name = "is_template", nullable = false)
+    private boolean isTemplate = false;
 
     // Getters and Setters
 
@@ -74,12 +86,12 @@ public class Event extends AuditableEntity {
         this.description = description;
     }
 
-    public AiWorkflow getWorkflow() {
-        return workflow;
+    public String getWorkflowName() {
+        return workflowName;
     }
 
-    public void setWorkflow(AiWorkflow workflow) {
-        this.workflow = workflow;
+    public void setWorkflowName(String workflowName) {
+        this.workflowName = workflowName;
     }
 
     public boolean isEnabled() {
@@ -96,6 +108,14 @@ public class Event extends AuditableEntity {
 
     public void setSortOrder(Integer sortOrder) {
         this.sortOrder = sortOrder;
+    }
+
+    public boolean isTemplate() {
+        return isTemplate;
+    }
+
+    public void setTemplate(boolean template) {
+        isTemplate = template;
     }
 }
 

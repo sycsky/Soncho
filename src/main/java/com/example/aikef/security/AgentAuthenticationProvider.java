@@ -10,8 +10,10 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
+@Transactional(readOnly = true)
 public class AgentAuthenticationProvider implements AuthenticationProvider {
 
     private final AgentRepository agentRepository;

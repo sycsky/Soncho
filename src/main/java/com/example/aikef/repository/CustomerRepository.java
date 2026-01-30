@@ -29,4 +29,6 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
     boolean existsByEmail(String email);
 
     boolean existsByPhone(String phone);
+
+    Optional<Customer> findByShopifyCustomerId(String shopifyCustomerId);
 }

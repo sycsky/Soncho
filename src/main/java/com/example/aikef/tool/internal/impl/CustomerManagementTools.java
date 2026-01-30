@@ -22,17 +22,88 @@ public class CustomerManagementTools {
     private final com.example.aikef.service.CustomerService customerService;
     private final com.example.aikef.mapper.EntityMapper entityMapper;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    private final com.example.aikef.service.CustomerTagService customerTagService;
 
     public CustomerManagementTools(ChatSessionService chatSessionService,
                                    SpecialCustomerService specialCustomerService,
                                    com.example.aikef.service.CustomerService customerService,
                                    com.example.aikef.mapper.EntityMapper entityMapper,
-                                   com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+                                   com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+                                   com.example.aikef.service.CustomerTagService customerTagService) {
         this.chatSessionService = chatSessionService;
         this.specialCustomerService = specialCustomerService;
         this.customerService = customerService;
         this.entityMapper = entityMapper;
         this.objectMapper = objectMapper;
+        this.customerTagService = customerTagService;
+    }
+
+    @Tool("Add manual tags to the current customer (e.g. VIP, Gift Buyer)")
+    public String addCustomerTags(
+            @P(value = "Current Session ID", required = true) String sessionId,
+            @P(value = "Tags to add (comma separated)", required = true) String tags
+    ) {
+        try {
+            ChatSession session = chatSessionService.findById(UUID.fromString(sessionId));
+            Customer customer = session.getCustomer();
+            if (customer == null) {
+                return "Error: No customer associated with this session.";
+            }
+
+            if (tags == null || tags.isBlank()) {
+                return "Error: Tags cannot be empty.";
+            }
+
+            String[] tagArray = tags.split(",");
+            for (String tag : tagArray) {
+                String trimmedTag = tag.trim();
+                if (!trimmedTag.isEmpty()) {
+                    customerTagService.addManualTag(customer.getId(), trimmedTag);
+                }
+            }
+
+            return "Successfully added tags: " + tags;
+
+        } catch (IllegalArgumentException e) {
+            return "Error: Invalid Session ID format.";
+        } catch (Exception e) {
+            log.error("Failed to add customer tags via tool", e);
+            return "Error: " + e.getMessage();
+        }
+    }
+
+    @Tool("Remove manual tags from the current customer")
+    public String removeCustomerTags(
+            @P(value = "Current Session ID", required = true) String sessionId,
+            @P(value = "Tags to remove (comma separated)", required = true) String tags
+    ) {
+        try {
+            ChatSession session = chatSessionService.findById(UUID.fromString(sessionId));
+            Customer customer = session.getCustomer();
+            if (customer == null) {
+                return "Error: No customer associated with this session.";
+            }
+
+            if (tags == null || tags.isBlank()) {
+                return "Error: Tags cannot be empty.";
+            }
+
+            String[] tagArray = tags.split(",");
+            for (String tag : tagArray) {
+                String trimmedTag = tag.trim();
+                if (!trimmedTag.isEmpty()) {
+                    customerTagService.removeManualTag(customer.getId(), trimmedTag);
+                }
+            }
+
+            return "Successfully removed tags: " + tags;
+
+        } catch (IllegalArgumentException e) {
+            return "Error: Invalid Session ID format.";
+        } catch (Exception e) {
+            log.error("Failed to remove customer tags via tool", e);
+            return "Error: " + e.getMessage();
+        }
     }
 
     @Tool("Get current customer's personal information (profile)")

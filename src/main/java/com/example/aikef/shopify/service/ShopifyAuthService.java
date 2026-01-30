@@ -9,6 +9,8 @@ import com.example.aikef.repository.RoleRepository;
 import com.example.aikef.service.SessionGroupService;
 import com.example.aikef.shopify.model.ShopifyStore;
 import com.example.aikef.shopify.repository.ShopifyStoreRepository;
+import com.example.aikef.model.Event;
+import com.example.aikef.repository.EventRepository;
 import com.example.aikef.model.AiWorkflow;
 import com.example.aikef.model.SessionGroup;
 import com.example.aikef.repository.AiWorkflowRepository;
@@ -63,6 +65,7 @@ public class ShopifyAuthService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AiWorkflowRepository aiWorkflowRepository;
+    private final EventRepository eventRepository;
     private final EntityManager entityManager;
 
 
@@ -90,6 +93,7 @@ public class ShopifyAuthService {
                              RoleRepository roleRepository,
                              PasswordEncoder passwordEncoder,
                              AiWorkflowRepository aiWorkflowRepository,
+                             EventRepository eventRepository,
                              EntityManager entityManager) {
         this.redisTemplate = redisTemplate;
         this.restTemplate = restTemplate;
@@ -99,6 +103,7 @@ public class ShopifyAuthService {
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.aiWorkflowRepository = aiWorkflowRepository;
+        this.eventRepository = eventRepository;
         this.entityManager = entityManager;
     }
 
@@ -265,8 +270,38 @@ public class ShopifyAuthService {
         TenantContext.setTenantId(tenantId);
         // 2. 复制模板工作流
         copyTemplateWorkflows(agent);
+        // 3. 复制模板事件
+        copyTemplateEvents(agent);
 
         return agent;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void copyTemplateEvents(Agent adminAgent) {
+        try {
+            // 查询所有模板事件 (忽略租户过滤器)
+            String sql = "SELECT * FROM events WHERE is_template = true";
+            var query = entityManager.createNativeQuery(sql, Event.class);
+            var templates = (java.util.List<Event>) query.getResultList();
+            
+            for (Event template : templates) {
+                // 检查当前租户是否已经复制过该模板
+                boolean exists = eventRepository.findByName(template.getName()).isPresent();
+                if (!exists) {
+                    Event copy = new Event();
+                    BeanUtils.copyProperties(template, copy, "id", "createdAt", "updatedAt", "version");
+                    
+                    copy.setTenantId(null); // TenantEntityListener handles it
+                    copy.setTemplate(false); // 复制后的不再是模板
+                    copy.setEnabled(true);
+                    
+                    eventRepository.save(copy);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to copy template events: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     private TokenResponse exchangeAccessToken(String shopDomain, String code) {
