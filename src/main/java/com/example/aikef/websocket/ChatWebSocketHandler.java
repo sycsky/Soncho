@@ -81,10 +81,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 log.info("📬 推送 {} 条离线消息给客服: agentId={}", unsentMessages.size(), agentId);
                 
                 for (ChatMessageDto message : unsentMessages) {
-                    // 发送离线消息
-                    Map<String, Object> offlineMsg = new HashMap<>();
-                    offlineMsg.put("type", "offline_message");
-                    offlineMsg.put("message", message);
+                    // 发送离线消息 - 使用标准 newMessage 事件格式
+                    ServerEvent offlineMsg = new ServerEvent("newMessage", Map.of(
+                            "sessionId", message.sessionId(),
+                            "message", message));
                     
                     session.sendMessage(new TextMessage(objectMapper.writeValueAsString(offlineMsg)));
                 }
