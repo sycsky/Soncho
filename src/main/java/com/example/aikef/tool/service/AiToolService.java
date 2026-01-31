@@ -41,6 +41,7 @@ import java.util.regex.Pattern;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class AiToolService {
 
     private final AiToolRepository toolRepository;
@@ -447,6 +448,7 @@ public class AiToolService {
                         ctx.getCustomerInfo().put("id", session.getCustomer().getId());
                         ctx.getCustomerInfo().put("name", session.getCustomer().getName());
                         ctx.getCustomerInfo().put("email", session.getCustomer().getEmail());
+                        ctx.getCustomerInfo().put("email", session.getCustomer().getTags());
                     }
                     if (session.getMetadata() != null) {
                         try {

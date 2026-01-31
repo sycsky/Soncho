@@ -300,62 +300,48 @@ public class ReactFlowToLiteflowConverter {
         StringBuilder el = new StringBuilder();
         el.append("SWITCH(").append(nodeRef).append(").TO(\n");
         
-        // 为每个分支生成完整的子流程
+        // 按 sourceHandle 分组，支持一个出口连接多个节点（并发执行）
+        Map<String, List<EdgeInfo>> groupedEdges = nextEdges.stream()
+                .collect(Collectors.groupingBy(e -> e.sourceHandle() != null ? e.sourceHandle() : "default", LinkedHashMap::new, Collectors.toList()));
+
         List<String> branchEls = new ArrayList<>();
-        for (EdgeInfo edge : nextEdges) {
-            // 递归生成从目标节点开始的完整流程
-            String branchEl = generateEl(edge.targetId, nodeMap, outEdges, inEdges, new HashSet<>(visited), indentLevel + 1);
-            if (!branchEl.isEmpty()) {
-                String targetId = edge.targetId();
-                // 对于 switch 节点，根据节点类型决定使用哪个作为 tag：
-                // - intent 节点返回 "tag:" + targetNodeId，所以使用 targetId 作为 tag
-                // - tool 节点也使用 targetId 作为 tag，以便目标节点能获取到正确的配置
-                //   注意：tool 节点需要返回 "tag:" + targetNodeId 格式才能匹配
-                String branchTag;
-                if ("intent".equals(nodeType)) {
-                    // intent 节点返回 "tag:" + targetNodeId，所以使用 targetId
-                    branchTag = targetId;
-                } else if ("condition".equals(nodeType)) {
-                    // condition 节点返回 "tag:" + targetNodeId，所以使用 targetId
-                    branchTag = targetId;
-                } else {
-                    // tool 节点也使用 targetId 作为 tag
-                    // 这样目标节点执行时 getTag() 返回的是实际节点ID，而不是状态值
-                    branchTag = targetId;
+        for (Map.Entry<String, List<EdgeInfo>> entry : groupedEdges.entrySet()) {
+            String sourceHandle = entry.getKey();
+            List<EdgeInfo> edges = entry.getValue();
+            
+            List<String> subBranchEls = new ArrayList<>();
+            for (EdgeInfo edge : edges) {
+                String branchEl = generateEl(edge.targetId, nodeMap, outEdges, inEdges, new HashSet<>(visited), indentLevel + 1);
+                if (!branchEl.isEmpty()) {
+                    subBranchEls.add(branchEl.trim());
                 }
-                
-                // 根据分支类型添加 tag
-                if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 
-                    !branchEl.trim().startsWith("IF(") && !branchEl.trim().startsWith("WHEN(") && 
-                    !branchEl.trim().startsWith("THEN(")) {
-                    // 多节点串行，包装成 THEN 并添加 tag
-                    branchEl = "THEN(\n" + indent(indentLevel + 2) + branchEl.replace("\n", "\n" + indent(1)) + 
-                               "\n" + indent(indentLevel + 1) + ").tag(\"" + branchTag + "\")";
-                } else if (branchEl.trim().startsWith("SWITCH(") || branchEl.trim().startsWith("IF(")) {
-                    // 嵌套的 SWITCH 或 IF，在末尾添加 tag
-                    branchEl = branchEl + ".tag(\"" + branchTag + "\")";
-                } else {
-                    // 单节点分支：需要替换或添加 tag
-                    // 如果已经有 tag，替换它；如果没有，添加它
-                    if (branchEl.contains(".tag(")) {
-                        // 替换现有的 tag
-                        branchEl = branchEl.replaceAll("\\.tag\\(\"[^\"]+\"\\)", ".tag(\"" + branchTag + "\")");
-                    } else {
-                        // 添加新的 tag
-                        branchEl = branchEl + ".tag(\"" + branchTag + "\")";
-                    }
-                }
-                
-                branchEls.add(indent(indentLevel + 1) + branchEl);
             }
+            
+            if (subBranchEls.isEmpty()) continue;
+            
+            String combinedEl;
+            if (subBranchEls.size() > 1) {
+                // 一个出口对应多个节点，使用 WHEN 并发执行
+                combinedEl = "WHEN(\n" + 
+                           subBranchEls.stream()
+                               .map(s -> indent(indentLevel + 2) + (s.contains(",") ? "THEN(" + s + ")" : s))
+                               .collect(Collectors.joining(",\n")) + 
+                           "\n" + indent(indentLevel + 1) + ")";
+            } else {
+                combinedEl = subBranchEls.get(0);
+                if (combinedEl.contains(",") && !combinedEl.startsWith("THEN(") && !combinedEl.startsWith("WHEN(") && !combinedEl.startsWith("SWITCH(")) {
+                    combinedEl = "THEN(" + combinedEl + ")";
+                }
+            }
+            
+            // 为分支添加 tag
+            String finalBranchEl = combinedEl + ".tag(\"" + sourceHandle + "\")";
+            branchEls.add(indent(indentLevel + 1) + finalBranchEl);
         }
         
         if (branchEls.isEmpty()) {
             return nodeRef;
         }
-        
-        // 去重
-        branchEls = branchEls.stream().distinct().toList();
         
         el.append(String.join(",\n", branchEls));
         el.append("\n").append(indent(indentLevel)).append(")");
@@ -907,61 +893,52 @@ public class ReactFlowToLiteflowConverter {
         StringBuilder el = new StringBuilder();
         el.append("SWITCH(").append(nodeRef).append(").TO(\n");
         
+        // 按 sourceHandle 分组，支持一个出口连接多个节点（并发执行）
+        Map<String, List<EdgeInfo>> groupedEdges = nextEdges.stream()
+                .collect(Collectors.groupingBy(e -> e.sourceHandle() != null ? e.sourceHandle() : "default", LinkedHashMap::new, Collectors.toList()));
+
         List<String> branchEls = new ArrayList<>();
-        for (EdgeInfo edge : nextEdges) {
-            String nextNodeId = edge.targetId();
-            String branchEl;
-            if (allLlmNodeIds.contains(nextNodeId)) {
-                // 直接使用子链 ID，不需要 .tag()
-                branchEl = String.format("subchain_%s_%s", workflowId, nextNodeId);
-            } else {
-                branchEl = generateSubChainEl(nextNodeId, nodeMap, outEdges, allLlmNodeIds, workflowId, new HashSet<>(visited), indentLevel + 1);
+        for (Map.Entry<String, List<EdgeInfo>> entry : groupedEdges.entrySet()) {
+            String sourceHandle = entry.getKey();
+            List<EdgeInfo> edges = entry.getValue();
+            
+            List<String> subBranchEls = new ArrayList<>();
+            for (EdgeInfo edge : edges) {
+                String nextNodeId = edge.targetId();
+                String branchEl;
+                if (allLlmNodeIds.contains(nextNodeId)) {
+                    branchEl = String.format("subchain_%s_%s", workflowId, nextNodeId);
+                } else {
+                    branchEl = generateSubChainEl(nextNodeId, nodeMap, outEdges, allLlmNodeIds, workflowId, new HashSet<>(visited), indentLevel + 1);
+                }
+                if (!branchEl.isEmpty()) {
+                    subBranchEls.add(branchEl.trim());
+                }
             }
             
-            if (!branchEl.isEmpty()) {
-                String targetId = edge.targetId();
-                // 对于 switch 节点，根据节点类型决定使用哪个作为 tag：
-                String branchTag;
-                if ("intent".equals(nodeType) || "condition".equals(nodeType)) {
-                    branchTag = targetId;
-                } else {
-                    // tool 节点也使用 targetId 作为 tag
-                    // 这样目标节点执行时 getTag() 返回的是实际节点ID，而不是状态值
-                    branchTag = targetId;
+            if (subBranchEls.isEmpty()) continue;
+            
+            String combinedEl;
+            if (subBranchEls.size() > 1) {
+                combinedEl = "WHEN(\n" + 
+                           subBranchEls.stream()
+                               .map(s -> indent(indentLevel + 2) + (s.contains(",") && !s.startsWith("subchain_") ? "THEN(" + s + ")" : s))
+                               .collect(Collectors.joining(",\n")) + 
+                           "\n" + indent(indentLevel + 1) + ")";
+            } else {
+                combinedEl = subBranchEls.get(0);
+                if (combinedEl.contains(",") && !combinedEl.startsWith("THEN(") && !combinedEl.startsWith("WHEN(") && !combinedEl.startsWith("SWITCH(") && !combinedEl.startsWith("subchain_")) {
+                    combinedEl = "THEN(" + combinedEl + ")";
                 }
-                
-                // 子链不需要额外包装
-                if (branchEl.trim().startsWith("subchain_")) {
-                    // 子链直接使用，添加 tag 用于路由
-                    branchEl = branchEl + ".tag(\"" + branchTag + "\")";
-                } else if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 
-                    !branchEl.trim().startsWith("IF(") && !branchEl.trim().startsWith("WHEN(") && 
-                    !branchEl.trim().startsWith("THEN(")) {
-                    branchEl = "THEN(\n" + indent(indentLevel + 2) + branchEl.replace("\n", "\n" + indent(1)) + 
-                               "\n" + indent(indentLevel + 1) + ").tag(\"" + branchTag + "\")";
-                } else if (branchEl.trim().startsWith("SWITCH(") || branchEl.trim().startsWith("IF(")) {
-                    branchEl = branchEl + ".tag(\"" + branchTag + "\")";
-                } else {
-                    // 单节点分支：需要替换或添加 tag
-                    // 如果已经有 tag，替换它；如果没有，添加它
-                    if (branchEl.contains(".tag(")) {
-                        // 替换现有的 tag
-                        branchEl = branchEl.replaceAll("\\.tag\\(\"[^\"]+\"\\)", ".tag(\"" + branchTag + "\")");
-                    } else {
-                        // 添加新的 tag
-                        branchEl = branchEl + ".tag(\"" + branchTag + "\")";
-                    }
-                }
-                
-                branchEls.add(indent(indentLevel + 1) + branchEl);
             }
+            
+            String finalBranchEl = combinedEl + ".tag(\"" + sourceHandle + "\")";
+            branchEls.add(indent(indentLevel + 1) + finalBranchEl);
         }
         
         if (branchEls.isEmpty()) {
             return nodeRef;
         }
-        
-        branchEls = branchEls.stream().distinct().toList();
         
         el.append(String.join(",\n", branchEls));
         el.append("\n").append(indent(indentLevel)).append(")");
@@ -1080,49 +1057,46 @@ public class ReactFlowToLiteflowConverter {
         StringBuilder el = new StringBuilder();
         el.append("SWITCH(").append(nodeRef).append(").TO(\n");
         
+        // 按 sourceHandle 分组，支持一个出口连接多个节点（并发执行）
+        Map<String, List<EdgeInfo>> groupedEdges = nextEdges.stream()
+                .collect(Collectors.groupingBy(e -> e.sourceHandle() != null ? e.sourceHandle() : "default", LinkedHashMap::new, Collectors.toList()));
+
         List<String> branchEls = new ArrayList<>();
-        for (EdgeInfo edge : nextEdges) {
-            String branchEl = generateMainChainElRecursive(edge.targetId(), nodeMap, outEdges, subChains, new HashSet<>(visited), indentLevel + 1);
-            if (!branchEl.isEmpty()) {
-                String targetId = edge.targetId();
-                // 对于 switch 节点，根据节点类型决定使用哪个作为 tag：
-                String branchTag;
-                if ("intent".equals(nodeType) || "condition".equals(nodeType)) {
-                    branchTag = targetId;
-                } else {
-                    // tool 节点也使用 targetId 作为 tag
-                    // 这样目标节点执行时 getTag() 返回的是实际节点ID，而不是状态值
-                    branchTag = targetId;
+        for (Map.Entry<String, List<EdgeInfo>> entry : groupedEdges.entrySet()) {
+            String sourceHandle = entry.getKey();
+            List<EdgeInfo> edges = entry.getValue();
+            
+            List<String> subBranchEls = new ArrayList<>();
+            for (EdgeInfo edge : edges) {
+                String branchEl = generateMainChainElRecursive(edge.targetId(), nodeMap, outEdges, subChains, new HashSet<>(visited), indentLevel + 1);
+                if (!branchEl.isEmpty()) {
+                    subBranchEls.add(branchEl.trim());
                 }
-                
-                if (branchEl.contains(",") && !branchEl.trim().startsWith("SWITCH(") && 
-                    !branchEl.trim().startsWith("IF(") && !branchEl.trim().startsWith("WHEN(") && 
-                    !branchEl.trim().startsWith("THEN(") && !branchEl.trim().startsWith("subchain_")) {
-                    branchEl = "THEN(\n" + indent(indentLevel + 2) + branchEl.replace("\n", "\n" + indent(1)) + 
-                               "\n" + indent(indentLevel + 1) + ").tag(\"" + branchTag + "\")";
-                } else if (branchEl.trim().startsWith("SWITCH(") || branchEl.trim().startsWith("IF(")) {
-                    branchEl = branchEl + ".tag(\"" + branchTag + "\")";
-                } else {
-                    // 单节点分支：需要替换或添加 tag
-                    // 如果已经有 tag，替换它；如果没有，添加它
-                    if (branchEl.contains(".tag(")) {
-                        // 替换现有的 tag
-                        branchEl = branchEl.replaceAll("\\.tag\\(\"[^\"]+\"\\)", ".tag(\"" + branchTag + "\")");
-                    } else {
-                        // 添加新的 tag
-                        branchEl = branchEl + ".tag(\"" + branchTag + "\")";
-                    }
-                }
-                
-                branchEls.add(indent(indentLevel + 1) + branchEl);
             }
+            
+            if (subBranchEls.isEmpty()) continue;
+            
+            String combinedEl;
+            if (subBranchEls.size() > 1) {
+                combinedEl = "WHEN(\n" + 
+                           subBranchEls.stream()
+                               .map(s -> indent(indentLevel + 2) + (s.contains(",") ? "THEN(" + s + ")" : s))
+                               .collect(Collectors.joining(",\n")) + 
+                           "\n" + indent(indentLevel + 1) + ")";
+            } else {
+                combinedEl = subBranchEls.get(0);
+                if (combinedEl.contains(",") && !combinedEl.startsWith("THEN(") && !combinedEl.startsWith("WHEN(") && !combinedEl.startsWith("SWITCH(")) {
+                    combinedEl = "THEN(" + combinedEl + ")";
+                }
+            }
+            
+            String finalBranchEl = combinedEl + ".tag(\"" + sourceHandle + "\")";
+            branchEls.add(indent(indentLevel + 1) + finalBranchEl);
         }
         
         if (branchEls.isEmpty()) {
             return nodeRef;
         }
-        
-        branchEls = branchEls.stream().distinct().toList();
         
         el.append(String.join(",\n", branchEls));
         el.append("\n").append(indent(indentLevel)).append(")");

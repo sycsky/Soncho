@@ -10,6 +10,8 @@ import com.example.aikef.model.Role;
 import com.example.aikef.repository.RoleRepository;
 import com.example.aikef.shopify.service.ShopifyAuthService;
 import jakarta.persistence.EntityNotFoundException;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -27,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/v1/public")
@@ -38,6 +41,7 @@ public class PublicController {
     private final TokenService tokenService;
     private final AgentService agentService;
     private final RoleRepository roleRepository;
+    private final RedissonClient redissonClient;
     
     @Value("${app.saas.enabled:false}")
     private boolean saasEnabled;
@@ -46,12 +50,14 @@ public class PublicController {
                            CustomerTokenService customerTokenService,
                            TokenService tokenService,
                            AgentService agentService,
-                           RoleRepository roleRepository) {
+                           RoleRepository roleRepository,
+                           RedissonClient redissonClient) {
         this.customerService = customerService;
         this.customerTokenService = customerTokenService;
         this.tokenService = tokenService;
         this.agentService = agentService;
         this.roleRepository = roleRepository;
+        this.redissonClient = redissonClient;
     }
 
     /**
@@ -129,15 +135,37 @@ public class PublicController {
             TenantContext.setTenantId(tenantId);
         }
 
+        RLock lock = null;
         try {
+            // 如果是 Shopify 渠道，优先使用 shopifyCustomerId 作为 channelUserId
+            String effectiveChannelUserId = request.channelUserId();
+            if (request.channel() == com.example.aikef.model.Channel.SHOPIFY && 
+                (effectiveChannelUserId == null || effectiveChannelUserId.isBlank())) {
+                effectiveChannelUserId = request.shopifyCustomerId();
+            }
+
+            // 使用 Redisson 分布式锁，防止并发创建重复用户
+            if (effectiveChannelUserId != null && !effectiveChannelUserId.isBlank()) {
+                String lockKey = "lock:customer:create:" + request.channel() + ":" + effectiveChannelUserId;
+                lock = redissonClient.getLock(lockKey);
+                try {
+                    // 尝试获取锁，等待 5 秒，持有 10 秒
+                    if (!lock.tryLock(5, 10, TimeUnit.SECONDS)) {
+                        throw new RuntimeException("系统繁忙，请稍后重试");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("获取锁被中断", e);
+                }
+            }
+
             // 查找或创建客户
             Customer customer = customerService.findOrCreateByChannel(
                     request.channel(),
                     request.name(),
                     request.email(),
                     request.phone(),
-                    request.channelUserId(),
-                    request.shopifyCustomerId(),
+                    effectiveChannelUserId,
                     request.shopifyCustomerInfo(),
                     request.shopifyCustomerId() != null && !request.shopifyCustomerId().isBlank()
             );
@@ -150,6 +178,9 @@ public class PublicController {
 
             return response;
         } finally {
+            if (lock != null && lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
             TenantContext.clear();
         }
     }

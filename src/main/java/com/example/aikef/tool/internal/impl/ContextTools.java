@@ -16,6 +16,8 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.hibernate.Hibernate;
 import org.hibernate.proxy.HibernateProxy;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -23,6 +25,7 @@ import java.util.*;
 
 @Slf4j
 @Component
+@Transactional
 public class ContextTools {
 
     private final ObjectMapper objectMapper;
@@ -62,7 +65,10 @@ public class ContextTools {
 //            result.put("query", ctx.getQuery());
 //            result.put("intent", ctx.getIntent());
 //            result.put("entities", ctx.getEntities());
-//            result.put("variables", ctx.getVariables());
+            if(ctx.getVariables()!=null){
+                result.put("eventData", ctx.getVariables().get("eventData"));
+            }
+
             result.put("shopifyUrl",shopifyGraphQLService.getCurrentStore().getShopDomain());
             if (ctx.getCustomerId() != null) {
                 Optional<Customer> customerOpt = customerRepository.findById(ctx.getCustomerId());

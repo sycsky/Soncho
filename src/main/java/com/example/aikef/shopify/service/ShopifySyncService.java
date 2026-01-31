@@ -6,6 +6,7 @@ import com.example.aikef.shopify.repository.ShopifyStoreRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.HashMap;
@@ -16,15 +17,19 @@ import java.util.Set;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class ShopifySyncService {
 
+    private static final Logger log = LoggerFactory.getLogger(ShopifySyncService.class);
     private static final String TOKEN_KEY_PREFIX = "shopify:access_token:";
 
     private static final Set<String> CUSTOMER_RELATED_TOPICS = new HashSet<>(Arrays.asList(
@@ -44,6 +49,7 @@ public class ShopifySyncService {
     private final ShopifyGdprService gdprService;
     private final EventService eventService;
     private final CustomerRepository customerRepository;
+    private ShopifySyncService self;
 
     public ShopifySyncService(ShopifyObjectRepository objectRepository,
                               ShopifyStoreRepository storeRepository,
@@ -59,6 +65,28 @@ public class ShopifySyncService {
         this.gdprService = gdprService;
         this.eventService = eventService;
         this.customerRepository = customerRepository;
+    }
+
+    @Autowired
+    public void setSelf(@Lazy ShopifySyncService self) {
+        this.self = self;
+    }
+
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public void updateStoreSyncTime(String shopDomain) {
+        String cacheKey = "shopify:store_sync_throttle:" + shopDomain;
+        String lastUpdate = redisTemplate.opsForValue().get(cacheKey);
+        if (lastUpdate != null) {
+            // Throttle: only update DB once every 60 seconds
+            return;
+        }
+
+        try {
+            storeRepository.updateLastSyncedAt(shopDomain, Instant.now());
+            redisTemplate.opsForValue().set(cacheKey, "1", Duration.ofSeconds(60));
+        } catch (Exception e) {
+            log.warn("Failed to update store sync time for {}: {}", shopDomain, e.getMessage());
+        }
     }
 
     @Transactional
@@ -88,10 +116,7 @@ public class ShopifySyncService {
         }
         ShopifyObject.ObjectType objectType = mapTopicToObjectType(topic);
         if (objectType == null) {
-            storeRepository.findByShopDomain(shopDomain).ifPresent(store -> {
-                store.setLastSyncedAt(Instant.now());
-                storeRepository.save(store);
-            });
+            self.updateStoreSyncTime(shopDomain);
             return;
         }
 
@@ -113,10 +138,7 @@ public class ShopifySyncService {
         obj.setSourceWebhookId(webhookId);
         objectRepository.save(obj);
 
-        storeRepository.findByShopDomain(shopDomain).ifPresent(store -> {
-            store.setLastSyncedAt(Instant.now());
-            storeRepository.save(store);
-        });
+        self.updateStoreSyncTime(shopDomain);
 
         // Trigger Event
         try {
@@ -142,8 +164,9 @@ public class ShopifySyncService {
                 if (customer != null) {
                     eventService.triggerEventForCustomer(customer.getId(), eventName, eventData);
                 } else {
-                    // Log but do NOT trigger event as per requirement
-                    // System.out.println("Skipping customer-related event " + eventName + " because no associated customer found.");
+                    log.warn("Skipping customer-related event {} because no associated customer found for shop {}", eventName, shopDomain);
+                    // Still trigger a generic event so it's visible in the system logs/traces
+//                    eventService.triggerEvent(eventName, null, eventData);
                 }
             } else {
                 // Non-customer related events: trigger with generic method (mock session)

@@ -139,37 +139,10 @@ public class IntentNode extends NodeSwitchComponent {
         ctx.setIntentConfidence(confidence);
         ctx.setVariable("matchedIntentId", matchedIntentId);
         
-        // 5. 从边数据获取路由映射（使用实际节点 ID）
-        String routesKey = "__intent_routes_" + actualNodeId;
-        @SuppressWarnings("unchecked")
-        Map<String, String> routeKeyToNode = ctx.getVariable(routesKey);
+        log.info("意图识别+路由: userMessage={}, matchedIntent={}({}), confidence={}", 
+                userMessage, matchedIntentLabel, matchedIntentId, confidence);
         
-        // 6. 根据意图 id 找到目标节点
-        String targetNodeId = null;
-        
-        if (routeKeyToNode != null && !routeKeyToNode.isEmpty()) {
-            targetNodeId = routeKeyToNode.get(matchedIntentId);
-            
-            // 如果找不到，使用默认路由
-            if (targetNodeId == null) {
-                String defaultRouteId = getDefaultRouteId(config);
-                targetNodeId = routeKeyToNode.get(defaultRouteId);
-            }
-            
-            // 最后兜底
-            if (targetNodeId == null) {
-                targetNodeId = routeKeyToNode.values().iterator().next();
-            }
-        }
-        
-        if (targetNodeId == null) {
-            targetNodeId = "default";
-        }
-        
-        log.info("意图识别+路由: userMessage={}, matchedIntent={}({}), confidence={}, targetNode={}", 
-                userMessage, matchedIntentLabel, matchedIntentId, confidence, targetNodeId);
-        
-        // 记录执行详情
+        // 4. 记录执行详情
         BaseWorkflowNode.recordExecution(
                 ctx,
                 actualNodeId,
@@ -179,16 +152,15 @@ public class IntentNode extends NodeSwitchComponent {
                 Map.of(
                         "intentId", matchedIntentId,
                         "intentLabel", matchedIntentLabel,
-                        "confidence", confidence,
-                        "targetNode", targetNodeId
+                        "confidence", confidence
                 ),
                 startTime,
                 true,
                 null
         );
         
-        // 返回 tag:targetNodeId 格式，LiteFlow SWITCH 会匹配 TO 列表中 tag 为 targetNodeId 的节点
-        return "tag:" + targetNodeId;
+        // 直接返回匹配的 intentId (sourceHandle)，LiteFlow 会通过 tag 匹配对应的分支
+        return "tag:" + matchedIntentId;
     }
 
     /**

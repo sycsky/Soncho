@@ -6,6 +6,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -18,6 +20,7 @@ import org.springframework.web.client.RestTemplate;
 @Service
 public class ShopifyWebhookRegistrationService {
 
+    private static final Logger log = LoggerFactory.getLogger(ShopifyWebhookRegistrationService.class);
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
@@ -142,7 +145,9 @@ public class ShopifyWebhookRegistrationService {
 
         try {
             restTemplate.postForEntity(url, new HttpEntity<>(payload, headers), String.class);
+            log.info("Registered webhook {} for shop {}", topic, shopDomain);
         } catch (Exception e) {
+            log.error("Failed to register webhook {} for shop {}: {}", topic, shopDomain, e.getMessage());
         }
     }
 
@@ -159,7 +164,9 @@ public class ShopifyWebhookRegistrationService {
 
         try {
             restTemplate.put(url, new HttpEntity<>(payload, headers));
+            log.info("Updated webhook {} for shop {}", webhookId, shopDomain);
         } catch (Exception e) {
+            log.error("Failed to update webhook {} for shop {}: {}", webhookId, shopDomain, e.getMessage());
         }
     }
 

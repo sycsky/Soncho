@@ -1115,7 +1115,7 @@ public class AiWorkflowService {
             context.getCustomerInfo().put("id", session.getCustomer().getId());
             context.getCustomerInfo().put("name", session.getCustomer().getName());
             context.getCustomerInfo().put("email", session.getCustomer().getEmail());
-
+            context.getCustomerInfo().put("customer_tags", session.getCustomer().getTags());
             // 注入 AgentSession（如果存在）
             if (agentSession != null) {
                 context.setAgentSession(agentSession);

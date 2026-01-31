@@ -8,6 +8,7 @@ import com.example.aikef.mapper.EntityMapper;
 import com.example.aikef.model.Channel;
 import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.Customer;
+import com.example.aikef.repository.ChatSessionRepository;
 import com.example.aikef.repository.CustomerRepository;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.criteria.Predicate;
@@ -31,15 +32,18 @@ public class CustomerService {
     private final EntityMapper entityMapper;
     private final CustomerTokenService customerTokenService;
     private final ChatSessionService chatSessionService;
+    private final ChatSessionRepository chatSessionRepository;
 
     public CustomerService(CustomerRepository customerRepository,
                           EntityMapper entityMapper,
                           CustomerTokenService customerTokenService,
-                          ChatSessionService chatSessionService) {
+                          ChatSessionService chatSessionService,
+                          ChatSessionRepository chatSessionRepository) {
         this.customerRepository = customerRepository;
         this.entityMapper = entityMapper;
         this.customerTokenService = customerTokenService;
         this.chatSessionService = chatSessionService;
+        this.chatSessionRepository = chatSessionRepository;
     }
 
     public Page<CustomerDto> listCustomers(String name, Channel channel, String tag, Boolean active, Pageable pageable) {
@@ -236,8 +240,13 @@ public class CustomerService {
     public CustomerTokenResponse generateCustomerToken(UUID customerId, Map<String, Object> metadata) {
         Customer customer = findById(customerId);
         
-        // 创建聊天会话并分配客服（支持元数据）
-        ChatSession session = chatSessionService.createSessionForCustomer(customer, metadata);
+        // 查找最近的会话
+        ChatSession session = chatSessionRepository.findFirstByCustomer_IdOrderByLastActiveAtDesc(customerId);
+        
+        // 如果没有会话，则创建新会话
+        if (session == null) {
+            session = chatSessionService.createSessionForCustomer(customer, metadata);
+        }
         
         // 生成 Token
         String token = customerTokenService.issueToken(customer);
@@ -267,7 +276,6 @@ public class CustomerService {
             String email,
             String phone,
             String channelUserId,
-            String shopifyCustomerId,
             Map<String, Object> shopifyCustomerInfo,
             boolean forceOverrideContact
     ) {
@@ -281,6 +289,7 @@ public class CustomerService {
                 case LINE -> customerRepository.findByLineId(channelUserId).orElse(null);
                 case TELEGRAM -> customerRepository.findByTelegramId(channelUserId).orElse(null);
                 case FACEBOOK -> customerRepository.findByFacebookId(channelUserId).orElse(null);
+                case SHOPIFY -> customerRepository.findByShopifyCustomerId(channelUserId).orElse(null);
                 default -> null;
             };
         }
@@ -304,7 +313,6 @@ public class CustomerService {
                     phone,
                     channelUserId,
                     channel,
-                    shopifyCustomerId,
                     shopifyCustomerInfo,
                     forceOverrideContact
             );
@@ -317,7 +325,11 @@ public class CustomerService {
         customer.setPrimaryChannel(channel);
         customer.setEmail(email);
         customer.setPhone(phone);
-        customer.setShopifyCustomerId(shopifyCustomerId);
+        
+        if (channel == Channel.SHOPIFY && channelUserId != null && !channelUserId.isBlank()) {
+            customer.setShopifyCustomerId(channelUserId);
+        }
+        
         if (shopifyCustomerInfo != null) {
             customer.setShopifyCustomerInfo(shopifyCustomerInfo);
         }
@@ -330,6 +342,7 @@ public class CustomerService {
                 case LINE -> customer.setLineId(channelUserId);
                 case TELEGRAM -> customer.setTelegramId(channelUserId);
                 case FACEBOOK -> customer.setFacebookId(channelUserId);
+                case SHOPIFY -> customer.setShopifyCustomerId(channelUserId);
             }
         }
         
@@ -343,7 +356,6 @@ public class CustomerService {
             String phone,
             String channelUserId,
             Channel channel,
-            String shopifyCustomerId,
             Map<String, Object> shopifyCustomerInfo,
             boolean forceOverrideContact
     ) {
@@ -408,11 +420,12 @@ public class CustomerService {
                         customer.setFacebookId(channelUserId);
                     }
                     break;
+                case SHOPIFY:
+                    if (customer.getShopifyCustomerId() == null) {
+                        customer.setShopifyCustomerId(channelUserId);
+                    }
+                    break;
             }
-        }
-
-        if (shopifyCustomerId != null && !shopifyCustomerId.isBlank()) {
-            customer.setShopifyCustomerId(shopifyCustomerId);
         }
 
         if (shopifyCustomerInfo != null) {
