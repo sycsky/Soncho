@@ -10,6 +10,5 @@ public class HelloWorldTool {
     @Tool("A simple Hello World tool that returns a greeting message")
     public String helloWorld(@P(value = "The name of the person", required = true) String name) {
         return "Hello, " + name + "! Welcome to the internal tool world.";
-
     }
 }
