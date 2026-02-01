@@ -2,9 +2,12 @@ package com.example.aikef.service;
 
 import com.example.aikef.model.AiWorkflow;
 import com.example.aikef.model.ChatSession;
+import com.example.aikef.model.Customer;
 import com.example.aikef.model.Event;
 import com.example.aikef.repository.ChatSessionRepository;
+import com.example.aikef.repository.CustomerRepository;
 import com.example.aikef.repository.EventRepository;
+import com.example.aikef.saas.context.TenantContext;
 import com.example.aikef.service.SessionMessageGateway;
 import com.example.aikef.workflow.service.AiWorkflowService;
 import jakarta.persistence.EntityNotFoundException;
@@ -39,12 +42,18 @@ public class EventService {
     private ChatSessionRepository chatSessionRepository;
 
     @Autowired
+    private CustomerRepository customerRepository;
+
+    @Autowired
     @Lazy
     private AiWorkflowService workflowService;
 
     @Autowired
     @Lazy
     private SessionMessageGateway messageGateway;
+
+    @Autowired
+    private org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     /**
      * 获取所有事件
@@ -156,6 +165,41 @@ public class EventService {
     }
 
     /**
+     * 为指定客户触发事件（异步）
+     * 自动查找最近的活跃会话
+     * 增加 Redis 计数器防止并发重复触发（10秒内只允许一次）
+     *
+     * @param customerId 客户ID
+     * @param eventName 事件名称
+     * @param eventData 事件数据
+     */
+    @Transactional
+    @Async
+    public void triggerEventForCustomerAsync(UUID customerId, String eventName, Map<String, Object> eventData) {
+        // 1. 根据 customerId 查找客户，获取租户ID
+        // 此时 TenantContext 为空，Repository 不会开启 Filter，可以查到任意租户的客户
+        Customer customer = customerRepository.findById(customerId).orElse(null);
+
+        if (customer != null && customer.getTenantId() != null) {
+            // 2. 设置租户上下文
+            TenantContext.setTenantId(customer.getTenantId());
+        } else {
+            if (customer == null) {
+                log.warn("触发异步事件时未找到客户: customerId={}", customerId);
+                return;
+            }
+            log.warn("触发异步事件时客户无租户ID: customerId={}", customerId);
+        }
+
+        try {
+            triggerEventForCustomer(customerId, eventName, eventData);
+        } finally {
+            // 3. 清理上下文
+            TenantContext.clear();
+        }
+    }
+
+    /**
      * 为指定客户触发事件（自动查找最近的活跃会话）
      * 
      * @param customerId 客户ID
@@ -189,8 +233,18 @@ public class EventService {
 
     @Transactional
     @Async
-    public void triggerEventAsync(String eventName, UUID sessionId, Map<String, Object> eventData) {
-        this.triggerEvent(eventName, sessionId, eventData);
+    public void triggerEventAsync(String eventName, UUID sessionId, Map<String, Object> eventData, String tenantId) {
+        if (tenantId != null && !tenantId.isBlank()) {
+            TenantContext.setTenantId(tenantId);
+        } else {
+             log.warn("触发异步事件时未提供租户ID: eventName={}", eventName);
+        }
+
+        try {
+            this.triggerEvent(eventName, sessionId, eventData);
+        } finally {
+            TenantContext.clear();
+        }
     }
 
 

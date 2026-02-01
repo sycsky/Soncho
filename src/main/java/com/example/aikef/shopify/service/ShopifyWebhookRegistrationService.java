@@ -27,7 +27,7 @@ public class ShopifyWebhookRegistrationService {
     @Value("${shopify.app-url:http://localhost:8080}")
     private String appUrl;
 
-    @Value("${shopify.api-version:2025-10}")
+    @Value("${shopify.api-version:2025-01}")
     private String apiVersion;
 
     public ShopifyWebhookRegistrationService(RestTemplate restTemplate, ObjectMapper objectMapper) {

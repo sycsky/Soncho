@@ -1,6 +1,9 @@
 package com.example.aikef.shopify.controller;
 
 import com.example.aikef.model.PermissionConstants;
+import com.example.aikef.model.enums.SenderType;
+import com.example.aikef.model.enums.SentItemType;
+import com.example.aikef.service.SentItemService;
 import com.example.aikef.tool.internal.impl.ShopifyCustomerServiceTools;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -14,6 +17,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.time.Instant;
 
 @RestController
 @RequestMapping("/api/v1/shopify")
@@ -22,6 +26,7 @@ import java.util.Map;
 public class ShopifyProductController {
 
     private final ShopifyCustomerServiceTools shopifyTools;
+    private final SentItemService sentItemService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -148,11 +153,73 @@ public class ShopifyProductController {
     public JsonNode getActiveDiscounts() {
         try {
             String jsonResult = shopifyTools.getActivePriceRules();
-            return objectMapper.readTree(jsonResult);
+            JsonNode root = objectMapper.readTree(jsonResult);
+            return filterSendableDiscounts(root);
         } catch (Exception e) {
             log.error("Failed to get discounts", e);
             throw new RuntimeException("Get discounts failed");
         }
+    }
+
+    private JsonNode filterSendableDiscounts(JsonNode root) {
+        ArrayNode filteredEdges = objectMapper.createArrayNode();
+        Instant now = Instant.now();
+
+        if (root != null && root.has("edges") && root.get("edges").isArray()) {
+            for (JsonNode edge : root.get("edges")) {
+                JsonNode discount = edge.path("node").path("discount");
+                if (isSendableDiscount(discount, now)) {
+                    filteredEdges.add(edge);
+                }
+            }
+        }
+
+        ObjectNode result = objectMapper.createObjectNode();
+        result.set("edges", filteredEdges);
+        return result;
+    }
+
+    private boolean isSendableDiscount(JsonNode discount, Instant now) {
+        if (discount == null || discount.isNull()) {
+            return false;
+        }
+
+        String type = discount.path("__typename").asText("");
+        if (!type.startsWith("DiscountCode")) {
+            return false;
+        }
+
+        JsonNode codes = discount.path("codes").path("nodes");
+        if (!codes.isArray() || codes.size() == 0) {
+            return false;
+        }
+
+        String code = codes.get(0).path("code").asText("").trim();
+        if (code.isEmpty()) {
+            return false;
+        }
+
+        String startsAt = discount.path("startsAt").asText(null);
+        if (startsAt != null && !startsAt.isBlank()) {
+            try {
+                if (Instant.parse(startsAt).isAfter(now)) {
+                    return false;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        String endsAt = discount.path("endsAt").asText(null);
+        if (endsAt != null && !endsAt.isBlank()) {
+            try {
+                if (!Instant.parse(endsAt).isAfter(now)) {
+                    return false;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -164,11 +231,47 @@ public class ShopifyProductController {
         try {
             String amount = payload.get("amount");
             String note = payload.getOrDefault("note", "Created by Agent");
-            String jsonResult = shopifyTools.createGiftCard(amount, note);
+            String customerId = payload.get("customerId");
+            String expiresOn = payload.get("expiresOn");
+            
+            String jsonResult = shopifyTools.createGiftCard(amount, note, customerId, SenderType.AGENT, expiresOn);
             return objectMapper.readTree(jsonResult);
         } catch (Exception e) {
             log.error("Failed to create gift card", e);
             throw new RuntimeException("Create gift card failed");
+        }
+    }
+
+    /**
+     * 记录发送的物品（如折扣码）
+     */
+    @PostMapping("/sent-items")
+    @PreAuthorize("hasAuthority('" + PermissionConstants.ACCESS_SHOPIFY_DISCOUNTS + "') or hasAuthority('" + PermissionConstants.MANAGE_SHOPIFY_GIFT_CARDS + "')")
+    public void recordSentItem(@RequestBody Map<String, String> payload) {
+        try {
+            String customerId = payload.get("customerId");
+            String typeStr = payload.get("itemType");
+            String itemValue = payload.get("itemValue");
+            String amount = payload.get("amount");
+            String note = payload.get("note");
+            
+            if (customerId == null || typeStr == null || itemValue == null) {
+                throw new IllegalArgumentException("Missing required fields");
+            }
+
+            SentItemType itemType = SentItemType.valueOf(typeStr);
+            
+            sentItemService.recordSentItem(
+                customerId,
+                itemType,
+                itemValue,
+                amount,
+                SenderType.AGENT,
+                note
+            );
+        } catch (Exception e) {
+            log.error("Failed to record sent item", e);
+            // Don't throw to frontend to avoid disrupting the chat flow, just log
         }
     }
 }

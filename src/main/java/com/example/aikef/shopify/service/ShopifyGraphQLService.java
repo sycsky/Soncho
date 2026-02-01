@@ -18,6 +18,7 @@ import java.util.Map;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@Transactional
 public class ShopifyGraphQLService {
 
     private final ShopifyStoreRepository shopifyStoreRepository;

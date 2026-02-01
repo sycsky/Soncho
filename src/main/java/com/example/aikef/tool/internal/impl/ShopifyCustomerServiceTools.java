@@ -5,8 +5,11 @@ import com.example.aikef.model.Customer;
 import com.example.aikef.model.OrderCancellationPolicy;
 import com.example.aikef.repository.CustomerRepository;
 import com.example.aikef.saas.context.TenantContext;
+import com.example.aikef.model.enums.SenderType;
+import com.example.aikef.model.enums.SentItemType;
 import com.example.aikef.service.EmailVerificationService;
 import com.example.aikef.service.OrderCancellationPolicyService;
+import com.example.aikef.service.SentItemService;
 import com.example.aikef.shopify.service.ShopifyGraphQLService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -34,12 +38,14 @@ import java.util.UUID;
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@Transactional
 public class ShopifyCustomerServiceTools {
 
     private final ShopifyGraphQLService graphQLService;
     private final EmailVerificationService emailVerificationService;
     private final CustomerRepository customerRepository;
     private final OrderCancellationPolicyService cancellationPolicyService;
+    private final SentItemService sentItemService;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     
@@ -1372,14 +1378,17 @@ public class ShopifyCustomerServiceTools {
         return data.get("nodes");
     }
 
+    @Tool("Get all discount rules/codes from the store (including active, scheduled, and expired)")
     public String getActivePriceRules() {
         String gql = """
-            query {
-              discountNodes(first: 20, query: "status:active", sortKey: CREATED_AT, reverse: true) {
+            query ($cursor: String) {
+              discountNodes(first: 250, after: $cursor, sortKey: CREATED_AT, reverse: true) {
                 edges {
+                  cursor
                   node {
                     id
                     discount {
+                      __typename
                       ... on DiscountCodeBasic {
                         title
                         codes(first: 1) {
@@ -1433,6 +1442,96 @@ public class ShopifyCustomerServiceTools {
                         startsAt
                         endsAt
                       }
+                      ... on DiscountCodeBxgy {
+                        title
+                        codes(first: 1) {
+                          nodes {
+                            code
+                          }
+                        }
+                        customerGets {
+                          value {
+                            ... on DiscountPercentage {
+                              percentage
+                            }
+                            ... on DiscountAmount {
+                              amount {
+                                amount
+                                currencyCode
+                              }
+                            }
+                            ... on DiscountOnQuantity {
+                              quantity {
+                                quantity
+                              }
+                              effect {
+                                ... on DiscountPercentage {
+                                  percentage
+                                }
+                                ... on DiscountAmount {
+                                  amount {
+                                    amount
+                                    currencyCode
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          items {
+                            ... on DiscountProducts {
+                              products(first: 10) {
+                                edges {
+                                  node {
+                                    id
+                                  }
+                                }
+                              }
+                              productVariants(first: 20) {
+                                edges {
+                                  node {
+                                    id
+                                    product {
+                                      id
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            ... on DiscountCollections {
+                              collections(first: 10) {
+                                edges {
+                                  node {
+                                    id
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                        startsAt
+                        endsAt
+                      }
+                      ... on DiscountCodeFreeShipping {
+                        title
+                        codes(first: 1) {
+                          nodes {
+                            code
+                          }
+                        }
+                        startsAt
+                        endsAt
+                      }
+                      ... on DiscountCodeApp {
+                        title
+                        codes(first: 1) {
+                          nodes {
+                            code
+                          }
+                        }
+                        startsAt
+                        endsAt
+                        status
+                      }
                       ... on DiscountAutomaticBasic {
                          title
                          startsAt
@@ -1481,14 +1580,124 @@ public class ShopifyCustomerServiceTools {
                           }
                         }
                       }
+                      ... on DiscountAutomaticBxgy {
+                        title
+                        startsAt
+                        endsAt
+                        customerGets {
+                          value {
+                            ... on DiscountPercentage {
+                              percentage
+                            }
+                            ... on DiscountAmount {
+                              amount {
+                                amount
+                                currencyCode
+                              }
+                            }
+                            ... on DiscountOnQuantity {
+                              quantity {
+                                quantity
+                              }
+                              effect {
+                                ... on DiscountPercentage {
+                                  percentage
+                                }
+                                ... on DiscountAmount {
+                                  amount {
+                                    amount
+                                    currencyCode
+                                  }
+                                }
+                              }
+                            }
+                          }
+                          items {
+                            ... on DiscountProducts {
+                              products(first: 10) {
+                                edges {
+                                  node {
+                                    id
+                                  }
+                                }
+                              }
+                              productVariants(first: 20) {
+                                edges {
+                                  node {
+                                    id
+                                    product {
+                                      id
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            ... on DiscountCollections {
+                              collections(first: 10) {
+                                edges {
+                                  node {
+                                    id
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                      ... on DiscountAutomaticFreeShipping {
+                        title
+                        startsAt
+                        endsAt
+                      }
+                      ... on DiscountCodeApp {
+                        title
+                        codes(first: 1) {
+                          nodes {
+                            code
+                          }
+                        }
+                        startsAt
+                        endsAt
+                      }
+                      ... on DiscountAutomaticApp {
+                        title
+                        startsAt
+                        endsAt
+                      }
                     }
                   }
+                }
+                pageInfo {
+                  hasNextPage
+                  endCursor
                 }
               }
             }
             """;
-        JsonNode data = graphQLService.execute(gql, Map.of());
-        return data.get("discountNodes").toString();
+        ArrayNode allEdges = objectMapper.createArrayNode();
+        String cursor = null;
+        boolean hasNextPage = true;
+        while (hasNextPage) {
+            Map<String, Object> variables = new HashMap<>();
+            variables.put("cursor", cursor);
+            JsonNode data = graphQLService.execute(gql, variables);
+            JsonNode discountNodes = data.path("discountNodes");
+            JsonNode edges = discountNodes.path("edges");
+            if (edges.isArray()) {
+                for (JsonNode edge : edges) {
+                    allEdges.add(edge);
+                }
+            }
+            JsonNode pageInfo = discountNodes.path("pageInfo");
+            hasNextPage = pageInfo.path("hasNextPage").asBoolean(false);
+            cursor = pageInfo.path("endCursor").isNull() ? null : pageInfo.path("endCursor").asText(null);
+            if (!hasNextPage || cursor == null || cursor.isBlank()) {
+                break;
+            }
+        }
+        ObjectNode result = objectMapper.createObjectNode();
+        result.set("edges", allEdges);
+        return result.toString();
     }
 
 
@@ -1504,7 +1713,7 @@ public class ShopifyCustomerServiceTools {
         return sb.toString();
     }
 
-    public String createGiftCard(String amount, String note) {
+    public String createGiftCard(String amount, String note, String customerId, SenderType senderType, String expiresOn) {
         String code = generateGiftCardCode();
         
         String gql = """
@@ -1517,6 +1726,7 @@ public class ShopifyCustomerServiceTools {
                     currencyCode
                   }
                   note
+                  expiresOn
                 }
                 userErrors {
                   field
@@ -1535,6 +1745,9 @@ public class ShopifyCustomerServiceTools {
         if (note != null && !note.isEmpty()) {
             input.put("note", note);
         }
+        if (expiresOn != null && !expiresOn.isEmpty()) {
+            input.put("expiresOn", expiresOn);
+        }
 
         JsonNode data = graphQLService.execute(gql, Map.of("input", input));
         JsonNode result = data.get("giftCardCreate");
@@ -1542,12 +1755,89 @@ public class ShopifyCustomerServiceTools {
         // Inject the generated code into the result so the frontend can display it
         if (result.has("giftCard") && !result.get("giftCard").isNull()) {
             ((com.fasterxml.jackson.databind.node.ObjectNode) result.get("giftCard")).put("code", code);
+            
+            // Record the sent item if successful
+            if (customerId != null && !customerId.isEmpty()) {
+                sentItemService.recordSentItem(
+                    customerId, 
+                    SentItemType.GIFT_CARD, 
+                    code, 
+                    formattedAmount, 
+                    senderType != null ? senderType : SenderType.AI, 
+                    note
+                );
+            }
         }
         
         try {
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(result);
         } catch (Exception e) {
             return result.toString();
+        }
+    }
+
+    @Tool("Search for sent items (Gift Cards/Discounts) history. Filter by customer ID and/or date range. All parameters are optional.")
+    public String searchSentRecords(
+            @P(value = "Customer ID (UUID format)", required = false) String customerId,
+            @P(value = "Start date (ISO 8601 format, e.g. 2024-01-01T00:00:00)", required = false) String startDate,
+            @P(value = "End date (ISO 8601 format, e.g. 2024-12-31T23:59:59)", required = false) String endDate) {
+        try {
+            java.time.LocalDateTime start = null;
+            java.time.LocalDateTime end = null;
+            
+            if (startDate != null && !startDate.isBlank()) {
+                try {
+                    start = java.time.LocalDateTime.parse(startDate);
+                } catch (Exception e) {
+                    // Try parsing date only and start of day
+                    try {
+                        start = java.time.LocalDate.parse(startDate).atStartOfDay();
+                    } catch (Exception e2) {
+                        return "Invalid start date format. Please use ISO 8601 (YYYY-MM-DDTHH:mm:ss) or YYYY-MM-DD.";
+                    }
+                }
+            }
+            
+            if (endDate != null && !endDate.isBlank()) {
+                try {
+                    end = java.time.LocalDateTime.parse(endDate);
+                } catch (Exception e) {
+                    // Try parsing date only and end of day
+                    try {
+                        end = java.time.LocalDate.parse(endDate).atTime(java.time.LocalTime.MAX);
+                    } catch (Exception e2) {
+                        return "Invalid end date format. Please use ISO 8601 (YYYY-MM-DDTHH:mm:ss) or YYYY-MM-DD.";
+                    }
+                }
+            }
+
+            java.util.List<com.example.aikef.model.SentItemRecord> records = sentItemService.searchSentItems(customerId, start, end);
+            
+            if (records.isEmpty()) {
+                return "No sent records found matching criteria.";
+            }
+
+            // Convert to simple map list to avoid recursion/lazy loading issues and format nicely
+            List<Map<String, Object>> resultList = new ArrayList<>();
+            for (com.example.aikef.model.SentItemRecord record : records) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("type", record.getItemType());
+                map.put("value", record.getItemValue());
+                map.put("amount", record.getAmount());
+                map.put("sentBy", record.getSentBy());
+                map.put("sentAt", record.getCreatedAt().toString());
+                if (record.getCustomer() != null) {
+                    map.put("customerId", record.getCustomer().getId().toString());
+                    map.put("customerName", record.getCustomer().getName());
+                }
+                map.put("note", record.getNote());
+                resultList.add(map);
+            }
+            
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(resultList);
+        } catch (Exception e) {
+            log.error("Failed to search sent records", e);
+            return "Search failed: " + e.getMessage();
         }
     }
 

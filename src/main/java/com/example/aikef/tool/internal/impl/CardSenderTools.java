@@ -1,6 +1,9 @@
 package com.example.aikef.tool.internal.impl;
 
 import com.example.aikef.service.SessionMessageGateway;
+import com.example.aikef.service.SentItemService;
+import com.example.aikef.model.enums.SenderType;
+import com.example.aikef.model.enums.SentItemType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.P;
@@ -21,8 +24,9 @@ public class CardSenderTools {
     private final ShopifyCustomerServiceTools shopifyTools;
     private final ObjectMapper objectMapper;
     private final SessionMessageGateway sessionMessageGateway;
+    private final SentItemService sentItemService;
 
-    @Tool("Send product cards to the user. Supports multiple products or variants.")
+    @Tool("Send a product card to the conversation. Supports multiple products or variants.")
     public String sendProductCard(
             @P("The Session ID") String sessionId,
             @P("Comma-separated list of Shopify Product IDs or Variant IDs (e.g. '12345,67890')") String ids) {
@@ -148,19 +152,40 @@ public class CardSenderTools {
     @Tool("Send a gift card to the conversation window")
     public String sendGiftCard(
             @P("The Session ID") String sessionId,
-            @P("Amount/Value of the gift card") String amount) {
+            @P("Amount/Value of the gift card") String amount,
+            @P(value = "Expiration date (ISO 8601 format, e.g., 2024-12-31). Optional.", required = false) String expiresOn,
+            @P(value = "Customer ID. Optional but recommended for recording.", required = false) String customerId) {
         try {
+            // Call real service
+            String resultJson = shopifyTools.createGiftCard(amount, "Created by AI Agent", customerId, SenderType.AI, expiresOn);
+            JsonNode result = objectMapper.readTree(resultJson);
+            
+            if (result.has("userErrors") && result.get("userErrors").isArray() && result.get("userErrors").size() > 0) {
+                 return "Failed to create gift card: " + result.get("userErrors").get(0).get("message").asText();
+            }
+            
+            JsonNode giftCard = result.get("giftCard");
+            if (giftCard == null || giftCard.isNull()) {
+                return "Failed to create gift card (No data returned).";
+            }
+
             Map<String, Object> cardData = new HashMap<>();
-            cardData.put("amount", amount);
-            cardData.put("code", "GIFT-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+            cardData.put("amount", giftCard.path("balance").path("amount").asText());
+            cardData.put("currency", giftCard.path("balance").path("currencyCode").asText());
+            cardData.put("code", giftCard.path("code").asText());
+            cardData.put("id", giftCard.path("id").asText());
+            if (giftCard.has("expiresOn") && !giftCard.get("expiresOn").isNull()) {
+                cardData.put("expiresOn", giftCard.get("expiresOn").asText());
+            }
             
             String payload = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(cardData);
             String cardMessage = "card#CARD_GIFT#" + payload;
             
             sessionMessageGateway.sendAiMessage(UUID.fromString(sessionId), cardMessage);
-            return "Gift card sent successfully.";
+            return "Gift card sent successfully. Code: " + cardData.get("code");
         } catch (Exception e) {
-            return "Failed to create gift card.";
+            log.error("Failed to send gift card", e);
+            return "Failed to create gift card: " + e.getMessage();
         }
     }
 
@@ -168,7 +193,8 @@ public class CardSenderTools {
     public String sendDiscountCard(
             @P("The Session ID") String sessionId,
             @P("Discount code") String code,
-            @P("Discount value (e.g. '20% off' or '$10')") String value) {
+            @P("Discount value (e.g. '20% off' or '$10')") String value,
+            @P(value = "Customer ID. Optional but recommended for recording.", required = false) String customerId) {
         try {
             Map<String, Object> cardData = new HashMap<>();
             cardData.put("code", code);
@@ -178,6 +204,7 @@ public class CardSenderTools {
             String cardMessage = "card#CARD_DISCOUNT#" + payload;
             
             sessionMessageGateway.sendAiMessage(UUID.fromString(sessionId), cardMessage);
+            sentItemService.recordSentItem(customerId, SentItemType.DISCOUNT, code, value, SenderType.AI, null);
             return "Discount card sent successfully.";
         } catch (Exception e) {
             return "Failed to create discount card.";

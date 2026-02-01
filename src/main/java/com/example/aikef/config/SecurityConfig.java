@@ -75,6 +75,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/login").permitAll()
                         .requestMatchers("/api/v1/files/upload").permitAll()
                         .requestMatchers("/api/v1/public/**").permitAll()
+                        .requestMatchers("/api/v1/shopify/webhooks/**").permitAll()
                         .requestMatchers("/api/public/cms/**").permitAll() // CMS Public API
                         .requestMatchers("/api/admin/cms/**").permitAll() // CMS Admin API (Handled by manual token check)
                         .requestMatchers("/api/v1/shopify/auth/exchange").permitAll()

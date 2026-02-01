@@ -162,7 +162,7 @@ public class ShopifySyncService {
             if (CUSTOMER_RELATED_TOPICS.contains(topic)) {
                 Customer customer = findAssociatedCustomer(topic, shopDomain, payloadJson);
                 if (customer != null) {
-                    eventService.triggerEventForCustomer(customer.getId(), eventName, eventData);
+                    eventService.triggerEventForCustomerAsync(customer.getId(), eventName, eventData);
                 } else {
                     log.warn("Skipping customer-related event {} because no associated customer found for shop {}", eventName, shopDomain);
                     // Still trigger a generic event so it's visible in the system logs/traces
@@ -170,7 +170,10 @@ public class ShopifySyncService {
                 }
             } else {
                 // Non-customer related events: trigger with generic method (mock session)
-                eventService.triggerEvent(eventName, null, eventData);
+                String tenantId = storeRepository.findByShopDomain(shopDomain)
+                        .map(store -> store.getTenantId())
+                        .orElse(null);
+                eventService.triggerEventAsync(eventName, null, eventData, tenantId);
             }
         } catch (Exception e) {
             // Log error but continue

@@ -3,8 +3,7 @@ package com.example.aikef.controller;
 
 import com.example.aikef.dto.request.CreateTenantAdminRequest;
 import com.example.aikef.saas.context.TenantContext;
-import com.example.aikef.service.AgentService;
-import com.example.aikef.service.RoleService;
+import com.example.aikef.service.*;
 import com.example.aikef.dto.AgentDto;
 import com.example.aikef.model.Role;
 import com.example.aikef.repository.RoleRepository;
@@ -12,6 +11,7 @@ import com.example.aikef.shopify.service.ShopifyAuthService;
 import jakarta.persistence.EntityNotFoundException;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -22,8 +22,6 @@ import com.example.aikef.model.Customer;
 import com.example.aikef.security.AgentPrincipal;
 import com.example.aikef.security.CustomerPrincipal;
 import com.example.aikef.security.TokenService;
-import com.example.aikef.service.CustomerService;
-import com.example.aikef.service.CustomerTokenService;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 
@@ -42,22 +40,28 @@ public class PublicController {
     private final AgentService agentService;
     private final RoleRepository roleRepository;
     private final RedissonClient redissonClient;
+    private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
     
     @Value("${app.saas.enabled:false}")
     private boolean saasEnabled;
+
+    @Autowired
+    private  EventService eventService;
 
     public PublicController(CustomerService customerService,
                            CustomerTokenService customerTokenService,
                            TokenService tokenService,
                            AgentService agentService,
                            RoleRepository roleRepository,
-                           RedissonClient redissonClient) {
+                           RedissonClient redissonClient,
+                           org.springframework.data.redis.core.StringRedisTemplate redisTemplate) {
         this.customerService = customerService;
         this.customerTokenService = customerTokenService;
         this.tokenService = tokenService;
         this.agentService = agentService;
         this.roleRepository = roleRepository;
         this.redissonClient = redissonClient;
+        this.redisTemplate = redisTemplate;
     }
 
     /**
@@ -170,11 +174,40 @@ public class PublicController {
                     request.shopifyCustomerId() != null && !request.shopifyCustomerId().isBlank()
             );
 
+
+
             // 生成 Token 并创建会话（带 metadata）
             CustomerTokenResponse response = customerService.generateCustomerToken(
                     customer.getId(),
                     request.metadata()
             );
+
+            // 检查客户是否在最近 10 秒内创建，如果是则触发系统事件
+            if (customer.getCreatedAt() != null &&
+                    customer.getCreatedAt().isAfter(java.time.Instant.now().minusSeconds(10))) {
+                try {
+                    String eventName = "system.customer.created";
+                    String lockKey = "event:trigger:" + customer.getId() + ":" + eventName;
+                    log.info("lockkey: " + lockKey);
+                    // Redis 计数去重：防止短时间内重复触发
+                    Long count = redisTemplate.opsForValue().increment(lockKey);
+                    if (count != null && count == 1) {
+                        redisTemplate.expire(lockKey, 10, TimeUnit.SECONDS);
+                        
+                        Map<String, Object> eventData = new HashMap<>();
+                        eventData.put("customerId", customer.getId());
+                        eventData.put("customerName", customer.getName());
+                        eventData.put("channel", request.channel());
+                        eventData.put("isNewCustomer", true);
+    
+                        eventService.triggerEventForCustomerAsync(customer.getId(), eventName, eventData);
+                    } else {
+                        log.info("Duplicate system.customer.created event skipped for customer: {}", customer.getId());
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to trigger system.customer.created event", e);
+                }
+            }
 
             return response;
         } finally {
