@@ -145,7 +145,7 @@ public class CardSenderTools {
         }
     }
 
-    @Tool("Send a gift card to the user.")
+    @Tool("Send a gift card to the conversation window")
     public String sendGiftCard(
             @P("The Session ID") String sessionId,
             @P("Amount/Value of the gift card") String amount) {
@@ -164,7 +164,7 @@ public class CardSenderTools {
         }
     }
 
-    @Tool("Send a discount card to the user.")
+    @Tool("Send a discount card to the conversation window")
     public String sendDiscountCard(
             @P("The Session ID") String sessionId,
             @P("Discount code") String code,
