@@ -140,7 +140,7 @@ You are a friendly, professional, and empathetic Customer Support Specialist. Do
             goal = goal + "\n\n" + DEFAULT_SYSTEM_PROMPT;
             String contextRs = contextTools.getWorkflowContext(null,ctx);
 
-            goal = goal + "\n\n" + "contextData:"+contextRs;
+            goal = goal + "\n\n" + "context data:\n{{\n"+contextRs+"\n}}";
 
 
             Integer maxIterations = getConfigInt("maxIterations", 10);
