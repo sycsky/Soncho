@@ -1,6 +1,8 @@
 package com.example.aikef.service;
 
 import com.example.aikef.workflow.service.AiWorkflowService;
+import com.example.aikef.model.AiWorkflow;
+import com.example.aikef.service.SessionMessageGateway;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -23,6 +25,7 @@ public class SqsDelayService {
 
     private final SqsClient sqsClient;
     private final AiWorkflowService workflowService;
+    private final SessionMessageGateway messageGateway;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${aws.sqs.queue-url:}")
@@ -34,9 +37,10 @@ public class SqsDelayService {
     private ExecutorService executorService;
     private volatile boolean running = true;
 
-    public SqsDelayService(SqsClient sqsClient, @Lazy AiWorkflowService workflowService) {
+    public SqsDelayService(SqsClient sqsClient, @Lazy AiWorkflowService workflowService, @Lazy SessionMessageGateway messageGateway) {
         this.sqsClient = sqsClient;
         this.workflowService = workflowService;
+        this.messageGateway = messageGateway;
     }
 
     @PostConstruct
@@ -114,6 +118,23 @@ public class SqsDelayService {
                 return;
             }
             UUID workflowId = UUID.fromString(workflowIdStr);
+            String workflowName = (String) taskData.get("workflowName");
+
+            // 验证工作流是否存在且名称匹配
+            try {
+                AiWorkflow workflow = workflowService.getWorkflow(workflowId);
+                if (workflowName != null && !workflowName.isEmpty() && !workflowName.equals(workflow.getName())) {
+                    log.warn("SQS 消息中工作流名称不匹配, 跳过处理: id={}, expectedName={}, actualName={}", 
+                            workflowId, workflowName, workflow.getName());
+                    deleteMessage(message);
+                    return;
+                }
+            } catch (Exception e) {
+                log.warn("获取工作流失败或工作流不存在: id={}, error={}", workflowId, e.getMessage());
+                deleteMessage(message);
+                return;
+            }
+
             String inputData = (String) taskData.get("inputData");
 
             Map<String, Object> variables = new HashMap<>();
@@ -121,7 +142,21 @@ public class SqsDelayService {
             variables.put("_fromDelayNode", true);
 
             // 触发工作流
-            workflowService.executeWorkflow(workflowId, sessionId, inputData, variables);
+            AiWorkflowService.WorkflowExecutionResult result = workflowService.executeWorkflow(workflowId, sessionId, inputData, variables);
+
+            // 如果工作流执行成功且有回复，发送 AI 回复消息
+            if (result.success() && result.reply() != null && !result.reply().isBlank()) {
+                try {
+                    messageGateway.sendAiMessage(sessionId, result.reply());
+                    log.info("延迟节点触发工作流执行成功，已发送 AI 回复: workflowId={}, sessionId={}, replyLength={}", 
+                            workflowId, sessionId, result.reply().length());
+                } catch (Exception e) {
+                    log.error("发送 AI 回复失败: workflowId={}, sessionId={}", workflowId, sessionId, e);
+                }
+            } else if (!result.success()) {
+                 log.warn("延迟节点触发工作流执行失败: workflowId={}, sessionId={}, error={}", 
+                    workflowId, sessionId, result.errorMessage());
+            }
 
             // 删除消息
             deleteMessage(message);
