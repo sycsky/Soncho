@@ -82,6 +82,13 @@ This document details the configuration and parameters for the available workflo
     - `systemPrompt` (String, Optional): Instructions for extraction.
     - `mappings` (Object): Key-value pairs mapping extracted JSON fields to session metadata keys.
 
+### 14. Delay Execution (`delay`)
+- **Description**: Delays the execution for a specified time and then triggers another workflow.
+- **Configuration (`data.config`)**:
+    - `targetWorkflowId` (String, Required): ID of the workflow to trigger after the delay.
+    - `delayMinutes` (Number, Required): Delay time in minutes (Maximum: 1440 minutes / 24 hours).
+    - `inputData` (String, Optional): Template string for input data, processed by the template engine. Passed to the target workflow as `userMessage` and in `variables.inputData`.
+
 ---
 
 ## Generated Workflow Demo
