@@ -1,20 +1,32 @@
 package com.example.aikef.model;
 
 import com.example.aikef.model.base.AuditableEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
+import com.example.aikef.saas.context.TenantContext;
+import jakarta.persistence.*;
+
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import lombok.Data;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Filter;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "roles")
 @Data
-public class Role extends AuditableEntity {
+@Filter(name = "tenantFilter", condition = "(tenant_id = :tenantId OR tenant_id IS NULL)")
+public class Role {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(nullable = false, updatable = false, columnDefinition = "CHAR(36)")
+    private UUID id;
+
 
     @Column(nullable = false, unique = true)
     private String name;
@@ -27,6 +39,35 @@ public class Role extends AuditableEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "json", nullable = false)
     private Map<String, Object> permissions = new HashMap<>();
+
+
+    @Column(name = "created_by")
+    private UUID createdBy;
+
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+    @Column(name = "tenant_id", length = 50)
+    private String tenantId;
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.tenantId == null) {
+            try {
+                String currentTenant = TenantContext.getTenantId();
+                if (currentTenant != null) {
+                    this.tenantId = currentTenant;
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+    }
+
 
     public String getName() {
         return name;

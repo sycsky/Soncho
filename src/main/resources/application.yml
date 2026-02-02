@@ -69,3 +69,12 @@ translation:
     - code: ja
       name: 日本語
   default-system-language: zh-CN
+
+# AWS SQS 延迟任务配置
+aws:
+  sqs:
+    enabled: ${AWS_SQS_ENABLED:false}
+    queue-url: ${AWS_SQS_QUEUE_URL:}
+    region: ${AWS_SQS_REGION:us-east-1}
+    access-key: ${AWS_SQS_ACCESS_KEY:}
+    secret-key: ${AWS_SQS_SECRET_KEY:}

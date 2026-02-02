@@ -2,7 +2,6 @@ package com.example.aikef.service;
 
 import com.example.aikef.dto.AgentDto;
 import com.example.aikef.dto.request.CreateAgentRequest;
-import com.example.aikef.dto.request.CreateTenantAdminRequest;
 import com.example.aikef.dto.request.UpdateAgentRequest;
 import com.example.aikef.mapper.EntityMapper;
 import com.example.aikef.model.Agent;
@@ -89,11 +88,8 @@ public class AgentService {
         }
         
         // 如果开启了 SAAS 且当前没有租户上下文（例如管理员创建租户管理员），需要手动设置 TenantId
-        // 这里假设 CreateAgentRequest 中可能会传入 tenantId，或者在注册流程中处理
-        // 如果是在 SAAS 模式下，普通 Agent 创建应该由 TenantEntityListener 自动填充当前租户 ID
-        // 如果是创建新租户的第一个 Agent，则需要显式设置
-        if (request instanceof CreateTenantAdminRequest) {
-             agent.setTenantId(((CreateTenantAdminRequest) request).getTenantId());
+        if (request.getTenantId() != null && !request.getTenantId().isBlank()) {
+             agent.setTenantId(request.getTenantId());
         }
 
         Agent saved = agentRepository.save(agent);
@@ -131,7 +127,10 @@ public class AgentService {
     }
 
     public Agent findById(UUID id) {
-        return agentRepository.findById(id)
+        // 使用 findById (EntityManager.find) 默认不应用 Hibernate Filter
+        // 需要改用 JPA Specification 或 JPQL 查询才能生效
+        // 这里暂时改为使用 Specification 方式
+        return agentRepository.findOne((root, query, cb) -> cb.equal(root.get("id"), id))
                 .orElseThrow(() -> new EntityNotFoundException("坐席不存在"));
     }
 

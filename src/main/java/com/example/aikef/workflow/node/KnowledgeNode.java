@@ -59,7 +59,7 @@ public class KnowledgeNode extends BaseWorkflowNode {
             }
             
             if (knowledgeBaseIds.isEmpty()) {
-                String output = getConfigString("noResultMessage", "未配置知识库。");
+                String output = getConfigString("noResultMessage", "No knowledge base configured。");
                 setOutput(output);
                 recordExecution(query, output, startTime, true, null);
                 return;
@@ -75,7 +75,7 @@ public class KnowledgeNode extends BaseWorkflowNode {
             
             String output;
             if (results.isEmpty()) {
-                output = getConfigString("noResultMessage", "未找到相关知识。");
+                output = getConfigString("noResultMessage", "No relevant knowledge found.");
             } else {
                 output = formatOutput(results, outputFormat);
             }

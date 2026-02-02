@@ -15,16 +15,16 @@ import lombok.NoArgsConstructor;
 public class CreateAgentRequest {
     @NotBlank
     private String name;
-    
+
     @Email
     @NotBlank
     private String email;
-    
+
     @NotBlank
     private String password;
-    
+
     @NotNull
     private UUID roleId;
-    
+
     private String language; // 可选，客服使用的语言代码（如 zh-CN, en, ja）
 }

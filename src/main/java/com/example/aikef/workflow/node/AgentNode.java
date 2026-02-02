@@ -144,6 +144,7 @@ You are a friendly, professional, and empathetic Customer Support Specialist. Do
 
             goal = goal + "\n\n" + "context data:\n{{\n"+contextRs+"\n}}";
 
+
             Integer maxIterations = getConfigInt("maxIterations", 10);
             Boolean useHistory = getConfigBoolean("useHistory", true);
             Double temperature = getConfigDouble("temperature", 0.7); // Default to creative for agents
@@ -173,6 +174,18 @@ You are a friendly, professional, and empathetic Customer Support Specialist. Do
                 });
             } catch (Exception e) {
                 log.warn("Failed to auto-inject transferToCustomerService tool", e);
+            }
+
+            // Auto-inject 'searchKnowledgeBaseByKeyword' tool
+            try {
+                aiToolRepository.findByName("searchKnowledgeBaseByKeyword").ifPresent(tool -> {
+                    if (!toolIds.contains(tool.getId())) {
+                        toolIds.add(tool.getId());
+                        log.info("Auto-injected tool: searchKnowledgeBaseByKeyword ({})", tool.getId());
+                    }
+                });
+            } catch (Exception e) {
+                log.warn("Failed to auto-inject searchKnowledgeBaseByKeyword tool", e);
             }
 
             List<ToolSpecification> toolSpecs = Collections.emptyList();

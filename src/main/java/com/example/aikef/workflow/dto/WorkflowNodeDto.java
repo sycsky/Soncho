@@ -24,6 +24,7 @@ public record WorkflowNodeDto(
      * knowledge - 知识库查询节点
      * intent - 意图识别节点
      * human_transfer - 转人工节点
+     * delay - 延迟节点
      * end - 结束节点
      */
     String type,

@@ -2,6 +2,10 @@
 # 开发环境配置
 # ================================
 
+app:
+  saas:
+    enabled: false
+
 spring:
   # 数据库配置
   datasource:
@@ -17,6 +21,7 @@ spring:
       password: ""
   # JPA 配置
   jpa:
+    show-sql: false
     database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
       ddl-auto: update
@@ -33,6 +38,8 @@ logging:
     root: INFO
     com.example.aikef: DEBUG
     com.yomahub.liteflow: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
 # AI 配置
 ai:
@@ -63,3 +70,12 @@ translation:
     access-key: ${AWS_TRANSLATE_ACCESS_KEY:}
     secret-key: ${AWS_TRANSLATE_SECRET_KEY:}
     region: us-east-1
+
+# SQS 延迟任务开发环境配置
+aws:
+  sqs:
+    enabled: false
+    queue-url: 
+    region: us-east-1
+    access-key: 
+    secret-key: 

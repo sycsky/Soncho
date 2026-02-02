@@ -26,6 +26,7 @@ public class WorkflowExecutionScheduler {
     private final AiWorkflowService workflowService;
     private final ChatSessionRepository sessionRepository;
     private final SessionMessageGateway messageGateway;
+    private final com.example.aikef.service.SqsDelayService sqsDelayService;
 
     // 防抖时间（秒），默认3秒
     @Value("${workflow.debounce.seconds:0}")
@@ -42,16 +43,25 @@ public class WorkflowExecutionScheduler {
 
     public WorkflowExecutionScheduler(AiWorkflowService workflowService,
                                       ChatSessionRepository sessionRepository,
-                                      SessionMessageGateway messageGateway) {
+                                      SessionMessageGateway messageGateway,
+                                      com.example.aikef.service.SqsDelayService sqsDelayService) {
         this.workflowService = workflowService;
         this.sessionRepository = sessionRepository;
         this.messageGateway = messageGateway;
+        this.sqsDelayService = sqsDelayService;
         // 创建单线程调度器用于防抖任务
         this.debounceExecutor = Executors.newScheduledThreadPool(10, r -> {
             Thread t = new Thread(r, "workflow-debounce-" + System.currentTimeMillis());
             t.setDaemon(true);
             return t;
         });
+    }
+
+    /**
+     * 调度延迟任务
+     */
+    public void scheduleDelayTask(Map<String, Object> taskData, int delayMinutes) {
+        sqsDelayService.sendDelayMessage(taskData, delayMinutes);
     }
 
     /**

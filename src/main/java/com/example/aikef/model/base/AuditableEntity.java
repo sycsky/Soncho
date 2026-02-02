@@ -8,10 +8,18 @@ import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.EntityListeners;
+import com.example.aikef.saas.listener.TenantEntityListener;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.hibernate.annotations.Filter;
+import org.hibernate.annotations.FilterDef;
+import org.hibernate.annotations.ParamDef;
+
 @MappedSuperclass
+@EntityListeners(TenantEntityListener.class)
+@FilterDef(name = "tenantFilter", parameters = @ParamDef(name = "tenantId", type = String.class))
+@Filter(name = "tenantFilter", condition = "tenant_id = :tenantId")
 public abstract class AuditableEntity {
 
     @Id
@@ -33,7 +41,7 @@ public abstract class AuditableEntity {
         Instant now = Instant.now();
         this.createdAt = now;
         this.updatedAt = now;
-        
+
         // Auto-fill tenant ID if not set and context is available
         // This logic might be better placed in an EntityListener to keep model clean
         // But for simplicity in MappedSuperclass:
