@@ -28,6 +28,7 @@ public record LlmModelDto(
     String description,
     Instant createdAt,
     Instant updatedAt,
-    String modelType
+    String modelType,
+    Boolean statusExplanation
 ) {}
 

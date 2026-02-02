@@ -178,7 +178,8 @@ public class LlmModelController {
                 model.getDescription(),
                 model.getCreatedAt(),
                 model.getUpdatedAt(),
-                model.getModelType().name()
+                model.getModelType().name(),
+                model.getStatusExplanation()
         );
     }
 

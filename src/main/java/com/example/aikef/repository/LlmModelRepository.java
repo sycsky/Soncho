@@ -48,6 +48,11 @@ public interface LlmModelRepository extends JpaRepository<LlmModel, UUID> {
     List<LlmModel> findByModelTypeAndEnabledTrueOrderBySortOrderAsc(LlmModel.ModelType modelType);
 
     /**
+     * 查找第一个状态解释模型
+     */
+    Optional<LlmModel> findFirstByStatusExplanationTrueAndEnabledTrueOrderBySortOrderAsc();
+
+    /**
      * 查找嵌入模型的默认模型
      */
     Optional<LlmModel> findByModelTypeAndIsDefaultTrueAndEnabledTrue(LlmModel.ModelType modelType);
