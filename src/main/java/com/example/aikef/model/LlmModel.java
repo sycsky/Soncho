@@ -140,6 +140,12 @@ public class LlmModel {
     @Column(name = "extra_config", columnDefinition = "TEXT")
     private String extraConfig;
 
+    /**
+     * 是否为状态解释模型
+     */
+    @Column(name = "status_explanation")
+    private Boolean statusExplanation = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -341,6 +347,14 @@ public class LlmModel {
 
     public void setModelType(ModelType modelType) {
         this.modelType = modelType;
+    }
+
+    public Boolean getStatusExplanation() {
+        return statusExplanation;
+    }
+
+    public void setStatusExplanation(Boolean statusExplanation) {
+        this.statusExplanation = statusExplanation;
     }
 
     /**

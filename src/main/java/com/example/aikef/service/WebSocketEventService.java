@@ -309,6 +309,39 @@ public class WebSocketEventService {
     }
     
     /**
+     * 广播状态更新给会话的所有参与者
+     */
+    public void broadcastStatusToSession(UUID chatSessionId, String statusType, String description) {
+        try {
+            // 构建广播事件
+            ServerEvent broadcastEvent = new ServerEvent("workflowStatus", Map.of(
+                    "sessionId", chatSessionId,
+                    "statusType", statusType,
+                    "description", description));
+
+            String broadcastMessage = objectMapper.writeValueAsString(broadcastEvent);
+
+            // 获取会话信息
+            ChatSession session = conversationService.getChatSession(chatSessionId);
+            if (session == null) {
+                return;
+            }
+
+            // 广播给会话的所有参与者
+            sessionManager.broadcastToSession(
+                    chatSessionId,
+                    session.getPrimaryAgent() != null ? session.getPrimaryAgent().getId() : null,
+                    session.getSupportAgentIds() != null ? session.getSupportAgentIds().stream().toList() : null,
+                    session.getCustomer() != null ? session.getCustomer().getId() : null,
+                    null, // 不排除任何发送者
+                    broadcastMessage
+            );
+        } catch (Exception e) {
+            log.error("Failed to broadcast workflow status", e);
+        }
+    }
+
+    /**
      * 广播消息给会话的所有参与者（除了发送者）
      */
     private void broadcastMessageToSession(UUID chatSessionId, MessageDto messageDto, UUID senderId) {

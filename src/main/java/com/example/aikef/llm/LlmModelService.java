@@ -249,6 +249,9 @@ public class LlmModelService {
         }
         model.setDescription(request.description());
         model.setExtraConfig(request.extraConfig());
+        if (request.statusExplanation() != null) {
+            model.setStatusExplanation(request.statusExplanation());
+        }
     }
 
     /**
