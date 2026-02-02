@@ -1,5 +1,6 @@
 package com.example.aikef.service;
 
+import com.example.aikef.model.AiWorkflow;
 import com.example.aikef.workflow.service.AiWorkflowService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
@@ -114,6 +115,23 @@ public class SqsDelayService {
                 return;
             }
             UUID workflowId = UUID.fromString(workflowIdStr);
+            String workflowName = (String) taskData.get("workflowName");
+
+            // 验证工作流是否存在且名称匹配
+            try {
+                AiWorkflow workflow = workflowService.getWorkflow(workflowId);
+                if (workflowName != null && !workflowName.isEmpty() && !workflowName.equals(workflow.getName())) {
+                    log.warn("SQS 消息中工作流名称不匹配, 跳过处理: id={}, expectedName={}, actualName={}", 
+                            workflowId, workflowName, workflow.getName());
+                    deleteMessage(message);
+                    return;
+                }
+            } catch (Exception e) {
+                log.warn("获取工作流失败或工作流不存在: id={}, error={}", workflowId, e.getMessage());
+                deleteMessage(message);
+                return;
+            }
+
             String inputData = (String) taskData.get("inputData");
 
             Map<String, Object> variables = new HashMap<>();

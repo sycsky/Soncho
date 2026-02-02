@@ -32,10 +32,11 @@ public class DelayNode extends BaseWorkflowNode {
         try {
             // 1. 获取配置
             String targetWorkflowIdStr = readConfigString(config, "targetWorkflowId", null);
+            String targetWorkflowName = readConfigString(config, "targetWorkflowName", null);
             int delayMinutes = readConfigInt(config, "delayMinutes", 0);
             String inputDataTemplate = readConfigString(config, "inputData", "");
 
-            if (targetWorkflowIdStr == null || targetWorkflowIdStr.isEmpty()) {
+            if (targetWorkflowName == null || targetWorkflowName.isEmpty() ) {
                 throw new IllegalArgumentException("未配置延迟后触发的工作流");
             }
 
@@ -51,14 +52,15 @@ public class DelayNode extends BaseWorkflowNode {
             Map<String, Object> taskData = new HashMap<>();
             taskData.put("sessionId", ctx.getSessionId());
             taskData.put("workflowId", targetWorkflowIdStr);
+            taskData.put("workflowName", targetWorkflowName);
             taskData.put("inputData", processedInputData);
             taskData.put("originalWorkflowId", ctx.getWorkflowId());
 
             // 4. 调度延迟任务
             scheduler.scheduleDelayTask(taskData, delayMinutes);
 
-            log.info("延迟节点执行成功: sessionId={}, targetWorkflowId={}, delayMinutes={}",
-                    ctx.getSessionId(), targetWorkflowIdStr, delayMinutes);
+            log.info("延迟节点执行成功: sessionId={}, targetWorkflowId={}, targetWorkflowName={}, delayMinutes={}",
+                    ctx.getSessionId(), targetWorkflowIdStr, targetWorkflowName, delayMinutes);
 
             recordExecution(ctx, getActualNodeId(), "delay", getName(), 
                     config, "Task scheduled", startTime, true, null);
