@@ -81,3 +81,12 @@ translation:
     access-key: ${AWS_TRANSLATE_ACCESS_KEY:}
     secret-key: ${AWS_TRANSLATE_SECRET_KEY:}
     region: us-east-1
+
+# SQS 延迟任务开发环境配置
+aws:
+  sqs:
+    enabled: false
+    queue-url: 
+    region: us-east-1
+    access-key: 
+    secret-key: 

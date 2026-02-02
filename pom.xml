@@ -156,7 +156,14 @@
             <artifactId>s3</artifactId>
             <version>2.25.0</version>
         </dependency>
-        
+
+        <!-- AWS SQS SDK v2 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sqs</artifactId>
+            <version>2.25.0</version>
+        </dependency>
+
         <!-- AWS Translate SDK v2 -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
