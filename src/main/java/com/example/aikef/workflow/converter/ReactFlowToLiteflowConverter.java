@@ -308,7 +308,7 @@ public class ReactFlowToLiteflowConverter {
         for (Map.Entry<String, List<EdgeInfo>> entry : groupedEdges.entrySet()) {
             String sourceHandle = entry.getKey();
             List<EdgeInfo> edges = entry.getValue();
-            
+
             List<String> subBranchEls = new ArrayList<>();
             for (EdgeInfo edge : edges) {
                 String branchEl = generateEl(edge.targetId, nodeMap, outEdges, inEdges, new HashSet<>(visited), indentLevel + 1);
@@ -316,24 +316,27 @@ public class ReactFlowToLiteflowConverter {
                     subBranchEls.add(branchEl.trim());
                 }
             }
-            
+
             if (subBranchEls.isEmpty()) continue;
-            
+
             String combinedEl;
             if (subBranchEls.size() > 1) {
                 // 一个出口对应多个节点，使用 WHEN 并发执行
-                combinedEl = "WHEN(\n" + 
+                combinedEl = "WHEN(\n" +
                            subBranchEls.stream()
                                .map(s -> indent(indentLevel + 2) + (s.contains(",") ? "THEN(" + s + ")" : s))
-                               .collect(Collectors.joining(",\n")) + 
+                               .collect(Collectors.joining(",\n")) +
                            "\n" + indent(indentLevel + 1) + ")";
             } else {
                 combinedEl = subBranchEls.get(0);
-                if (combinedEl.contains(",") && !combinedEl.startsWith("THEN(") && !combinedEl.startsWith("WHEN(") && !combinedEl.startsWith("SWITCH(")) {
+                // 即使只有一个节点，也包装在 THEN() 中，这样 .tag() 就会加在 THEN() 上，而不是节点上
+                // 除非它已经是一个包装器（THEN, WHEN, SWITCH, subchain_）
+                if (!combinedEl.startsWith("THEN(") && !combinedEl.startsWith("WHEN(") &&
+                    !combinedEl.startsWith("SWITCH(") && !combinedEl.startsWith("subchain_")) {
                     combinedEl = "THEN(" + combinedEl + ")";
                 }
             }
-            
+
             // 为分支添加 tag
             String finalBranchEl = combinedEl + ".tag(\"" + sourceHandle + "\")";
             branchEls.add(indent(indentLevel + 1) + finalBranchEl);
@@ -342,7 +345,7 @@ public class ReactFlowToLiteflowConverter {
         if (branchEls.isEmpty()) {
             return nodeRef;
         }
-        
+
         el.append(String.join(",\n", branchEls));
         el.append("\n").append(indent(indentLevel)).append(")");
         
@@ -901,7 +904,7 @@ public class ReactFlowToLiteflowConverter {
         for (Map.Entry<String, List<EdgeInfo>> entry : groupedEdges.entrySet()) {
             String sourceHandle = entry.getKey();
             List<EdgeInfo> edges = entry.getValue();
-            
+
             List<String> subBranchEls = new ArrayList<>();
             for (EdgeInfo edge : edges) {
                 String nextNodeId = edge.targetId();
@@ -915,23 +918,26 @@ public class ReactFlowToLiteflowConverter {
                     subBranchEls.add(branchEl.trim());
                 }
             }
-            
+
             if (subBranchEls.isEmpty()) continue;
-            
+
             String combinedEl;
             if (subBranchEls.size() > 1) {
-                combinedEl = "WHEN(\n" + 
+                combinedEl = "WHEN(\n" +
                            subBranchEls.stream()
                                .map(s -> indent(indentLevel + 2) + (s.contains(",") && !s.startsWith("subchain_") ? "THEN(" + s + ")" : s))
-                               .collect(Collectors.joining(",\n")) + 
+                               .collect(Collectors.joining(",\n")) +
                            "\n" + indent(indentLevel + 1) + ")";
             } else {
                 combinedEl = subBranchEls.get(0);
-                if (combinedEl.contains(",") && !combinedEl.startsWith("THEN(") && !combinedEl.startsWith("WHEN(") && !combinedEl.startsWith("SWITCH(") && !combinedEl.startsWith("subchain_")) {
+                // 即使只有一个节点，也包装在 THEN() 中，这样 .tag() 就会加在 THEN() 上，而不是节点上
+                // 除非它已经是一个包装器（THEN, WHEN, SWITCH, subchain_）
+                if (!combinedEl.startsWith("THEN(") && !combinedEl.startsWith("WHEN(") &&
+                    !combinedEl.startsWith("SWITCH(") && !combinedEl.startsWith("subchain_")) {
                     combinedEl = "THEN(" + combinedEl + ")";
                 }
             }
-            
+
             String finalBranchEl = combinedEl + ".tag(\"" + sourceHandle + "\")";
             branchEls.add(indent(indentLevel + 1) + finalBranchEl);
         }
@@ -939,7 +945,7 @@ public class ReactFlowToLiteflowConverter {
         if (branchEls.isEmpty()) {
             return nodeRef;
         }
-        
+
         el.append(String.join(",\n", branchEls));
         el.append("\n").append(indent(indentLevel)).append(")");
         
@@ -1065,7 +1071,7 @@ public class ReactFlowToLiteflowConverter {
         for (Map.Entry<String, List<EdgeInfo>> entry : groupedEdges.entrySet()) {
             String sourceHandle = entry.getKey();
             List<EdgeInfo> edges = entry.getValue();
-            
+
             List<String> subBranchEls = new ArrayList<>();
             for (EdgeInfo edge : edges) {
                 String branchEl = generateMainChainElRecursive(edge.targetId(), nodeMap, outEdges, subChains, new HashSet<>(visited), indentLevel + 1);
@@ -1073,23 +1079,26 @@ public class ReactFlowToLiteflowConverter {
                     subBranchEls.add(branchEl.trim());
                 }
             }
-            
+
             if (subBranchEls.isEmpty()) continue;
-            
+
             String combinedEl;
             if (subBranchEls.size() > 1) {
-                combinedEl = "WHEN(\n" + 
+                combinedEl = "WHEN(\n" +
                            subBranchEls.stream()
                                .map(s -> indent(indentLevel + 2) + (s.contains(",") ? "THEN(" + s + ")" : s))
-                               .collect(Collectors.joining(",\n")) + 
+                               .collect(Collectors.joining(",\n")) +
                            "\n" + indent(indentLevel + 1) + ")";
             } else {
                 combinedEl = subBranchEls.get(0);
-                if (combinedEl.contains(",") && !combinedEl.startsWith("THEN(") && !combinedEl.startsWith("WHEN(") && !combinedEl.startsWith("SWITCH(")) {
+                // 即使只有一个节点，也包装在 THEN() 中，这样 .tag() 就会加在 THEN() 上，而不是节点上
+                // 除非它已经是一个包装器（THEN, WHEN, SWITCH, subchain_）
+                if (!combinedEl.startsWith("THEN(") && !combinedEl.startsWith("WHEN(") &&
+                    !combinedEl.startsWith("SWITCH(") && !combinedEl.startsWith("subchain_")) {
                     combinedEl = "THEN(" + combinedEl + ")";
                 }
             }
-            
+
             String finalBranchEl = combinedEl + ".tag(\"" + sourceHandle + "\")";
             branchEls.add(indent(indentLevel + 1) + finalBranchEl);
         }
@@ -1097,7 +1106,7 @@ public class ReactFlowToLiteflowConverter {
         if (branchEls.isEmpty()) {
             return nodeRef;
         }
-        
+
         el.append(String.join(",\n", branchEls));
         el.append("\n").append(indent(indentLevel)).append(")");
         
