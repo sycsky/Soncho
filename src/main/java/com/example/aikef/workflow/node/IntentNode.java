@@ -4,6 +4,7 @@ import com.example.aikef.llm.LangChainChatService;
 import com.example.aikef.model.Message;
 import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.workflow.context.WorkflowContext;
+import com.example.aikef.workflow.service.WorkflowStatusService;
 import com.example.aikef.workflow.util.HistoryMessageLoader;
 import com.example.aikef.workflow.util.TemplateEngine;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -65,12 +66,21 @@ public class IntentNode extends NodeSwitchComponent {
     @Resource
     private HistoryMessageLoader historyMessageLoader;
 
+    @Resource
+    private WorkflowStatusService workflowStatusService;
+
     @Override
     public String processSwitch() throws Exception {
 
         log.info("开始执行意图识别节点");
         long startTime = System.currentTimeMillis();
         WorkflowContext ctx = this.getContextBean(WorkflowContext.class);
+
+        // 发送状态更新
+        if (ctx.isStatusStreamingEnabled() && ctx.getSessionId() != null) {
+            workflowStatusService.updateStatus(ctx.getSessionId(), WorkflowStatusService.StatusType.INTENT_ANALYZING, null, ctx);
+        }
+
         String actualNodeId = BaseWorkflowNode.resolveActualNodeId(this.getTag(), this.getNodeId(), ctx);
         JsonNode config = ctx.getNodeConfig(actualNodeId);
         
