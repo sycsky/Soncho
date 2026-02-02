@@ -4,6 +4,8 @@ import com.example.aikef.shopify.service.ShopifyWebhookIngestService;
 import com.example.aikef.shopify.service.ShopifyWebhookVerifier;
 import java.time.Instant;
 import java.util.Map;
+
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/shopify/webhooks")
+@Slf4j
 public class ShopifyWebhookController {
 
     private final ShopifyWebhookVerifier verifier;
@@ -46,6 +49,18 @@ public class ShopifyWebhookController {
             @RequestBody byte[] body
     ) {
         return verifyIngestAndOk("orders/updated", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
+    @PostMapping("/orders/paid")
+    public ResponseEntity<Map<String, Object>> ordersPaid(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("orders/paid", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
     }
 
     @PostMapping("/orders/cancelled")
@@ -117,6 +132,7 @@ public class ShopifyWebhookController {
             @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
             @RequestBody byte[] body
     ) {
+
         return verifyIngestAndOk("checkouts/create", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
     }
 

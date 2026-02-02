@@ -46,8 +46,8 @@ public class StartNode extends BaseWorkflowNode {
             log.info("工作流开始执行, sessionId=null, query={}", query);
         }
         
-        // 开始节点标记起点
-        setOutput("workflow_started");
+
+
         
         recordExecution(null, "workflow_started", startTime, true, null);
     }

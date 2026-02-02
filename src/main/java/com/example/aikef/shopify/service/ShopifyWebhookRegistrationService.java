@@ -60,6 +60,7 @@ public class ShopifyWebhookRegistrationService {
         Map<String, String> m = new LinkedHashMap<>();
         m.put("orders/create", webhooksBase + "/orders/create");
         m.put("orders/updated", webhooksBase + "/orders/updated");
+        m.put("orders/paid", webhooksBase + "/orders/paid");
         m.put("orders/cancelled", webhooksBase + "/orders/cancelled");
         m.put("customers/create", webhooksBase + "/customers/create");
         m.put("customers/update", webhooksBase + "/customers/update");

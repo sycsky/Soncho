@@ -14,6 +14,12 @@ public interface ShopifyObjectRepository extends JpaRepository<ShopifyObject, UU
             String externalId
     );
 
+    java.util.List<ShopifyObject> findByShopDomainAndObjectTypeAndPayloadJsonContaining(
+            String shopDomain,
+            ShopifyObject.ObjectType objectType,
+            String substring
+    );
+
     void deleteByShopDomain(String shopDomain);
 }
 

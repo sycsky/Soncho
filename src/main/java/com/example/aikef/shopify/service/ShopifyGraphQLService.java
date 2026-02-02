@@ -24,6 +24,7 @@ public class ShopifyGraphQLService {
     private final ShopifyStoreRepository shopifyStoreRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final com.example.aikef.shopify.repository.ShopifyObjectRepository shopifyObjectRepository;
 
     @org.springframework.beans.factory.annotation.Value("${shopify.api-version:2025-01}")
     private String apiVersion;
@@ -153,6 +154,74 @@ public class ShopifyGraphQLService {
             log.error("Failed to get policies via REST", e);
             throw new RuntimeException("Get Policies Failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Get checkout via REST API (since it's not available in Admin GraphQL)
+     */
+    /**
+     * Check checkout payment status by looking up associated Order or Checkout in local DB
+     * (Since REST API is deprecated and GraphQL doesn't support Checkout type)
+     */
+    public JsonNode getCheckoutPaymentStatus(String checkoutId) {
+        // Normalize ID (remove gid if present)
+        String id = checkoutId;
+        if (checkoutId.startsWith("gid://shopify/Checkout/")) {
+            id = checkoutId.substring("gid://shopify/Checkout/".length());
+            if (id.contains("?")) id = id.substring(0, id.indexOf("?"));
+        } else if (checkoutId.startsWith("gid://shopify/Order/")) { // Just in case
+             id = checkoutId.substring("gid://shopify/Order/".length());
+             if (id.contains("?")) id = id.substring(0, id.indexOf("?"));
+        }
+
+        ShopifyStore store = getCurrentStore();
+        
+        // 1. Try to find an ORDER created from this checkout
+        // We search for the checkout ID in the order payload (checkout_id field)
+        List<com.example.aikef.shopify.model.ShopifyObject> orders = shopifyObjectRepository.findByShopDomainAndObjectTypeAndPayloadJsonContaining(
+                store.getShopDomain(),
+                com.example.aikef.shopify.model.ShopifyObject.ObjectType.ORDER,
+                id // Search for the ID string in JSON
+        );
+        
+        for (com.example.aikef.shopify.model.ShopifyObject orderObj : orders) {
+            try {
+                JsonNode order = objectMapper.readTree(orderObj.getPayloadJson());
+                // Verify it's actually the checkout_id (not some other number)
+                if (order.has("checkout_id") && String.valueOf(order.get("checkout_id").asLong()).equals(id)) {
+                    // FOUND THE ORDER!
+                    return order; // Return the full order object
+                }
+                 if (order.has("checkout_token") && order.get("checkout_token").asText().equals(id)) {
+                    // FOUND THE ORDER via Token!
+                    return order; 
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse order JSON", e);
+            }
+        }
+        
+        // 2. If no order found, try to find the CHECKOUT object itself
+        java.util.Optional<com.example.aikef.shopify.model.ShopifyObject> checkoutObj = shopifyObjectRepository.findByShopDomainAndObjectTypeAndExternalId(
+                store.getShopDomain(), 
+                com.example.aikef.shopify.model.ShopifyObject.ObjectType.CHECKOUT, 
+                id);
+        
+        if (checkoutObj.isPresent()) {
+            try {
+                return objectMapper.readTree(checkoutObj.get().getPayloadJson());
+            } catch (Exception e) {
+                 log.error("Failed to parse checkout JSON", e);
+            }
+        }
+
+        // 3. Not found
+        return null;
+    }
+
+    // Deprecated/Removed REST method
+    public JsonNode getCheckout(String checkoutId) {
+         return getCheckoutPaymentStatus(checkoutId);
     }
 
     public ShopifyStore getCurrentStore() {

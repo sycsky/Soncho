@@ -318,7 +318,7 @@ public class EventService {
             AiWorkflowService.WorkflowExecutionResult result = workflowService.executeWorkflow(
                     workflow.getId(), 
                     sessionId, 
-                    triggerMessage, 
+                    null,
                     variables
             );
 

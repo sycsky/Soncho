@@ -2915,4 +2915,56 @@ public class ShopifyCustomerServiceTools {
             return "Failed to cancel order: " + e.getMessage();
         }
     }
+
+    @Tool("Check if a checkout is paid/completed by its ID")
+    public String checkCheckoutPaymentStatus(
+            @P(value = "The Shopify Checkout ID", required = true) String checkoutId) {
+        try {
+            // Use improved logic: Search Local DB for associated Order or Checkout (REST API is deprecated)
+            JsonNode result = graphQLService.getCheckoutPaymentStatus(checkoutId);
+            
+            if (result == null || result.isMissingNode()) {
+                return "Status Unknown: No order or checkout found for ID: " + checkoutId + ". It might be unpaid or the webhook hasn't arrived yet.";
+            }
+
+            // Check if it's an Order or a Checkout
+            boolean isOrder = result.has("order_number") || result.has("financial_status");
+            
+            StringBuilder sb = new StringBuilder();
+            sb.append("Status for Checkout ID ").append(checkoutId).append(":\n");
+            
+            if (isOrder) {
+                String orderName = result.path("name").asText();
+                String financialStatus = result.path("financial_status").asText();
+                String fulfillmentStatus = result.path("fulfillment_status").asText("unfulfilled");
+                String processedAt = result.path("processed_at").asText();
+                
+                sb.append("✅ PAID / CONVERTED TO ORDER\n");
+                sb.append("- Order: ").append(orderName).append("\n");
+                sb.append("- Financial Status: ").append(financialStatus).append("\n");
+                sb.append("- Fulfillment: ").append(fulfillmentStatus).append("\n");
+                sb.append("- Processed At: ").append(processedAt).append("\n");
+            } else {
+                // It's a Checkout object
+                boolean isCompleted = result.has("completed_at") && !result.get("completed_at").isNull();
+                String webUrl = result.path("web_url").asText("N/A");
+                String currency = result.path("currency").asText("N/A");
+                String totalPrice = result.path("total_price").asText("0.00");
+                
+                sb.append("- Completed: ").append(isCompleted).append("\n");
+                if (isCompleted) {
+                    sb.append("- Completed At: ").append(result.get("completed_at").asText()).append("\n");
+                } else {
+                    sb.append("❌ NOT COMPLETED / UNPAID (Based on last sync)\n");
+                }
+                sb.append("- Total: ").append(totalPrice).append(" ").append(currency).append("\n");
+                sb.append("- Web URL: ").append(webUrl).append("\n");
+            }
+            
+            return sb.toString();
+
+        } catch (Exception e) {
+            return "Error checking checkout status: " + e.getMessage();
+        }
+    }
 }

@@ -130,6 +130,20 @@ public class ShopifySyncService {
                 .findByShopDomainAndObjectTypeAndExternalId(shopDomain, objectType, externalId)
                 .orElseGet(ShopifyObject::new);
 
+        boolean isNew;
+        if (objectType == ShopifyObject.ObjectType.CHECKOUT) {
+             String redisKey = "shopify:checkout:processed:" + shopDomain + ":" + externalId;
+             Boolean hasKey = redisTemplate.hasKey(redisKey);
+             if (Boolean.TRUE.equals(hasKey)) {
+                 isNew = false;
+             } else {
+                 isNew = true;
+                 redisTemplate.opsForValue().set(redisKey, "1", Duration.ofDays(10));
+             }
+        } else {
+             isNew = obj.getId() == null;
+        }
+
         obj.setShopDomain(shopDomain);
         obj.setObjectType(objectType);
         obj.setExternalId(externalId);
@@ -140,6 +154,12 @@ public class ShopifySyncService {
 
         self.updateStoreSyncTime(shopDomain);
 
+        if ("checkouts/create".equals(topic) && !isNew) {
+            log.info("Duplicate checkouts/create event for checkout {}, skipping event trigger.", externalId);
+            return;
+        }
+
+        log.info("payloadJson:{}",payloadJson);
         // Trigger Event
         try {
             String eventName = "shopify." + topic.replace("/", ".");
@@ -150,6 +170,13 @@ public class ShopifySyncService {
                 Map<String, Object> payloadMap = objectMapper.readValue(payloadJson, Map.class);
                 if (payloadMap != null) {
                     eventData.putAll(payloadMap);
+
+                    boolean isPaid = false;
+                    Object financialStatus = payloadMap.get("financial_status");
+                    if ("paid".equals(financialStatus)) {
+                        isPaid = true;
+                    }
+                    eventData.put("isPaid", isPaid);
                 }
             } catch (Exception e) {
                 // ignore
@@ -241,7 +268,7 @@ public class ShopifySyncService {
             return null;
         }
         return switch (topic) {
-            case "orders/create", "orders/updated", "orders/cancelled" -> ShopifyObject.ObjectType.ORDER;
+            case "orders/create", "orders/updated", "orders/cancelled", "orders/paid" -> ShopifyObject.ObjectType.ORDER;
             case "customers/create", "customers/update" -> ShopifyObject.ObjectType.CUSTOMER;
             case "products/create", "products/update" -> ShopifyObject.ObjectType.PRODUCT;
             case "inventory_levels/update" -> ShopifyObject.ObjectType.INVENTORY_LEVEL;
