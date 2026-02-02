@@ -1129,12 +1129,8 @@ public class AiWorkflowService {
             if (messageId != null) {
                 context.setStatusStreamingEnabled(true);
                 // 设置流式传输语言，默认为会话的客户语言
-                if (sessionId != null) {
-                    chatSessionRepository.findById(sessionId).ifPresent(session -> {
-                        if (session.getCustomerLanguage() != null) {
-                            context.setStreamingLanguage(session.getCustomerLanguage());
-                        }
-                    });
+                if (session.getCustomerLanguage() != null) {
+                    context.setStreamingLanguage(session.getCustomerLanguage());
                 }
             }
 
