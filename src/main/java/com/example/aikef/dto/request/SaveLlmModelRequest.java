@@ -57,6 +57,8 @@ public record SaveLlmModelRequest(
     
     String description,
     
-    String extraConfig
+    String extraConfig,
+    
+    Boolean statusExplanation
 ) {}
 
