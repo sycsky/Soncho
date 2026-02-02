@@ -29,7 +29,7 @@ public class SqsDelayService {
     @Value("${aws.sqs.queue-url:}")
     private String queueUrl;
 
-    @Value("${aws.sqs.enabled:false}")
+    @Value("${aws.sqs.enabled:true}")
     private boolean enabled;
 
     private ExecutorService executorService;
