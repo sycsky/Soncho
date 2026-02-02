@@ -161,6 +161,16 @@ public class WorkflowContext {
     private Map<String, List<Map<String, Object>>> nodeToolExecutions = new HashMap<>();
 
     /**
+     * 是否启用状态流式传输
+     */
+    private boolean statusStreamingEnabled = false;
+
+    /**
+     * 流式传输状态解释的语言（目标语言）
+     */
+    private String streamingLanguage = "en";
+
+    /**
      * 添加工具执行记录
      */
     public void addToolExecution(String nodeId, String nodeType, String toolName, String args, String result, String error, long durationMs, boolean success) {
@@ -522,6 +532,22 @@ public class WorkflowContext {
 
     public void setSessionMetadata(Map<String, Object> sessionMetadata) {
         this.sessionMetadata = sessionMetadata;
+    }
+
+    public boolean isStatusStreamingEnabled() {
+        return statusStreamingEnabled;
+    }
+
+    public void setStatusStreamingEnabled(boolean statusStreamingEnabled) {
+        this.statusStreamingEnabled = statusStreamingEnabled;
+    }
+
+    public String getStreamingLanguage() {
+        return streamingLanguage;
+    }
+
+    public void setStreamingLanguage(String streamingLanguage) {
+        this.streamingLanguage = streamingLanguage;
     }
 
     // ========== 内部类 ==========

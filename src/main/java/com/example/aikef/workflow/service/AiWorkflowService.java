@@ -75,6 +75,9 @@ public class AiWorkflowService {
     @Resource
     private com.example.aikef.repository.AgentSessionRepository agentSessionRepository;
 
+    @Resource
+    private WorkflowStatusService workflowStatusService;
+
     private final ObjectMapper objectMapper = new ObjectMapper()
             .configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
 
@@ -341,6 +344,11 @@ public class AiWorkflowService {
                 toolExecutionChainJson = objectMapper.writeValueAsString(context.getToolExecutionChain());
             } catch (Exception e) {
                 log.warn("序列化工具执行链失败", e);
+            }
+
+            // 发送完成状态
+            if (context.isStatusStreamingEnabled() && context.getSessionId() != null) {
+                workflowStatusService.updateStatus(context.getSessionId(), WorkflowStatusService.StatusType.COMPLETED, null, context);
             }
 
             return new WorkflowExecutionResult(
@@ -1025,6 +1033,19 @@ public class AiWorkflowService {
             context.setQuery(userMessage);
             context.setMessageId(messageId);
             
+            // 只有当存在 messageId（由用户消息触发）时，才启用状态流式传输
+            if (messageId != null) {
+                context.setStatusStreamingEnabled(true);
+                // 设置流式传输语言，默认为会话的客户语言
+                if (sessionId != null) {
+                    chatSessionRepository.findById(sessionId).ifPresent(session -> {
+                        if (session.getCustomerLanguage() != null) {
+                            context.setStreamingLanguage(session.getCustomerLanguage());
+                        }
+                    });
+                }
+            }
+            
             // 注入 AgentSession（如果存在）
             if (agentSession != null) {
                 context.setAgentSession(agentSession);
@@ -1110,6 +1131,11 @@ public class AiWorkflowService {
                 log.warn("序列化工具执行链失败", e);
             }
 
+            // 发送完成状态
+            if (context.isStatusStreamingEnabled() && sessionId != null) {
+                workflowStatusService.updateStatus(sessionId, WorkflowStatusService.StatusType.COMPLETED, null, context);
+            }
+
             return new WorkflowExecutionResult(
                     true,
                     reply,
@@ -1121,9 +1147,13 @@ public class AiWorkflowService {
 
         } catch (com.example.aikef.workflow.exception.WorkflowPausedException pauseEx) {
             log.info("工作流暂停: reason={}, message={}", pauseEx.getPauseReason(), pauseEx.getPauseMessage());
+            // 暂停不需要发送 COMPLETED，因为可能还需要继续
             return new WorkflowExecutionResult(true, pauseEx.getPauseMessage(), null, null, false, null);
         } catch (Exception e) {
             AiWorkflowService.log.error("工作流执行失败", e);
+            if (sessionId != null) {
+                workflowStatusService.sendCompletedStatus(sessionId);
+            }
             return new WorkflowExecutionResult(false, null, e.getMessage(), null, false, null);
         }
     }

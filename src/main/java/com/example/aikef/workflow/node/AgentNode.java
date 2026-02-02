@@ -72,6 +72,9 @@ public class AgentNode extends BaseWorkflowNode {
     @Autowired
     private AiToolService aiToolService;
 
+    @Resource
+    private com.example.aikef.workflow.service.WorkflowStatusService workflowStatusService;
+
     private static final String DEFAULT_SYSTEM_PROMPT = """
 
 # Role
@@ -192,6 +195,13 @@ You are a friendly, professional, and empathetic Customer Support Specialist. Do
                 iterations++;
                 log.info("Agent Loop Iteration: {}", iterations);
 
+                // 发送正在分析状态
+                if (ctx.getSessionId() != null) {
+                    workflowStatusService.updateStatus(ctx.getSessionId(), 
+                        com.example.aikef.workflow.service.WorkflowStatusService.StatusType.ANALYZING, 
+                        "Iteration " + iterations, ctx);
+                }
+
                 // Call LLM
                 ChatResponse response = langChainChatService.chatWithTools(modelId, messages, toolSpecs, temperature, null);
                 AiMessage aiMessage = ChatResponseThinkingExtractor.enrichAiMessage(response, objectMapper);
@@ -213,6 +223,13 @@ You are a friendly, professional, and empathetic Customer Support Specialist. Do
                     List<ToolExecutionOutcome> outcomes = new ArrayList<>();
                     for (ToolExecutionRequest request : requests) {
                         log.info("Executing tool: {}", request.name());
+
+                        // 发送正在调用工具状态
+                        if (ctx.getSessionId() != null) {
+                            workflowStatusService.updateStatus(ctx.getSessionId(), 
+                                com.example.aikef.workflow.service.WorkflowStatusService.StatusType.TOOL_CALLING, 
+                                request.name(), ctx);
+                        }
 
                         ctx.setVariable(request.name()+"_ex", 1);
                         // Execute directly (simplified for autonomous agent)
