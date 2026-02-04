@@ -55,8 +55,6 @@ public class ShopifyWebhookRegistrationService {
 
     private Map<String, String> desiredWebhooks() {
         String webhooksBase = appUrl + "/api/v1/shopify/webhooks";
-        String gdprBase = appUrl + "/api/v1/shopify/gdpr";
-
         Map<String, String> m = new LinkedHashMap<>();
         m.put("orders/create", webhooksBase + "/orders/create");
         m.put("orders/updated", webhooksBase + "/orders/updated");
@@ -80,9 +78,6 @@ public class ShopifyWebhookRegistrationService {
         m.put("themes/publish", webhooksBase + "/themes/publish");
         m.put("fulfillment_events/create", webhooksBase + "/fulfillment_events/create");
         m.put("app/uninstalled", webhooksBase + "/app/uninstalled");
-        m.put("customers/data_request", gdprBase + "/customers/data_request");
-        m.put("customers/redact", gdprBase + "/customers/redact");
-        m.put("shop/redact", gdprBase + "/shop/redact");
         return m;
     }
 

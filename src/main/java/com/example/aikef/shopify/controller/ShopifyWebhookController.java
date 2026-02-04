@@ -4,6 +4,7 @@ import com.example.aikef.shopify.service.ShopifyWebhookIngestService;
 import com.example.aikef.shopify.service.ShopifyWebhookVerifier;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -19,12 +20,29 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 public class ShopifyWebhookController {
 
+    private static final Set<String> GDPR_TOPICS = Set.of("customers/data_request", "customers/redact", "shop/redact");
     private final ShopifyWebhookVerifier verifier;
     private final ShopifyWebhookIngestService ingestService;
 
     public ShopifyWebhookController(ShopifyWebhookVerifier verifier, ShopifyWebhookIngestService ingestService) {
         this.verifier = verifier;
         this.ingestService = ingestService;
+    }
+
+    @PostMapping("/gdpr")
+    public ResponseEntity<Map<String, Object>> gdprUnified(
+            @RequestHeader(value = "X-Shopify-Topic", required = false) String topic,
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        if (topic == null || topic.isBlank() || !GDPR_TOPICS.contains(topic)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("success", false));
+        }
+        return verifyIngestAndOk("gdpr/" + topic, hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
     }
 
     @PostMapping("/orders/create")
