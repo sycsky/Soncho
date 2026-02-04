@@ -128,10 +128,6 @@ public class ShopifyWebhookRegistrationService {
     }
 
     private void createWebhook(String shopDomain, String accessToken, String topic, String address) {
-        if (topic.contains("data_request") || topic.contains("redact")) {
-            return;
-        }
-
         String url = "https://" + shopDomain + "/admin/api/" + apiVersion + "/webhooks.json";
         Map<String, Object> payload = Map.of(
                 "webhook", Map.of(

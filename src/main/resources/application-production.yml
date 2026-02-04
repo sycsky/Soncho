@@ -9,8 +9,8 @@ app:
 
 shopify:
   api-version: 2025-01
-  api-key: ${SPRING_SHOPIFY_API_KEY:KEY}
-  api-secret: ${SPRING_SHOPIFY_API_SECRET:SECRET}
+  api-key: ${SHOPIFY_API_KEY:KEY}
+  api-secret: ${SHOPIFY_API_SECRET:SECRET}
   app-url: https://api.son-cho.com
 
 spring:
