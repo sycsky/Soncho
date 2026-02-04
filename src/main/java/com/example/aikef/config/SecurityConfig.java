@@ -80,6 +80,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/cms/**").permitAll() // CMS Admin API (Handled by manual token check)
                         .requestMatchers("/api/v1/shopify/auth/exchange").permitAll()
                         .requestMatchers("/api/v1/shopify/**").permitAll()
+                        .requestMatchers("/api/v1/shopify/gdp/**").permitAll()
                         .requestMatchers("/api/v1/files/image/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/error").permitAll()
