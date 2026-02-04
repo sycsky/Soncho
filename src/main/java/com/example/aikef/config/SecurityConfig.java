@@ -84,7 +84,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/files/image/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/error").permitAll()
-                        .requestMatchers("/**").permitAll() // Temporarily allow all for debugging
                         .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(unifiedAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
