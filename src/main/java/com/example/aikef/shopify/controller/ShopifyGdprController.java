@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/shopify/gdpr")
+@org.slf4j.Slf4j
 public class ShopifyGdprController {
 
     private final ShopifyWebhookVerifier verifier;
@@ -69,7 +70,9 @@ public class ShopifyGdprController {
             String triggeredAt,
             byte[] body
     ) {
+        log.info("Received GDPR Webhook: topic={}, shop={}, webhookId={}, hmac={}", topic, shopDomain, webhookId, hmac);
         if (!verifier.verify(hmac, body)) {
+            log.warn("GDPR Webhook HMAC verification failed for topic={}, shop={}", topic, shopDomain);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false));
         }
         try {

@@ -13,6 +13,17 @@ public class ShopifyWebhookVerifier {
     @Value("${shopify.api-secret:}")
     private String apiSecret;
 
+    @javax.annotation.PostConstruct
+    public void init() {
+        if (apiSecret == null || apiSecret.isBlank()) {
+            org.slf4j.LoggerFactory.getLogger(ShopifyWebhookVerifier.class).warn("Shopify API Secret is NOT configured! Webhook verification will fail.");
+        } else if ("SECRET".equals(apiSecret)) {
+            org.slf4j.LoggerFactory.getLogger(ShopifyWebhookVerifier.class).warn("Shopify API Secret is set to default value 'SECRET'. Please configure SPRING_SHOPIFY_API_SECRET environment variable.");
+        } else {
+            org.slf4j.LoggerFactory.getLogger(ShopifyWebhookVerifier.class).info("Shopify API Secret configured (length: {}).", apiSecret.length());
+        }
+    }
+
     public boolean verify(String hmacBase64, byte[] body) {
         if (hmacBase64 == null || hmacBase64.isBlank()) {
             return false;

@@ -74,7 +74,7 @@ resend:
     key: ${RESEND_APIKEY:KEY}  # 从环境变量获取 API Key
   from:
     email: send@son-cho.com
-    name: AutoReplai
+    name: Soncho Chat
 storage:
   type: ${STORAGE_TYPE:s3} # 切换为 's3' 即可启用 S3 存储
   local:
@@ -102,7 +102,7 @@ translation:
 # AWS SQS 延迟任务配置
 aws:
   sqs:
-    enabled: ${AWS_SQS_ENABLED:false}
+    enabled: ${AWS_SQS_ENABLED:true}
     queue-url: ${AWS_SQS_QUEUE_URL:}
     region: ${AWS_SQS_REGION:us-east-1}
     access-key: ${AWS_SQS_ACCESS_KEY:}
