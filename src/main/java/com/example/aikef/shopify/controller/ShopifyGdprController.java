@@ -4,6 +4,8 @@ import com.example.aikef.shopify.service.ShopifyWebhookIngestService;
 import com.example.aikef.shopify.service.ShopifyWebhookVerifier;
 import java.time.Instant;
 import java.util.Map;
+
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/shopify/gdpr")
-@org.slf4j.Slf4j
+@Slf4j
 public class ShopifyGdprController {
 
     private final ShopifyWebhookVerifier verifier;

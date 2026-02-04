@@ -13,7 +13,7 @@ public class ShopifyWebhookVerifier {
     @Value("${shopify.api-secret:}")
     private String apiSecret;
 
-    @javax.annotation.PostConstruct
+    @jakarta.annotation.PostConstruct
     public void init() {
         if (apiSecret == null || apiSecret.isBlank()) {
             org.slf4j.LoggerFactory.getLogger(ShopifyWebhookVerifier.class).warn("Shopify API Secret is NOT configured! Webhook verification will fail.");
