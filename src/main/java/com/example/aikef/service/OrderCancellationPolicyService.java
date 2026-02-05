@@ -154,9 +154,9 @@ public class OrderCancellationPolicyService {
         
         if (enabledPolicies.isEmpty()) {
             return new CancellationCheckResult(
-                false,
-                "No cancellation policy available",
-                null,
+                true,
+                "No specific cancellation policy configured, allowing cancellation by default",
+                BigDecimal.ZERO,
                 null
             );
         }
