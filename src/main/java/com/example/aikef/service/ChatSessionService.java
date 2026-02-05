@@ -439,6 +439,7 @@ public class ChatSessionService {
     /**
      * 根据ID查找会话
      */
+    @Transactional(readOnly = true, noRollbackFor = EntityNotFoundException.class)
     public ChatSession findById(UUID sessionId) {
         return chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new EntityNotFoundException("会话不存在"));
