@@ -2,10 +2,8 @@ package com.example.aikef.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import lombok.EqualsAndHashCode;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -13,13 +11,10 @@ import java.util.UUID;
  * 每个知识库包含多个文档，用于向量检索
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @Entity
 @Table(name = "knowledge_bases")
-public class KnowledgeBase {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+public class KnowledgeBase extends com.example.aikef.model.base.AuditableEntity {
 
     @Column(nullable = false, length = 100)
     private String name;
@@ -60,14 +55,6 @@ public class KnowledgeBase {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_agent_id")
     private Agent createdByAgent;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
-    private Instant updatedAt;
 
     @PrePersist
     public void prePersist() {
