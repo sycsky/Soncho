@@ -9,6 +9,7 @@ import com.example.aikef.workflow.service.AiWorkflowService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
@@ -24,6 +25,8 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +34,10 @@ public class AiScheduledTaskService {
 
     private static final Logger log = LoggerFactory.getLogger(AiScheduledTaskService.class);
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+    
+    // 限制并发数的线程池，防止大量任务同时触发耗尽资源
+    // 最小2线程，最大为 CPU 核心数
+    private final ExecutorService taskExecutor = Executors.newFixedThreadPool(Math.max(2, Runtime.getRuntime().availableProcessors()));
 
     @Resource
     private AiScheduledTaskRepository taskRepository;
@@ -143,7 +150,7 @@ public class AiScheduledTaskService {
         // 2. 遍历客户执行工作流
         int successCount = 0;
         for (Customer customer : targetCustomers) {
-            // 异步执行每个客户的工作流
+            // 异步执行每个客户的工作流，使用自定义线程池限制并发
             CompletableFuture.runAsync(() -> {
                 try {
                     // 查找最新会话
@@ -186,11 +193,18 @@ public class AiScheduledTaskService {
                 } catch (Exception e) {
                     log.error("为客户执行定时任务失败: customerId={}", customer.getId(), e);
                 }
-            });
+            }, taskExecutor);
             successCount++;
         }
         
         log.info("定时任务触发完成: taskId={}, 触发客户数={}", task.getId(), successCount);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        if (taskExecutor != null) {
+            taskExecutor.shutdown();
+        }
     }
 
     private void updateTaskFromRequest(AiScheduledTask task, SaveScheduledTaskRequest request) {
