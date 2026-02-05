@@ -69,6 +69,7 @@ public class CustomerManagementTools {
             @P(value = "New Location", required = false) String location
     ) {
         try {
+
             ChatSession session = chatSessionService.findById(UUID.fromString(sessionId));
             Customer customer = session.getCustomer();
             if (customer == null) {
