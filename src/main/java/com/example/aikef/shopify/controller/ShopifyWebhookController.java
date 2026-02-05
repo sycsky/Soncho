@@ -28,6 +28,7 @@ public class ShopifyWebhookController {
         this.verifier = verifier;
         this.ingestService = ingestService;
 
+
     }
 
     @PostMapping("/gdpr")
