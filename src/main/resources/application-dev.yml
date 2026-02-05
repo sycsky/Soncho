@@ -22,6 +22,8 @@ spring:
       host: 127.0.0.1
       port: 6379
       password: ""
+      ssl:
+        enabled: false
   # JPA 配置
   jpa:
     show-sql: false

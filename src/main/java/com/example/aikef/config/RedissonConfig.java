@@ -23,10 +23,16 @@ public class RedissonConfig {
     @Value("${spring.data.redis.database:0}")
     private int database;
 
+    @Value("${spring.data.redis.ssl.enabled:false}")
+    private boolean ssl;
+
     @Bean
     public RedissonClient redissonClient() {
         Config config = new Config();
-        String address = "redis://" + host + ":" + port;
+        String protocol = ssl ? "rediss://" : "redis://";
+        // Ensure host doesn't already contain protocol
+        String cleanHost = host.replace("redis://", "").replace("rediss://", "").replace("http://", "").replace("https://", "");
+        String address = protocol + cleanHost + ":" + port;
         
         // Single Server Mode
         config.useSingleServer()

@@ -34,6 +34,8 @@ spring:
       host: ${SPRING_DATA_REDIS_HOST}
       port: ${SPRING_DATA_REDIS_PORT:6379}
       password: ${SPRING_DATA_REDIS_PASSWORD:}
+      ssl:
+        enabled: true
   # JPA 配置
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
