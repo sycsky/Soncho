@@ -55,6 +55,7 @@ public class SupplyChainTools {
             parsedDeliveryDate = LocalDateTime.parse(deliveryDate.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         }
 
+
         // Group items by supplierId
         java.util.Map<String, List<OrderItemRequest>> itemsBySupplier = items.stream()
                 .collect(Collectors.groupingBy(OrderItemRequest::supplierId));
