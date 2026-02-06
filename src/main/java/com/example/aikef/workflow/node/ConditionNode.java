@@ -54,6 +54,32 @@ public class ConditionNode extends NodeSwitchComponent {
             }
         }
 
+        // 路由逻辑
+//        String routesKey = "__condition_routes_" + actualNodeId;
+//        @SuppressWarnings("unchecked")
+//        Map<String, String> routeKeyToNode = ctx.getVariable(routesKey);
+//
+//        // 兼容旧的 ConditionNode (Boolean) 逻辑或处理路由表不存在的情况
+//        // 如果是新的 Switch 模式，必须依赖 routeKeyToNode
+//
+//        String targetNodeId = null;
+//        if (routeKeyToNode != null) {
+//            targetNodeId = routeKeyToNode.get(matchedHandleId);
+//
+//            // 如果匹配到了条件但没有连接线，或者走 else 但没有连接线
+//            if (targetNodeId == null && !"else".equals(matchedHandleId)) {
+//                // 尝试 fallback 到 else
+//                targetNodeId = routeKeyToNode.get("else");
+//            }
+//        }
+//
+//        // 如果没有找到目标节点，可能需要返回 default 或 null
+//        // LiteFlow Switch 如果返回 null 会报错，通常返回 "default" 或空字符串
+//        if (targetNodeId == null) {
+//            targetNodeId = "default";
+//            // 或者如果这是一个终端节点，可能需要特殊处理，但 Switch 节点通常后面接其他节点
+//        }
+
         log.info("条件判断节点执行: nodeId={}, matched={}", actualNodeId, matchedHandleId);
 
         // 记录执行详情

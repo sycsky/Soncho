@@ -41,7 +41,7 @@ public class PublicController {
     private final RoleRepository roleRepository;
     private final RedissonClient redissonClient;
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
-    
+
     @Value("${app.saas.enabled:false}")
     private boolean saasEnabled;
 
@@ -95,7 +95,7 @@ public class PublicController {
             adminRole.setPermissions(com.example.aikef.model.PermissionConstants.createAllPermissionsMap());
             adminRole = roleRepository.save(adminRole);
         }
-        
+
         CreateTenantAdminRequest request = new CreateTenantAdminRequest(
                 name,
                 email,
@@ -143,7 +143,7 @@ public class PublicController {
         try {
             // 如果是 Shopify 渠道，优先使用 shopifyCustomerId 作为 channelUserId
             String effectiveChannelUserId = request.channelUserId();
-            if (request.channel() == com.example.aikef.model.Channel.SHOPIFY && 
+            if (request.channel() == com.example.aikef.model.Channel.SHOPIFY &&
                 (effectiveChannelUserId == null || effectiveChannelUserId.isBlank())) {
                 effectiveChannelUserId = request.shopifyCustomerId();
             }
@@ -193,13 +193,13 @@ public class PublicController {
                     Long count = redisTemplate.opsForValue().increment(lockKey);
                     if (count != null && count == 1) {
                         redisTemplate.expire(lockKey, 10, TimeUnit.SECONDS);
-                        
+
                         Map<String, Object> eventData = new HashMap<>();
                         eventData.put("customerId", customer.getId());
                         eventData.put("customerName", customer.getName());
                         eventData.put("channel", request.channel());
                         eventData.put("isNewCustomer", true);
-    
+
                         eventService.triggerEventForCustomerAsync(customer.getId(), eventName, eventData);
                     } else {
                         log.info("Duplicate system.customer.created event skipped for customer: {}", customer.getId());

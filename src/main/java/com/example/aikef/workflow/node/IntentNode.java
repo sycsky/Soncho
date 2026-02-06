@@ -149,9 +149,9 @@ public class IntentNode extends NodeSwitchComponent {
         ctx.setIntentConfidence(confidence);
         ctx.setVariable("matchedIntentId", matchedIntentId);
         
-        log.info("意图识别+路由: userMessage={}, matchedIntent={}({}), confidence={}", 
+        log.info("意图识别+路由: userMessage={}, matchedIntent={}({}), confidence={}",
                 userMessage, matchedIntentLabel, matchedIntentId, confidence);
-        
+
         // 4. 记录执行详情
         BaseWorkflowNode.recordExecution(
                 ctx,

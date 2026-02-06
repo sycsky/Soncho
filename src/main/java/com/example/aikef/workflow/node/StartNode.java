@@ -24,7 +24,7 @@ public class StartNode extends BaseWorkflowNode {
         
         UUID sessionId = getWorkflowContext().getSessionId();
         String query = getWorkflowContext().getQuery();
-        
+
         // 通过会话信息注入租户ID到 TenantContext
         if (sessionId != null) {
             try {
@@ -32,14 +32,14 @@ public class StartNode extends BaseWorkflowNode {
                 if (session != null && session.getTenantId() != null && !session.getTenantId().isEmpty()) {
                     String tenantId = session.getTenantId();
                     TenantContext.setTenantId(tenantId);
-                    log.info("工作流开始执行, sessionId={}, tenantId={}, query={}", 
+                    log.info("工作流开始执行, sessionId={}, tenantId={}, query={}",
                             sessionId, tenantId, query);
                 } else {
-                    log.warn("工作流开始执行, sessionId={}, 但未找到租户信息, query={}", 
+                    log.warn("工作流开始执行, sessionId={}, 但未找到租户信息, query={}",
                             sessionId, query);
                 }
             } catch (Exception e) {
-                log.error("工作流开始节点：设置租户上下文失败, sessionId={}, error={}", 
+                log.error("工作流开始节点：设置租户上下文失败, sessionId={}, error={}",
                         sessionId, e.getMessage(), e);
             }
         } else {
