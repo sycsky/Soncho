@@ -17,6 +17,11 @@ public class SubscriptionDto {
     private long seatUsage;
     private boolean cancelAtPeriodEnd;
     
+    // Next Cycle Info
+    private SubscriptionPlan nextPlan;
+    private Instant nextBillingDate;
+    private Double nextPrice;
+
     // Feature Flags
     private boolean supportAnalyticsHistory;
     private boolean supportAdvancedAnalytics;

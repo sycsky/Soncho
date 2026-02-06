@@ -219,32 +219,6 @@ public class ShopifyBillingService {
             throw new IllegalArgumentException("Invalid plan name: " + planName);
         }
 
-        // --- Downgrade Check ---
-        String tenantId = generateTenantId(shopDomain);
-        Optional<Subscription> currentSubOpt = subscriptionRepository.findByTenantId(tenantId);
-        if (currentSubOpt.isPresent()) {
-            Subscription currentSub = currentSubOpt.get();
-            // Check if current subscription is active and valid
-            boolean isCurrentActive = "ACTIVE".equals(currentSub.getStatus()) &&
-                    currentSub.getCurrentPeriodEnd() != null &&
-                    currentSub.getCurrentPeriodEnd().isAfter(java.time.Instant.now());
-
-            if (isCurrentActive) {
-                // Check if trying to downgrade (Current Price > New Price)
-                if (currentSub.getPlan().getPrice() > plan.getPrice()) {
-                     throw new IllegalArgumentException("Cannot downgrade to " + plan.name() + 
-                             " while " + currentSub.getPlan().name() + " is active until " + 
-                             currentSub.getCurrentPeriodEnd());
-                }
-                
-                // Also prevent re-subscribing to same plan if active (optional, but good UX)
-                if (currentSub.getPlan() == plan) {
-                    // Just return returnUrl immediately as they are already on this plan?
-                    // Or throw error? User might want to update payment method?
-                    // Let's allow it but log it. Shopify handles updates.
-                }
-            }
-        }
         // -----------------------
 
         if (plan == SubscriptionPlan.FREE) {
@@ -261,9 +235,26 @@ public class ShopifyBillingService {
         BigDecimal price = getPriceForPlan(plan);
         boolean isTest = true; // TODO: Make configurable
 
+        // Determine replacement behavior
+        // Upgrade/Same: APPLY_IMMEDIATELY (Prorated)
+        // Downgrade: APPLY_ON_NEXT_BILLING_CYCLE (Deferred)
+        String replacementBehavior = "APPLY_IMMEDIATELY";
+        
+        String tenantId = generateTenantId(shopDomain);
+        Optional<Subscription> currentSubOpt = subscriptionRepository.findByTenantId(tenantId);
+        if (currentSubOpt.isPresent()) {
+            Subscription currentSub = currentSubOpt.get();
+            if (currentSub.getPlan().getPrice() > plan.getPrice()) {
+                replacementBehavior = "APPLY_ON_NEXT_BILLING_CYCLE";
+                log.info("Downgrade detected for {}. Using replacementBehavior: {}", shopDomain, replacementBehavior);
+            } else {
+                log.info("Upgrade/Same plan for {}. Using replacementBehavior: {}", shopDomain, replacementBehavior);
+            }
+        }
+
         String graphQL = """
-            mutation AppSubscriptionCreate($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean) {
-              appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, test: $test) {
+            mutation AppSubscriptionCreate($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean, $replacementBehavior: AppSubscriptionReplacementBehavior!) {
+              appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, test: $test, replacementBehavior: $replacementBehavior) {
                 userErrors {
                   field
                   message
@@ -304,6 +295,7 @@ public class ShopifyBillingService {
         variables.put("name", plan.name() + " Plan");
         variables.put("returnUrl", cleanReturnUrl);
         variables.put("test", isTest);
+        variables.put("replacementBehavior", replacementBehavior);
 
         ArrayNode lineItems = variables.putArray("lineItems");
         ObjectNode item = lineItems.addObject();
@@ -340,6 +332,7 @@ public class ShopifyBillingService {
                 // We fallback to a mock flow to allow testing to proceed.
                 if (errorMessage.contains("Apps without a public distribution") || 
                     errorMessage.contains("Billing API") ||
+                    errorMessage.contains("Managed Pricing") ||
                     errorMessage.contains("Return url is too long")) {
                     
                     log.warn("Shopify Billing API restricted/failed ('{}'). Falling back to MOCK billing flow.", errorMessage);

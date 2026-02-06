@@ -18,6 +18,10 @@ public class Subscription extends AuditableEntity {
     @Column(name = "plan", nullable = false)
     private SubscriptionPlan plan;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "next_plan")
+    private SubscriptionPlan nextPlan;
+
     @Column(name = "status", nullable = false)
     private String status; // ACTIVE, CANCELED, PAST_DUE
 

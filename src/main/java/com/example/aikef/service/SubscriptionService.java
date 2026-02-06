@@ -30,13 +30,8 @@ public class SubscriptionService {
 
         // Check if expired
         if (sub.getCurrentPeriodEnd() != null && sub.getCurrentPeriodEnd().isBefore(Instant.now())) {
-            // Only auto-renew FREE plan
-            if (sub.getPlan() == SubscriptionPlan.FREE) {
-                renewSubscription(sub);
-            }
-            // For paid plans, we wait for Shopify webhook or scheduler to update/downgrade.
-            // If it's expired here, it means it hasn't been renewed yet.
-            // Ideally we should treat it as expired/inactive in feature checks.
+            // Handle expiration/renewal logic
+            handleSubscriptionRenewal(sub);
         }
 
         long aiUsage = messageRepository.countByCreatedAtBetweenAndTenantIdAndSenderType(
@@ -48,7 +43,7 @@ public class SubscriptionService {
 
         long seatUsage = agentRepository.countByTenantId(tenantId);
 
-        return SubscriptionDto.builder()
+        SubscriptionDto.SubscriptionDtoBuilder builder = SubscriptionDto.builder()
                 .plan(sub.getPlan())
                 .status(sub.getStatus())
                 .currentPeriodStart(sub.getCurrentPeriodStart())
@@ -60,8 +55,34 @@ public class SubscriptionService {
                 .supportAdvancedAnalytics(sub.getPlan().isSupportAdvancedAnalytics())
                 .supportMagicRewrite(sub.getPlan().isSupportMagicRewrite())
                 .supportSmartSummary(sub.getPlan().isSupportSmartSummary())
-                .supportAiTags(sub.getPlan().isSupportAiTags())
-                .build();
+                .supportAiTags(sub.getPlan().isSupportAiTags());
+
+        // Populate next cycle info
+        if (sub.getNextPlan() != null) {
+            builder.nextPlan(sub.getNextPlan())
+                   .nextBillingDate(sub.getCurrentPeriodEnd())
+                   .nextPrice((double) sub.getNextPlan().getPrice());
+        } else if (!sub.isCancelAtPeriodEnd()) {
+            // Auto-renew to same plan
+            builder.nextPlan(sub.getPlan())
+                   .nextBillingDate(sub.getCurrentPeriodEnd())
+                   .nextPrice((double) sub.getPlan().getPrice());
+        }
+
+        return builder.build();
+    }
+
+    private void handleSubscriptionRenewal(Subscription sub) {
+        // If there is a pending plan change, apply it now
+        if (sub.getNextPlan() != null) {
+            sub.setPlan(sub.getNextPlan());
+            sub.setNextPlan(null);
+            renewSubscription(sub);
+        } else if (sub.getPlan() == SubscriptionPlan.FREE) {
+            // Only auto-renew FREE plan if no pending change
+            renewSubscription(sub);
+        }
+        // For paid plans without pending change, we wait for payment/webhook
     }
 
     @Transactional
@@ -69,9 +90,22 @@ public class SubscriptionService {
         Subscription sub = subscriptionRepository.findByTenantId(tenantId)
                 .orElseGet(() -> createDefaultSubscription(tenantId));
         
-        sub.setPlan(newPlan);
-        // In real world, we might reset period or keep it.
-        // For simulation, we keep the period but update the plan.
+        // Check for downgrade
+        if (sub.getPlan() != null && newPlan.getPrice() < sub.getPlan().getPrice()) {
+            // Downgrade: set next plan, effective next cycle
+            sub.setNextPlan(newPlan);
+        } else {
+            // Upgrade or same: immediate effect
+            sub.setPlan(newPlan);
+            sub.setNextPlan(null); // Clear any pending downgrade
+        }
+        
+        // Ensure we have a period set
+        if (sub.getCurrentPeriodEnd() == null) {
+            sub.setCurrentPeriodStart(Instant.now());
+            sub.setCurrentPeriodEnd(Instant.now().plus(30, ChronoUnit.DAYS));
+        }
+        
         subscriptionRepository.save(sub);
     }
 

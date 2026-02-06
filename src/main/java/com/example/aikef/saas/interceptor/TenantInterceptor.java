@@ -56,7 +56,6 @@ public class TenantInterceptor implements HandlerInterceptor {
         if (!saasEnabled) {
             return true;
         }
-        log.info("收到新的请求");
         String requestUri = request.getRequestURI();
         // Check whitelist - Only allow if no tenant ID is present but path is whitelisted
         for (String pattern : WHITELIST_PATHS) {
