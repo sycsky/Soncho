@@ -568,6 +568,9 @@ public class AiWorkflowService {
             if (session.getCustomer() != null) {
                 variables.put("customerId", session.getCustomer().getId());
                 variables.put("customerName", session.getCustomer().getName());
+                if(session.getCustomer().getEmail() != null) {
+                    variables.put("customerEmail", session.getCustomer().getEmail());
+                }
             }
             if (session.getCategory() != null) {
                 variables.put("categoryId", session.getCategory().getId());

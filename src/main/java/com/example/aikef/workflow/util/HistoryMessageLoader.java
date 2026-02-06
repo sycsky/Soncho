@@ -221,7 +221,7 @@ public class HistoryMessageLoader {
                                         historyMessages.add(dev.langchain4j.data.message.ToolExecutionResultMessage.from(
                                                 toolCallId,
                                                 toolName,
-                                                toolResult != null ? toolResult : ""
+                                                "[HISTORY_SNAPSHOT]:"+(toolResult != null ? toolResult : "")
                                         ));
                                     }
                                 }
@@ -233,13 +233,13 @@ public class HistoryMessageLoader {
 
                 String text = msg.getText();
                 String toolName = "UnknownTool";
-                String toolResult = text;
+                String toolResult = "[HISTORY_SNAPSHOT]"+text;
 
                 if (text != null && text.contains("#TOOL#")) {
                     String[] parts = text.split("#TOOL#", 2);
                     if (parts.length >= 2) {
                         toolName = parts[0];
-                        toolResult = parts[1];
+                        toolResult = "[HISTORY_SNAPSHOT]:"+parts[1];
                     }
                 }
 

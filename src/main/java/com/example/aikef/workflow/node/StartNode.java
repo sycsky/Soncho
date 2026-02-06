@@ -17,8 +17,7 @@ public class StartNode extends BaseWorkflowNode {
                 getWorkflowContext().getSessionId(),
                 getWorkflowContext().getQuery());
         
-        // 开始节点只是标记起点，不做任何处理
-        setOutput("workflow_started");
+
         
         recordExecution(null, "workflow_started", startTime, true, null);
     }
