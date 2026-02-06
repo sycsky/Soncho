@@ -27,4 +27,6 @@ public class CreateAgentRequest {
     private UUID roleId;
 
     private String language; // 可选，客服使用的语言代码（如 zh-CN, en, ja）
+
+    private String tenantId; // 可选，仅在 SAAS 模式下管理员创建租户管理员时使用
 }
