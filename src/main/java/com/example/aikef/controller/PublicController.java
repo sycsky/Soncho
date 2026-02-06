@@ -78,7 +78,7 @@ public class PublicController {
                 adminRole.getId(),
                 "zh"
         );
-        request.setTenantId(tenantId);
+//        request.setTenantId(tenantId);
         
         AgentDto agent = agentService.createAgent(request);
         

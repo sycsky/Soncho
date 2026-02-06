@@ -87,10 +87,10 @@ public class AgentService {
             agent.setLanguage(request.getLanguage());
         }
         
-        // 如果开启了 SAAS 且当前没有租户上下文（例如管理员创建租户管理员），需要手动设置 TenantId
-        if (request.getTenantId() != null && !request.getTenantId().isBlank()) {
-             agent.setTenantId(request.getTenantId());
-        }
+//        // 如果开启了 SAAS 且当前没有租户上下文（例如管理员创建租户管理员），需要手动设置 TenantId
+//        if (request.getTenantId() != null && !request.getTenantId().isBlank()) {
+//             agent.setTenantId(request.getTenantId());
+//        }
 
         Agent saved = agentRepository.save(agent);
         return entityMapper.toAgentDto(saved);
