@@ -4,7 +4,7 @@
 # 所有敏感信息通过环境变量注入
 app:
   saas:
-    enabled: true
+    enabled: false
 spring:
   # 数据库配置
   datasource:
