@@ -47,7 +47,6 @@ public class StartNode extends BaseWorkflowNode {
         }
         
 
-
         
         recordExecution(null, "workflow_started", startTime, true, null);
     }

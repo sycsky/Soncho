@@ -1,0 +1,89 @@
+name: Build and Push Shopify Integration to ECR
+
+on:
+  push:
+    branches:
+      - saas
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-northeast-1
+  ECR_REPOSITORY: ai_agent/saas
+  # 以下 ECS 配置可能需要根据实际环境进行调整，目前沿用 hotpot 分支的配置
+  ECS_CLUSTER: ai_agent_saas
+  ECS_SERVICE: agent_saas-service-uavwxf6a
+  ECS_TASK_FAMILY: agent_saas
+  ECS_CONTAINER_NAME: agent
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "✅ Image pushed: $ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          echo "IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Register new ECS task definition revision (use new image)
+        run: |
+          echo "Using image: ${IMAGE_URI}"
+
+          aws ecs describe-task-definition \
+            --region "${AWS_REGION}" \
+            --task-definition "${ECS_TASK_FAMILY}" \
+            --query taskDefinition > taskdef.json
+
+          cat taskdef.json | jq \
+            --arg IMAGE "${IMAGE_URI}" \
+            --arg CONTAINER "${ECS_CONTAINER_NAME}" \
+            'del(
+              .taskDefinitionArn,
+              .revision,
+              .status,
+              .requiresAttributes,
+              .compatibilities,
+              .registeredAt,
+              .registeredBy
+            )
+            | .containerDefinitions = (.containerDefinitions | map(if .name == $CONTAINER then .image = $IMAGE else . end))' \
+            > taskdef-registered.json
+
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --region "${AWS_REGION}" \
+            --cli-input-json file://taskdef-registered.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "NEW_TASK_DEF_ARN=${NEW_TASK_DEF_ARN}" >> $GITHUB_ENV
+          echo "✅ Registered new task definition: ${NEW_TASK_DEF_ARN}"
+
+      - name: Deploy to ECS (update service to new task definition)
+        run: |
+          aws ecs update-service \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE}" \
+            --task-definition "${NEW_TASK_DEF_ARN}" \
+            --force-new-deployment
