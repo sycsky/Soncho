@@ -50,6 +50,7 @@ public class SupplyChainTools {
             @P(value = "List of items to purchase (must include supplierId)", required = true) List<OrderItemRequest> items,
             @P(value = "Delivery date (yyyy-MM-dd HH:mm:ss)", required = true) String deliveryDate
     ) {
+
         LocalDateTime parsedDeliveryDate = null;
         if (deliveryDate != null && !deliveryDate.isBlank()) {
             parsedDeliveryDate = LocalDateTime.parse(deliveryDate.trim(), DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
