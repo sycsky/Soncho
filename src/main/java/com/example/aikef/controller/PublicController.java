@@ -76,7 +76,8 @@ public class PublicController {
                 email,
                 password,
                 adminRole.getId(),
-                "zh"
+                "zh",
+                tenantId
         );
 //        request.setTenantId(tenantId);
         
