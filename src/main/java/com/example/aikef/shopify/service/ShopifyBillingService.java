@@ -391,15 +391,11 @@ public class ShopifyBillingService {
         ShopifyStore store = storeRepository.findByShopDomain(shopDomain)
                 .orElseThrow(() -> new IllegalArgumentException("Store not found"));
 
-        // We can query the installation's active subscriptions to find the one matching chargeId
-        // chargeId from Shopify URL param is usually the app_subscription_id (gid://shopify/AppSubscription/...)
-        // But the URL param might be numeric ID.
-        
-        // Let's query current active subscriptions
+        // Query specific subscription by ID to handle PENDING (deferred) subscriptions
         String graphQL = """
-            {
-              appInstallation {
-                activeSubscriptions {
+            query($id: ID!) {
+              node(id: $id) {
+                ... on AppSubscription {
                   id
                   name
                   status
@@ -410,50 +406,48 @@ public class ShopifyBillingService {
             }
             """;
             
+        ObjectNode variables = objectMapper.createObjectNode();
+        // Ensure chargeId is a GID
+        String gid = chargeId;
+        if (!gid.startsWith("gid://")) {
+            gid = "gid://shopify/AppSubscription/" + chargeId;
+        }
+        variables.put("id", gid);
+
         String url = "https://" + shopDomain + "/admin/api/" + apiVersion + "/graphql.json";
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-Shopify-Access-Token", store.getAccessToken());
         headers.setContentType(MediaType.APPLICATION_JSON);
         
         try {
+            Map<String, Object> requestBody = Map.of(
+                "query", graphQL,
+                "variables", variables
+            );
+
              ResponseEntity<String> response = restTemplate.exchange(
-                url, HttpMethod.POST, new HttpEntity<>(Map.of("query", graphQL), headers), String.class
+                url, HttpMethod.POST, new HttpEntity<>(requestBody, headers), String.class
             );
             
             JsonNode root = objectMapper.readTree(response.getBody());
-            JsonNode subscriptions = root.path("data").path("appInstallation").path("activeSubscriptions");
+            JsonNode node = root.path("data").path("node");
             
-            if (subscriptions.isArray()) {
-                for (JsonNode sub : subscriptions) {
-                    // Check if this subscription matches what we expect or is just active
-                    if ("ACTIVE".equals(sub.path("status").asText())) {
-                        String name = sub.path("name").asText();
-                        String gid = sub.path("id").asText();
-                        
-                        // Parse plan name from subscription name (e.g. "PRO Plan" -> PRO)
-                        SubscriptionPlan plan = parsePlanFromName(name);
-                        
-                        // Parse currentPeriodEnd if available (Shopify API might return it)
-                        // Note: AppSubscription fields might need to be requested specifically.
-                        // I added currentPeriodEnd to query above.
-                        java.time.Instant periodEnd = null;
-                        if (sub.has("currentPeriodEnd") && !sub.get("currentPeriodEnd").isNull()) {
-                            periodEnd = java.time.Instant.parse(sub.get("currentPeriodEnd").asText());
-                        }
-
-                        // Determine if this is a future-effective subscription (downgrade)
-                        // We check if we have a current active subscription that expires later than now
-                        // BUT Shopify's API returns "ACTIVE" even for future pending downgrades?
-                        // Actually, for deferred downgrades, the NEW subscription is usually in "PENDING" or "ACCEPTED" state until it becomes active?
-                        // Or does it show as ACTIVE but with a future start date?
-                        // If replacementBehavior=APPLY_ON_NEXT_BILLING_CYCLE, the new subscription might not be "ACTIVE" yet in the list?
-                        
-                        // Let's rely on updateLocalSubscription to handle the logic of "don't overwrite if current is still valid and higher tier"
-                        // But wait, if Shopify says it's ACTIVE, it means it's the current one.
-                        
-                        updateLocalSubscription(shopDomain, plan, gid, periodEnd);
-                        return true;
+            if (!node.isMissingNode() && !node.isNull()) {
+                String status = node.path("status").asText();
+                // Handle ACTIVE (Immediate) or PENDING (Deferred/Downgrade)
+                if ("ACTIVE".equals(status) || "PENDING".equals(status) || "ACCEPTED".equals(status)) {
+                    String name = node.path("name").asText();
+                    String subId = node.path("id").asText();
+                    
+                    SubscriptionPlan plan = parsePlanFromName(name);
+                    
+                    java.time.Instant periodEnd = null;
+                    if (node.has("currentPeriodEnd") && !node.get("currentPeriodEnd").isNull()) {
+                        periodEnd = java.time.Instant.parse(node.get("currentPeriodEnd").asText());
                     }
+
+                    updateLocalSubscription(shopDomain, plan, subId, periodEnd);
+                    return true;
                 }
             }
             
@@ -575,47 +569,9 @@ public class ShopifyBillingService {
             
             log.info("Deferred downgrade detected for {}: {} -> {}. Setting nextPlan.", shopDomain, sub.getPlan(), plan);
             sub.setNextPlan(plan);
-            // Don't update status or current period end, keep existing
-            // But we might want to update chargeId if it refers to the *future* subscription?
-            // Actually, if Shopify says the NEW plan is ACTIVE now, then it means it TOOK EFFECT.
-            // If replacementBehavior=APPLY_ON_NEXT_BILLING_CYCLE was used, Shopify would NOT return the new plan as "ACTIVE" yet?
-            // Wait, if verifySubscription found an "ACTIVE" subscription, it means it IS active.
-            
-            // If the user accepted a deferred downgrade, Shopify creates a subscription that might be in a different state or 
-            // the OLD one remains ACTIVE and the NEW one is scheduled.
-            // If our verify logic found the NEW plan as ACTIVE, then Shopify switched it immediately?
-            
-            // Let's trust the input 'plan' is what should be effectively next if it's a downgrade.
-            // However, if we blindly trust 'verifySubscription' which fetches 'ACTIVE' subscriptions,
-            // we need to be sure which one it fetched.
-            
-            // If we are here, it means 'verifySubscription' or 'syncSubscription' called us with a plan.
-            // If that plan is lower than current, and current is valid...
-            
-            // Case 1: User just clicked "Approve" for downgrade. verifySubscription is called with new plan's chargeId.
-            // If Shopify returned it as ACTIVE, then it IS active. 
-            // BUT for deferred, it shouldn't be active yet?
-            
-            // Ref: Shopify API: "The new subscription is created with a status of PENDING until the current subscription expires."
-            // So 'verifySubscription' iterating over 'activeSubscriptions' would NOT find the new pending one if it only looks for ACTIVE?
-            // OR it finds the OLD one which is still ACTIVE?
-            
-            // If verifySubscription found the OLD (High Tier) plan, then 'plan' arg is High Tier. No downgrade detected here.
-            // If verifySubscription found the NEW (Low Tier) plan, it means it became ACTIVE.
-            
-            // So, if we are here with a Low Tier plan, it implies it IS active?
-            // Unless we are calling this from 'createSubscription' mock/test flow?
-            
-            // In createSubscription, we call updateLocalSubscription for MOCK flow.
-            // For real flow, we wait for callback -> verifySubscription.
-            
-            // If it's a MOCK flow (test-mode), we might need to simulate the deferral.
-            if (chargeId != null && chargeId.startsWith("mock_charge_")) {
-                 sub.setNextPlan(plan);
-                 log.info("Mock deferred downgrade set for {}", shopDomain);
-                 subscriptionRepository.save(sub);
-                 return;
-            }
+            // Save and return immediately to avoid overwriting current plan
+            subscriptionRepository.save(sub);
+            return;
         }
         
         // Standard update (Immediate or Initial)
