@@ -300,6 +300,18 @@ public class ShopifyWebhookController {
         return verifyIngestAndOk("products/update", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
     }
 
+    @PostMapping("/app_subscriptions/update")
+    public ResponseEntity<Map<String, Object>> appSubscriptionsUpdate(
+            @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,
+            @RequestHeader(value = "X-Shopify-Shop-Domain", required = false) String shopDomain,
+            @RequestHeader(value = "X-Shopify-Webhook-Id", required = false) String webhookId,
+            @RequestHeader(value = "X-Shopify-API-Version", required = false) String apiVersion,
+            @RequestHeader(value = "X-Shopify-Triggered-At", required = false) String triggeredAt,
+            @RequestBody byte[] body
+    ) {
+        return verifyIngestAndOk("app_subscriptions/update", hmac, shopDomain, webhookId, apiVersion, triggeredAt, body);
+    }
+
     @PostMapping("/app/uninstalled")
     public ResponseEntity<Map<String, Object>> appUninstalled(
             @RequestHeader(value = "X-Shopify-Hmac-Sha256", required = false) String hmac,

@@ -49,6 +49,7 @@ public class ShopifySyncService {
     private final ShopifyGdprService gdprService;
     private final EventService eventService;
     private final CustomerRepository customerRepository;
+    private final ShopifyBillingService billingService;
     private ShopifySyncService self;
 
     public ShopifySyncService(ShopifyObjectRepository objectRepository,
@@ -57,7 +58,8 @@ public class ShopifySyncService {
                               StringRedisTemplate redisTemplate,
                               ShopifyGdprService gdprService,
                               @Lazy EventService eventService,
-                              CustomerRepository customerRepository) {
+                              CustomerRepository customerRepository,
+                              @Lazy ShopifyBillingService billingService) {
         this.objectRepository = objectRepository;
         this.storeRepository = storeRepository;
         this.objectMapper = objectMapper;
@@ -65,6 +67,7 @@ public class ShopifySyncService {
         this.gdprService = gdprService;
         this.eventService = eventService;
         this.customerRepository = customerRepository;
+        this.billingService = billingService;
     }
 
     @Autowired
@@ -91,6 +94,14 @@ public class ShopifySyncService {
 
     @Transactional
     public void upsertFromWebhook(String topic, String shopDomain, String webhookId, byte[] body) {
+        // App Subscriptions Update
+        if ("app_subscriptions/update".equals(topic)) {
+            // Sync subscription status directly from Shopify to ensure latest state
+            billingService.syncSubscription(shopDomain);
+            self.updateStoreSyncTime(shopDomain);
+            return;
+        }
+
         // GDPR Webhooks
         if (topic != null && topic.startsWith("gdpr/")) {
             String payloadJson = new String(body, StandardCharsets.UTF_8);

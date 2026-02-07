@@ -79,6 +79,7 @@ public class ShopifyWebhookRegistrationService {
         m.put("collections/update", webhooksBase + "/collections/update");
         m.put("themes/publish", webhooksBase + "/themes/publish");
         m.put("fulfillment_events/create", webhooksBase + "/fulfillment_events/create");
+        m.put("app_subscriptions/update", webhooksBase + "/app_subscriptions/update");
         m.put("app/uninstalled", webhooksBase + "/app/uninstalled");
         return m;
     }
