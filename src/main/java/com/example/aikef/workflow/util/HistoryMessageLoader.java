@@ -221,7 +221,7 @@ public class HistoryMessageLoader {
                                         historyMessages.add(dev.langchain4j.data.message.ToolExecutionResultMessage.from(
                                                 toolCallId,
                                                 toolName,
-                                                "[HISTORY_SNAPSHOT]:"+(toolResult != null ? toolResult : "")
+                                                "[State_Old]:"+(toolResult != null ? toolResult : "")
                                         ));
                                     }
                                 }
