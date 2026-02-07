@@ -233,13 +233,13 @@ public class HistoryMessageLoader {
 
                 String text = msg.getText();
                 String toolName = "UnknownTool";
-                String toolResult = "[HISTORY_SNAPSHOT]"+text;
+                String toolResult = "[State_Old]"+text;
 
                 if (text != null && text.contains("#TOOL#")) {
                     String[] parts = text.split("#TOOL#", 2);
                     if (parts.length >= 2) {
                         toolName = parts[0];
-                        toolResult = "[HISTORY_SNAPSHOT]:"+parts[1];
+                        toolResult = "[State_Old]:"+parts[1];
                     }
                 }
 
