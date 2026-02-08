@@ -56,7 +56,7 @@
 | :--- | :--- | :--- | :--- |
 | **工作流执行** | workflow, execute, run | 1. `AiWorkflowController.java`<br>2. `AiWorkflowService.java` | 触发 Liteflow 流程 |
 | **工作流测试** | test, debug, dry-run | 1. `WorkflowTestController.java`<br>2. `WorkflowTestService.java` | 调试模式运行工作流 |
-| **节点逻辑** | node, component | 1. `AgentNode.java` (LLM对话)<br>2. `ToolNode.java` (工具调用)<br>3. `IntentNode.java` (意图识别) | 位于 `workflow/node` 包 |
+| **节点逻辑** | node, component | 1. `AgentNode.java` (LLM对话)<br>2. `ToolNode.java` (工具调用)<br>3. `IntentNode.java` (意图识别)<br>4. `YesNoNode.java` (YES/NO开关) | 位于 `workflow/node` 包 |
 | **AI 润色/重写** | rewrite, polish | 1. `AiController.java` (`rewrite`)<br>2. `AiAssistantService.java` | 客服输入框辅助功能 |
 | **会话总结** | summary, summarize | 1. `AiController.java`<br>2. `SessionSummaryService.java` | 自动生成会话小结 |
 | **AI 工具管理** | tool, function | 1. `AiToolController.java`<br>2. `AiToolService.java` | 管理 Function Calling 工具 |
