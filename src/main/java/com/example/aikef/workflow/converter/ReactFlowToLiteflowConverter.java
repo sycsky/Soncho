@@ -4,6 +4,9 @@ import com.example.aikef.workflow.dto.WorkflowEdgeDto;
 import com.example.aikef.workflow.dto.WorkflowNodeDto;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yomahub.liteflow.core.NodeComponent;
+import com.yomahub.liteflow.core.NodeSwitchComponent;
+import com.yomahub.liteflow.flow.FlowBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -149,11 +152,8 @@ public class ReactFlowToLiteflowConverter {
         String nodeType = node.type();
         
         // Switch 节点特殊处理 (SWITCH)
-        // 支持 condition, intent, intent_router, tool, parameter_extraction 类型
-        // 注意：这些节点是 NodeSwitchComponent，必须使用 SWITCH 语法
-        if ("condition".equals(nodeType) || "intent".equals(nodeType) || 
-            "intent_router".equals(nodeType) || "tool".equals(nodeType) || 
-            "parameter_extraction".equals(nodeType)) {
+        // 动态检查节点是否为 Switch 类型
+        if (isSwitchComponent(nodeType)) {
             return generateSwitchEl(nodeId, nodeMap, outEdges, inEdges, nextEdges, visited, indentLevel);
         }
         
@@ -265,6 +265,27 @@ public class ReactFlowToLiteflowConverter {
         return el.toString();
     }
     
+    /**
+     * 判断是否为 Switch 组件
+     * 优先从 LiteFlow FlowBus 动态获取组件类型
+     * 如果获取失败，则降级使用硬编码列表
+     */
+    private boolean isSwitchComponent(String nodeType) {
+        try {
+            if (FlowBus.containNode(nodeType)) {
+                NodeComponent node = FlowBus.getNode(nodeType).getInstance();
+                return node instanceof NodeSwitchComponent;
+            }
+        } catch (Exception e) {
+            log.warn("检查 Switch 组件类型失败: nodeType={}", nodeType, e);
+        }
+        
+        // 降级策略：常见 Switch 节点类型
+        return "condition".equals(nodeType) || "intent".equals(nodeType) || 
+               "intent_router".equals(nodeType) || "tool".equals(nodeType) || 
+               "parameter_extraction".equals(nodeType) || "yes_no".equals(nodeType);
+    }
+
     /**
      * 格式化节点引用
      * 使用 LiteFlow 的 node 语法: node("componentId").tag("instanceId")
