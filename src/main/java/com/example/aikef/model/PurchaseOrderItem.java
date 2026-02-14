@@ -46,9 +46,9 @@ public class PurchaseOrderItem {
     private String productName;
     private String shopifyVariantId;
 
-    private Integer quantityRequested;
-    private Integer quantityShipped;
-    private Integer quantityReceived;
+    private BigDecimal quantityRequested;
+    private BigDecimal quantityShipped;
+    private BigDecimal quantityReceived;
 
     private BigDecimal unitPrice;
     private BigDecimal totalAmount;

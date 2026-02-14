@@ -113,30 +113,31 @@ public class PurchaseOrderService {
     }
 
     @Transactional
-    public void updateItemShipped(String itemId, int quantity) {
+    public void updateItemShipped(String itemId, BigDecimal quantity) {
         PurchaseOrderItem item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new EntityNotFoundException("Item not found"));
         
-        if (quantity > item.getQuantityRequested()) {
-            throw new IllegalArgumentException("Shipped quantity cannot exceed requested quantity (" + item.getQuantityRequested() + ")");
+        BigDecimal requested = item.getQuantityRequested() != null ? item.getQuantityRequested() : BigDecimal.ZERO;
+        if (quantity != null && quantity.compareTo(requested) > 0) {
+            throw new IllegalArgumentException("Shipped quantity cannot exceed requested quantity (" + requested + ")");
         }
         
-        item.setQuantityShipped(quantity);
+        item.setQuantityShipped(quantity != null ? quantity : BigDecimal.ZERO);
         itemRepository.save(item);
     }
 
     @Transactional
-    public void updateItemReceived(String itemId, int quantity) {
+    public void updateItemReceived(String itemId, BigDecimal quantity) {
         PurchaseOrderItem item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new EntityNotFoundException("Item not found"));
         
         // Ensure quantity shipped is set before validating received
-        int shipped = item.getQuantityShipped() != null ? item.getQuantityShipped() : 0;
-        if (quantity > shipped) {
+        BigDecimal shipped = item.getQuantityShipped() != null ? item.getQuantityShipped() : BigDecimal.ZERO;
+        if (quantity != null && quantity.compareTo(shipped) > 0) {
             throw new IllegalArgumentException("Received quantity cannot exceed shipped quantity (" + shipped + ")");
         }
         
-        item.setQuantityReceived(quantity);
+        item.setQuantityReceived(quantity != null ? quantity : BigDecimal.ZERO);
         itemRepository.save(item);
     }
 
@@ -260,10 +261,10 @@ public class PurchaseOrderService {
         
         List<Map<String, Object>> adjustments = new java.util.ArrayList<>();
         for (PurchaseOrderItem item : order.getItems()) {
-             if (item.getShopifyVariantId() != null && item.getQuantityReceived() != null && item.getQuantityReceived() > 0) {
+             if (item.getShopifyVariantId() != null && item.getQuantityReceived() != null && item.getQuantityReceived().compareTo(BigDecimal.ZERO) > 0) {
                  adjustments.add(Map.of(
                      "variantId", item.getShopifyVariantId(),
-                     "delta", item.getQuantityReceived() * multiplier
+                     "delta", item.getQuantityReceived().multiply(BigDecimal.valueOf(multiplier))
                  ));
              }
         }

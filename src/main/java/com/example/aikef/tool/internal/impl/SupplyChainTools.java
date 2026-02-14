@@ -78,10 +78,10 @@ public class SupplyChainTools {
                 item.setProductName(req.productName());
                 item.setShopifyVariantId(req.shopifyVariantId());
                 item.setQuantityRequested(req.quantity());
-                item.setQuantityShipped(0);
-                item.setQuantityReceived(0);
+                item.setQuantityShipped(BigDecimal.ZERO);
+                item.setQuantityReceived(BigDecimal.ZERO);
                 item.setUnitPrice(req.unitPrice() != null ? req.unitPrice() : BigDecimal.ZERO);
-                item.setTotalAmount(item.getUnitPrice().multiply(BigDecimal.valueOf(req.quantity())));
+                item.setTotalAmount(item.getUnitPrice().multiply(req.quantity() != null ? req.quantity() : BigDecimal.ZERO));
                 orderItems.add(item);
             }
             
@@ -278,9 +278,9 @@ public class SupplyChainTools {
 
     private SupplierSettlementDto calculateSettlement(List<PurchaseOrder> orders) {
         int orderCount = orders.size();
-        int totalQuantityRequested = 0;
-        int totalQuantityShipped = 0;
-        int totalQuantityReceived = 0;
+        BigDecimal totalQuantityRequested = BigDecimal.ZERO;
+        BigDecimal totalQuantityShipped = BigDecimal.ZERO;
+        BigDecimal totalQuantityReceived = BigDecimal.ZERO;
         BigDecimal totalReceivedAmount = BigDecimal.ZERO;
 
         List<SettlementItemDto> items = new ArrayList<>();
@@ -290,22 +290,25 @@ public class SupplyChainTools {
             boolean hasReturnInOrder = false;
 
             for (PurchaseOrderItem item : order.getItems()) {
-                int requested = item.getQuantityRequested() != null ? item.getQuantityRequested() : 0;
-                int shipped = item.getQuantityShipped() != null ? item.getQuantityShipped() : 0;
-                int received = item.getQuantityReceived() != null ? item.getQuantityReceived() : 0;
-                int returned = Math.max(0, requested - received);
+                BigDecimal requested = item.getQuantityRequested() != null ? item.getQuantityRequested() : BigDecimal.ZERO;
+                BigDecimal shipped = item.getQuantityShipped() != null ? item.getQuantityShipped() : BigDecimal.ZERO;
+                BigDecimal received = item.getQuantityReceived() != null ? item.getQuantityReceived() : BigDecimal.ZERO;
+                BigDecimal returned = requested.subtract(received);
+                if (returned.compareTo(BigDecimal.ZERO) < 0) {
+                    returned = BigDecimal.ZERO;
+                }
 
                 // Check if this item has return (received != shipped) as per user requirement: "清单item实收数!=实发数"
-                if (received != shipped) {
+                if (received.compareTo(shipped) != 0) {
                     hasReturnInOrder = true;
                 }
 
-                totalQuantityRequested += requested;
-                totalQuantityShipped += shipped;
-                totalQuantityReceived += received;
+                totalQuantityRequested = totalQuantityRequested.add(requested);
+                totalQuantityShipped = totalQuantityShipped.add(shipped);
+                totalQuantityReceived = totalQuantityReceived.add(received);
 
                 // Calculate amount for received items
-                BigDecimal itemTotal = item.getUnitPrice().multiply(BigDecimal.valueOf(received));
+                BigDecimal itemTotal = item.getUnitPrice().multiply(received);
                 totalReceivedAmount = totalReceivedAmount.add(itemTotal);
 
                 items.add(new SettlementItemDto(
@@ -352,7 +355,8 @@ public class SupplyChainTools {
                         item.getQuantityReceived(),
                         item.getUnitPrice(),
                         item.getTotalAmount(),
-                        (item.getQuantityRequested() == null ? 0 : item.getQuantityRequested()) > (item.getQuantityReceived() == null ? 0 : item.getQuantityReceived()) ? "YES" : "NO"
+                        (item.getQuantityRequested() == null ? BigDecimal.ZERO : item.getQuantityRequested())
+                                .compareTo(item.getQuantityReceived() == null ? BigDecimal.ZERO : item.getQuantityReceived()) > 0 ? "YES" : "NO"
                 ))
                 .collect(Collectors.toList());
 
@@ -370,15 +374,15 @@ public class SupplyChainTools {
 
     // DTOs
     public record SupplierDto(String id, String name, String email) {}
-    public record OrderItemRequest(String supplierId, String productName, String shopifyVariantId, int quantity, BigDecimal unitPrice) {}
-    public record ItemUpdate(String itemId, int quantity) {}
+    public record OrderItemRequest(String supplierId, String productName, String shopifyVariantId, BigDecimal quantity, BigDecimal unitPrice) {}
+    public record ItemUpdate(String itemId, BigDecimal quantity) {}
     public record PurchaseOrderDto(String id, String status, String statusDescription, BigDecimal totalAmount, String supplierName, String createdAt, String deliveryDate) {}
     
     public record SupplierSettlementDto(
             int orderCount,
-            int totalQuantityRequested,
-            int totalQuantityShipped,
-            int totalQuantityReceived,
+            BigDecimal totalQuantityRequested,
+            BigDecimal totalQuantityShipped,
+            BigDecimal totalQuantityReceived,
             BigDecimal totalReceivedAmount,
             BigDecimal taxAmount,
             BigDecimal totalBillAmount,
@@ -389,10 +393,10 @@ public class SupplyChainTools {
     public record SettlementItemDto(
             String productName,
             String supplierName,
-            int quantityRequested,
-            int quantityShipped,
-            int quantityReceived,
-            int quantityReturned,
+            BigDecimal quantityRequested,
+            BigDecimal quantityShipped,
+            BigDecimal quantityReceived,
+            BigDecimal quantityReturned,
             BigDecimal unitPrice
     ) {}
     
@@ -411,9 +415,9 @@ public class SupplyChainTools {
         String id,
         String productName,
         String supplierName,
-        int quantityRequested,
-        int quantityShipped,
-        int quantityReceived,
+        BigDecimal quantityRequested,
+        BigDecimal quantityShipped,
+        BigDecimal quantityReceived,
         BigDecimal unitPrice,
         BigDecimal totalAmount,
         String hasReturn
