@@ -518,13 +518,13 @@ public class ExternalPlatformService {
             ChatSession session = sessionRepository.findById(sessionId).orElse(null);
             String customerLanguage = session != null ? session.getCustomerLanguage() : null;
             
-            if (translationService.isEnabled() && customerLanguage != null && !customerLanguage.isBlank()
-                    && (senderType == SenderType.AGENT || senderType == SenderType.AI || senderType == SenderType.SYSTEM)) {
-                // 将客服/AI消息翻译为客户语言
-                String systemLanguage = translationService.getDefaultSystemLanguage();
-                translatedContent = translationService.translate(content, systemLanguage, customerLanguage);
-                log.debug("消息已翻译为客户语言: {} -> {}", systemLanguage, customerLanguage);
-            }
+            // if (translationService.isEnabled() && customerLanguage != null && !customerLanguage.isBlank()
+            //         && (senderType == SenderType.AGENT || senderType == SenderType.AI || senderType == SenderType.SYSTEM)) {
+            //     // 将客服/AI消息翻译为客户语言
+            //     String systemLanguage = translationService.getDefaultSystemLanguage();
+            //     translatedContent = translationService.translate(content, systemLanguage, customerLanguage);
+            //     log.debug("消息已翻译为客户语言: {} -> {}", systemLanguage, customerLanguage);
+            // }
 
             log.info("转发消息到第三方平台: platform={}, threadId={}, senderType={}", 
                     platform.getName(), mapping.getExternalThreadId(), senderType);
@@ -532,7 +532,7 @@ public class ExternalPlatformService {
             // 构建请求体
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("threadId", mapping.getExternalThreadId());
-            requestBody.put("content", translatedContent);
+            requestBody.put("content", content);
             requestBody.put("originalContent", content); // 保留原文
             requestBody.put("senderType", senderType.name());
             requestBody.put("timestamp", System.currentTimeMillis());
