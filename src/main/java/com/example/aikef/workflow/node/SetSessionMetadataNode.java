@@ -144,6 +144,7 @@ public class SetSessionMetadataNode extends BaseWorkflowNode {
 
             // 保存更新后的元数据
             saveSessionMetadata(session, metadata);
+            ctx.setSessionMetadata(metadata);
 
             String output = String.format("已更新 %d 个元数据字段", updatedCount);
             setOutput(output);

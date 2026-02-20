@@ -1062,6 +1062,29 @@ public class AiWorkflowService {
                     context.setCustomerId((UUID) variables.get("customerId"));
                 }
             }
+            
+            if (sessionId != null) {
+                chatSessionRepository.findById(sessionId).ifPresent(session -> {
+                    if (session.getCustomer() != null) {
+                        context.setCustomerId(session.getCustomer().getId());
+                        context.getCustomerInfo().put("id", session.getCustomer().getId());
+                        context.getCustomerInfo().put("name", session.getCustomer().getName());
+                        if (session.getCustomer().getEmail() != null) {
+                            context.getCustomerInfo().put("email", session.getCustomer().getEmail());
+                        }
+                    }
+                    if (session.getMetadata() != null) {
+                        try {
+                            Map<String, Object> metadata = objectMapper.readValue(
+                                    session.getMetadata(),
+                                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                            context.setSessionMetadata(metadata);
+                        } catch (Exception e) {
+                            log.warn("解析会话元数据失败", e);
+                        }
+                    }
+                });
+            }
 
             // 解析节点配置
             Map<String, JsonNode> nodesConfig = parseNodesConfig(workflow.getNodesJson());
