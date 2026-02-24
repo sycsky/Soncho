@@ -360,6 +360,12 @@ public class SupplyChainTools {
                 ))
                 .collect(Collectors.toList());
 
+        String createdAt = "";
+        if (order.getCreatedAt() != null) {
+            createdAt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                    .withZone(ZoneId.systemDefault())
+                    .format(order.getCreatedAt());
+        }
         return new PurchaseOrderDetailDto(
                 order.getId(),
                 order.getStatus(),
@@ -367,6 +373,7 @@ public class SupplyChainTools {
                 order.getTotalAmount(),
                 order.getInitiator().getName(),
                 order.getSupplier().getName(),
+                createdAt,
                 order.getDeliveryDate() != null ? order.getDeliveryDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : "",
                 items
         );
@@ -407,6 +414,7 @@ public class SupplyChainTools {
         BigDecimal totalAmount, 
         String initiatorName, 
         String supplierName,
+        String createdAt,
         String deliveryDate,
         List<OrderItemDto> items
     ) {}
