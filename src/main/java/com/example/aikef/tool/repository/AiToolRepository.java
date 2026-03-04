@@ -49,5 +49,14 @@ public interface AiToolRepository extends JpaRepository<AiTool, UUID> {
             "LOWER(t.displayName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(t.description) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     List<AiTool> searchByKeyword(String keyword);
+
+    @Query("SELECT t FROM AiTool t LEFT JOIN FETCH t.schema WHERE t.enabled = true AND t.id IN :ids")
+    List<AiTool> findEnabledByIdsWithSchema(List<UUID> ids);
+
+    /**
+     * 查找所有没有 embedding 的工具
+     */
+    @Query("SELECT t FROM AiTool t WHERE t.embedding IS NULL")
+    List<AiTool> findByEmbeddingIsNull();
 }
 

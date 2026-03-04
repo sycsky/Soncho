@@ -59,7 +59,7 @@
 | **节点逻辑** | node, component | 1. `AgentNode.java` (LLM对话)<br>2. `ToolNode.java` (工具调用)<br>3. `IntentNode.java` (意图识别)<br>4. `YesNoNode.java` (YES/NO开关) | 位于 `workflow/node` 包 |
 | **AI 润色/重写** | rewrite, polish | 1. `AiController.java` (`rewrite`)<br>2. `AiAssistantService.java` | 客服输入框辅助功能 |
 | **会话总结** | summary, summarize | 1. `AiController.java`<br>2. `SessionSummaryService.java` | 自动生成会话小结 |
-| **AI 工具管理** | tool, function | 1. `AiToolController.java`<br>2. `AiToolService.java` | 管理 Function Calling 工具 |
+| **AI 工具管理** | tool, function, semantic, vector | 1. `AiToolController.java`<br>2. `AiToolService.java` | PGVector 语义召回并回查 `ai_tools` 注入 Agent，缺失数据库自动创建并支持降级关键词检索 |
 | **AI 定时任务** | scheduled, task, cron | 1. `AiScheduledTaskController.java`<br>2. `AiScheduledTaskService.java` | 定时触发工作流 |
 | **工作流生成** | generate, prompt | 1. `WorkflowGeneratorController.java`<br>2. `WorkflowGeneratorService.java` | 根据提示生成或修改工作流 |
 | **事件触发** | event, hook | 1. `EventController.java`<br>2. `EventService.java` | 事件绑定并触发工作流 |
@@ -87,7 +87,7 @@
 | 功能名称 (Feature) | 触发关键词 (Keywords) | 涉及的核心 Java 文件 (Related Files) | 备注 |
 | :--- | :--- | :--- | :--- |
 | **文档上传/解析** | upload, parse, doc | 1. `KnowledgeBaseController.java`<br>2. `KnowledgeBaseService.java` | 处理文档入库 |
-| **向量检索** | search, vector, rag | 1. `AiKnowledgeService.java`<br>2. `VectorStoreService.java` | 语义搜索核心逻辑 |
+| **向量检索** | search, vector, rag | 1. `AiKnowledgeService.java`<br>2. `VectorStoreService.java` | 默认优先使用 LLM 默认 Embedding 模型，缺失向量数据库时自动创建 |
 
 ### [系统支撑] Platform Utilities
 | 功能名称 (Feature) | 触发关键词 (Keywords) | 涉及的核心 Java 文件 (Related Files) | 备注 |

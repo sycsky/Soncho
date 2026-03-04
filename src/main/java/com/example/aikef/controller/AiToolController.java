@@ -41,7 +41,16 @@ public class AiToolController {
     public List<ToolDto> getTools(@RequestParam(required = false) String keyword) {
         List<AiTool> tools;
         if (keyword != null && !keyword.isEmpty()) {
-            tools = toolService.searchTools(keyword);
+            // 使用新实现的语义搜索（虽然这里可能只是为了兼容旧 API，但语义搜索更好）
+            // 或者暂时使用 searchByKeyword
+            // tools = toolService.searchToolsBySemantic(keyword, 20);
+            
+            // 为了解决编译错误，我们应该使用 aiToolRepository 的 searchByKeyword
+            // 但 Controller 不应该直接调用 Repository。
+            // 之前的 searchTools 方法在 Service 中被删除了吗？
+            // 检查 AiToolService.java，发现 searchTools 方法被改名为 searchToolsBySemantic 了。
+            // 所以这里应该调用 searchToolsBySemantic。
+            tools = toolService.searchToolsBySemantic(keyword, 20); 
         } else {
             tools = toolService.getEnabledTools();
         }

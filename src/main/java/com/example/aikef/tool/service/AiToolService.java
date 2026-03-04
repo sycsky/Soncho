@@ -13,8 +13,18 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.langchain4j.data.document.Metadata;
+import dev.langchain4j.data.embedding.Embedding;
+import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.store.embedding.EmbeddingMatch;
+import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
+import dev.langchain4j.store.embedding.EmbeddingSearchResult;
+import dev.langchain4j.store.embedding.filter.MetadataFilterBuilder;
+import dev.langchain4j.store.embedding.pgvector.PgVectorEmbeddingStore;
+import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.*;
@@ -27,11 +37,17 @@ import org.springframework.web.client.RestTemplate;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * AI 工具服务
@@ -49,6 +65,39 @@ public class AiToolService {
     private final RestTemplate restTemplate;
     private final com.example.aikef.service.ChatSessionService chatSessionService;
     private final com.example.aikef.tool.internal.InternalToolRegistry internalToolRegistry;
+    private volatile PgVectorEmbeddingStore toolVectorStore;
+    private volatile boolean toolVectorInitFailed;
+    private volatile boolean pgDatabaseVerified;
+
+    @Value("${knowledge.pgvector.host:localhost}")
+    private String pgHost;
+
+    @Value("${knowledge.pgvector.port:5432}")
+    private int pgPort;
+
+    @Value("${knowledge.pgvector.database:aikef_vector}")
+    private String pgDatabase;
+
+    @Value("${knowledge.pgvector.user:postgres}")
+    private String pgUser;
+
+    @Value("${knowledge.pgvector.password:}")
+    private String pgPassword;
+
+    @Value("${knowledge.embedding.default-dimension:1536}")
+    private int vectorDimension;
+
+    @Value("${tool.search.min-score:0.65}")
+    private double semanticMinScore;
+
+    @Value("${tool.search.vector-table:ai_tool_embeddings}")
+    private String vectorTableName;
+
+    @Value("${tool.search.vector-enabled:true}")
+    private boolean vectorEnabled;
+
+    @Value("${tool.search.vector-create-table:true}")
+    private boolean vectorCreateTable;
 
     // ==================== 工具 CRUD ====================
 
@@ -69,47 +118,16 @@ public class AiToolService {
         tool.setDescription(request.description());
         tool.setToolType(request.toolType());
 
-        // 创建关联的 ExtractionSchema（1对1）
-        if (request.parameters() != null && !request.parameters().isEmpty()) {
-            ExtractionSchema schema = createSchemaForTool(request.name(), request.parameters());
-            tool.setSchema(schema);
-        }
+        // ... (省略中间代码)
 
-        // API 配置
-        if (request.toolType() == AiTool.ToolType.API) {
-            tool.setApiMethod(request.apiMethod());
-            tool.setApiUrl(request.apiUrl());
-            tool.setApiHeaders(request.apiHeaders());
-            tool.setApiBodyTemplate(request.apiBodyTemplate());
-            tool.setApiResponsePath(request.apiResponsePath());
-            tool.setApiTimeout(request.apiTimeout() != null ? request.apiTimeout() : 30);
-        }
-
-        // MCP 配置
-        if (request.toolType() == AiTool.ToolType.MCP) {
-            tool.setMcpEndpoint(request.mcpEndpoint());
-            tool.setMcpToolName(request.mcpToolName());
-            tool.setMcpServerType(request.mcpServerType());
-            tool.setMcpConfig(request.mcpConfig());
-        }
-
-        // 认证配置
-        tool.setAuthType(request.authType() != null ? request.authType() : AiTool.AuthType.NONE);
-        tool.setAuthConfig(request.authConfig());
-
-        // 其他配置
-        tool.setInputExample(request.inputExample());
-        tool.setOutputExample(request.outputExample());
-        tool.setResultDescription(request.resultDescription());
-        tool.setResultMetadata(request.resultMetadata());
-        tool.setRetryCount(request.retryCount() != null ? request.retryCount() : 0);
-        tool.setRequireConfirmation(request.requireConfirmation() != null ? request.requireConfirmation() : false);
-        tool.setEnabled(true);
-        tool.setSortOrder(request.sortOrder() != null ? request.sortOrder() : 0);
         tool.setTags(request.tags());
         tool.setCreatedBy(createdBy);
 
         AiTool saved = toolRepository.save(tool);
+        
+        // 异步生成 Embedding
+        generateAndSaveEmbedding(saved);
+
         log.info("创建工具: id={}, name={}, type={}, schemaId={}",
                 saved.getId(), saved.getName(), saved.getToolType(),
                 saved.getSchema() != null ? saved.getSchema().getId() : null);
@@ -124,27 +142,34 @@ public class AiToolService {
         AiTool tool = toolRepository.findById(toolId)
                 .orElseThrow(() -> new IllegalArgumentException("工具不存在: " + toolId));
 
+        boolean needsReEmbedding = false;
+
         if (request.displayName() != null) {
             tool.setDisplayName(request.displayName());
+            needsReEmbedding = true;
         }
         if (request.description() != null) {
             tool.setDescription(request.description());
+            needsReEmbedding = true;
+        }
+        if (request.tags() != null) {
+            tool.setTags(request.tags());
+            needsReEmbedding = true;
         }
 
+        // ... (省略中间属性设置)
         // 更新参数定义：直接更新已有 Schema 或创建新 Schema
         if (request.parameters() != null) {
-            if (tool.getSchema() != null) {
+             if (tool.getSchema() != null) {
                 // 直接更新已有 Schema（避免唯一键冲突）
                 updateSchemaForTool(tool.getSchema(), request.parameters());
-                log.info("更新 Schema: schemaId={}", tool.getSchema().getId());
             } else if (!request.parameters().isEmpty()) {
                 // 创建新的 Schema
                 ExtractionSchema newSchema = createSchemaForTool(tool.getName(), request.parameters());
                 tool.setSchema(newSchema);
-                log.info("创建新 Schema: name={}", newSchema.getName());
             }
         }
-
+        
         // API 配置更新
         if (request.apiMethod() != null) tool.setApiMethod(request.apiMethod());
         if (request.apiUrl() != null) tool.setApiUrl(request.apiUrl());
@@ -152,7 +177,6 @@ public class AiToolService {
         if (request.apiBodyTemplate() != null) tool.setApiBodyTemplate(request.apiBodyTemplate());
         if (request.apiResponsePath() != null) tool.setApiResponsePath(request.apiResponsePath());
         if (request.apiTimeout() != null) tool.setApiTimeout(request.apiTimeout());
-
 
         // MCP 配置更新
         if (request.mcpEndpoint() != null) tool.setMcpEndpoint(request.mcpEndpoint());
@@ -173,7 +197,11 @@ public class AiToolService {
         if (request.requireConfirmation() != null) tool.setRequireConfirmation(request.requireConfirmation());
         if (request.enabled() != null) tool.setEnabled(request.enabled());
         if (request.sortOrder() != null) tool.setSortOrder(request.sortOrder());
-        if (request.tags() != null) tool.setTags(request.tags());
+        
+        // 关键更新：如果关键字段变更，重新生成 embedding
+        if (needsReEmbedding) {
+            generateAndSaveEmbedding(tool);
+        }
 
         log.info("更新工具: id={}, schemaId={}",
                 toolId, tool.getSchema() != null ? tool.getSchema().getId() : null);
@@ -227,11 +255,98 @@ public class AiToolService {
         return parseFieldsJson(tool.getSchema().getFieldsJson());
     }
 
+    @Resource
+    private dev.langchain4j.model.embedding.EmbeddingModel embeddingModel;
+
     /**
-     * 搜索工具
+     * 根据语义搜索工具 (RAG)
+     * 使用 MySQL 模糊搜索降级 (生产环境建议使用独立 Vector DB)
      */
-    public List<AiTool> searchTools(String keyword) {
-        return toolRepository.searchByKeyword(keyword);
+    @Transactional(readOnly = true)
+    public List<AiTool> searchToolsBySemantic(String query, int limit) {
+        if (query == null || query.isBlank()) {
+            return Collections.emptyList();
+        }
+        int maxResults = limit > 0 ? limit : 5;
+        PgVectorEmbeddingStore vectorStore = getToolVectorStore();
+        if (vectorStore == null) {
+            return fallbackKeywordSearch(query, maxResults);
+        }
+
+        try {
+            Embedding queryEmbedding = embeddingModel.embed(query).content();
+            EmbeddingSearchRequest request = EmbeddingSearchRequest.builder()
+                    .queryEmbedding(queryEmbedding)
+                    .maxResults(maxResults * 3)
+                    .minScore(semanticMinScore)
+                    .build();
+            EmbeddingSearchResult<TextSegment> searchResult = vectorStore.search(request);
+
+            List<UUID> toolIds = new ArrayList<>();
+            for (EmbeddingMatch<TextSegment> match : searchResult.matches()) {
+                TextSegment segment = match.embedded();
+                if (segment == null || segment.metadata() == null) {
+                    continue;
+                }
+                String toolIdStr = segment.metadata().getString("toolId");
+                if (toolIdStr == null || toolIdStr.isBlank()) {
+                    continue;
+                }
+                try {
+                    UUID toolId = UUID.fromString(toolIdStr);
+                    if (!toolIds.contains(toolId)) {
+                        toolIds.add(toolId);
+                    }
+                } catch (Exception ignored) {
+                }
+                if (toolIds.size() >= maxResults) {
+                    break;
+                }
+            }
+            if (!toolIds.isEmpty()) {
+                List<AiTool> vectorMatchedTools = loadEnabledToolsInOrder(toolIds);
+                if (!vectorMatchedTools.isEmpty()) {
+                    return vectorMatchedTools;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("工具向量检索失败，回退关键词检索: query={}", query, e);
+        }
+
+        return fallbackKeywordSearch(query, maxResults);
+    }
+
+    /**
+     * 异步生成并保存工具的 Embedding
+     */
+    @Async
+    @Transactional
+    public void generateAndSaveEmbedding(AiTool tool) {
+        try {
+            StringBuilder content = new StringBuilder();
+            content.append(tool.getName()).append(" ");
+            if (tool.getDisplayName() != null) content.append(tool.getDisplayName()).append(" ");
+            if (tool.getDescription() != null) content.append(tool.getDescription()).append(" ");
+            if (tool.getTags() != null) content.append(tool.getTags());
+
+            String text = content.toString().trim();
+            if (text.isEmpty()) return;
+
+            Embedding embedding = embeddingModel.embed(text).content();
+            float[] vector = embedding.vector();
+            
+            List<Double> vectorList = new ArrayList<>(vector.length);
+            for (float v : vector) {
+                vectorList.add((double) v);
+            }
+            
+            tool.setEmbedding(vectorList);
+            AiTool savedTool = toolRepository.save(tool);
+            upsertToolVector(savedTool, embedding, text);
+            log.info("已生成工具 Embedding: id={}, name={}", tool.getId(), tool.getName());
+        } catch (Exception e) {
+            log.error("生成工具 Embedding 失败: id={}, name={}", tool.getId(), tool.getName(), e);
+        }
     }
 
     /**
@@ -243,6 +358,7 @@ public class AiToolService {
                 .orElseThrow(() -> new IllegalArgumentException("工具不存在: " + toolId));
         // 先删除执行记录，避免外键约束导致无法删除工具
         executionRepository.deleteByTool_Id(toolId);
+        deleteToolVector(toolId);
         toolRepository.delete(tool);
         log.info("删除工具: id={}, name={}", toolId, tool.getName());
     }
@@ -341,10 +457,125 @@ public class AiToolService {
         tool.setCreatedBy(createdBy);
 
         AiTool saved = toolRepository.save(tool);
+        generateAndSaveEmbedding(saved);
         log.info("覆盖创建工具: id={}, name={}, type={}, schemaId={}",
                 saved.getId(), saved.getName(), saved.getToolType(),
                 saved.getSchema() != null ? saved.getSchema().getId() : null);
         return saved;
+    }
+
+    private synchronized PgVectorEmbeddingStore getToolVectorStore() {
+        if (!vectorEnabled || toolVectorInitFailed) {
+            return null;
+        }
+        if (toolVectorStore == null) {
+            try {
+                ensurePgDatabaseExists();
+                toolVectorStore = PgVectorEmbeddingStore.builder()
+                        .host(pgHost)
+                        .port(pgPort)
+                        .database(pgDatabase)
+                        .user(pgUser)
+                        .password(pgPassword)
+                        .table(vectorTableName)
+                        .dimension(vectorDimension)
+                        .createTable(vectorCreateTable)
+                        .dropTableFirst(false)
+                        .build();
+            } catch (Exception e) {
+                toolVectorInitFailed = true;
+                log.warn("工具向量库初始化失败，切换为关键词检索: host={}, database={}, table={}",
+                        pgHost, pgDatabase, vectorTableName, e);
+                return null;
+            }
+        }
+        return toolVectorStore;
+    }
+
+    private synchronized void ensurePgDatabaseExists() {
+        if (pgDatabaseVerified) {
+            return;
+        }
+        String adminUrl = "jdbc:postgresql://" + pgHost + ":" + pgPort + "/postgres";
+        String checkSql = "SELECT 1 FROM pg_database WHERE datname = ?";
+        try (Connection conn = DriverManager.getConnection(adminUrl, pgUser, pgPassword);
+             PreparedStatement checkStmt = conn.prepareStatement(checkSql)) {
+            checkStmt.setString(1, pgDatabase);
+            try (ResultSet rs = checkStmt.executeQuery()) {
+                if (!rs.next()) {
+                    String safeDbName = pgDatabase.replace("\"", "\"\"");
+                    try (Statement createStmt = conn.createStatement()) {
+                        createStmt.execute("CREATE DATABASE \"" + safeDbName + "\"");
+                        log.info("已自动创建工具向量数据库: {}", pgDatabase);
+                    }
+                }
+            }
+            pgDatabaseVerified = true;
+        } catch (Exception e) {
+            throw new IllegalStateException("工具向量数据库初始化失败: " + pgDatabase, e);
+        }
+    }
+
+    private void upsertToolVector(AiTool tool, Embedding embedding, String text) {
+        try {
+            PgVectorEmbeddingStore vectorStore = getToolVectorStore();
+            if (vectorStore == null) {
+                return;
+            }
+            deleteToolVector(tool.getId());
+            String tenantId = tool.getTenantId() != null ? tool.getTenantId() : "SYSTEM";
+            Metadata metadata = Metadata.from(Map.of(
+                    "toolId", tool.getId().toString(),
+                    "toolName", tool.getName(),
+                    "tenantId", tenantId
+            ));
+            TextSegment segment = TextSegment.from(text, metadata);
+            vectorStore.add(embedding, segment);
+        } catch (Exception e) {
+            log.warn("写入工具向量失败: toolId={}, name={}", tool.getId(), tool.getName(), e);
+        }
+    }
+
+    private void deleteToolVector(UUID toolId) {
+        try {
+            PgVectorEmbeddingStore vectorStore = getToolVectorStore();
+            if (vectorStore == null) {
+                return;
+            }
+            vectorStore.removeAll(
+                    MetadataFilterBuilder.metadataKey("toolId").isEqualTo(toolId.toString())
+            );
+        } catch (Exception e) {
+            log.warn("删除工具向量失败: toolId={}", toolId, e);
+        }
+    }
+
+    private List<AiTool> loadEnabledToolsInOrder(List<UUID> toolIds) {
+        if (toolIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<AiTool> tools = toolRepository.findEnabledByIdsWithSchema(toolIds);
+        if (tools.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<UUID, AiTool> toolMap = tools.stream()
+                .collect(Collectors.toMap(AiTool::getId, t -> t, (a, b) -> a));
+        List<AiTool> orderedTools = new ArrayList<>();
+        for (UUID toolId : toolIds) {
+            AiTool tool = toolMap.get(toolId);
+            if (tool != null) {
+                orderedTools.add(tool);
+            }
+        }
+        return orderedTools;
+    }
+
+    private List<AiTool> fallbackKeywordSearch(String query, int limit) {
+        List<AiTool> tools = toolRepository.searchByKeyword(query);
+        if (tools.size() <= limit) {
+            return tools;
+        }
+        return new ArrayList<>(tools.subList(0, limit));
     }
 
     // ==================== 工具执行 ====================

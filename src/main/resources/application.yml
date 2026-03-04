@@ -34,6 +34,15 @@ spring:
   jackson:
     serialization:
       write-dates-as-timestamps: false
+  data:
+    mongodb:
+      # 本地 MongoDB 连接（默认）
+      # uri: ${SPRING_DATA_MONGODB_URI:mongodb://root:mongo123@localhost:27017/ai_agent_kef?authSource=admin}
+      
+      # MongoDB Atlas (云端) 连接示例
+      # 注意：在域名后面加上数据库名 /ai_agent_kef
+      uri: ${SPRING_DATA_MONGODB_URI:mongodb+srv://amor_db_user:yK5r5ZzFs3TIS4Tv@cluster0.gjthpac.mongodb.net/ai_agent_kef?appName=Cluster0}
+      auto-index-creation: true
 
 # LiteFlow 工作流引擎基础配置
 liteflow:
@@ -78,3 +87,9 @@ aws:
     region: ${AWS_SQS_REGION:us-east-1}
     access-key: ${AWS_SQS_ACCESS_KEY:}
     secret-key: ${AWS_SQS_SECRET_KEY:}
+  lambda:
+    enabled: ${AWS_LAMBDA_ENABLED:false}
+    region: ${AWS_LAMBDA_REGION:us-east-1}
+    access-key: ${AWS_LAMBDA_ACCESS_KEY:}
+    secret-key: ${AWS_LAMBDA_SECRET_KEY:}
+    role-arn: ${AWS_LAMBDA_ROLE_ARN:}

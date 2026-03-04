@@ -142,7 +142,7 @@ public class LlmModelService {
         
         // 检查模型类型，EMBEDDING 类型不能设为默认模型
         if (model.getModelType() == LlmModel.ModelType.EMBEDDING) {
-            throw new IllegalArgumentException("EMBEDDING 类型的模型不能设为默认模型，只有 CHAT 类型可以");
+            throw new IllegalArgumentException("EMBEDDING 类型的模型不能设为默认 Chat 模型，请使用 setDefaultEmbeddingModel");
         }
         
         // 取消原有默认模型
@@ -155,6 +155,36 @@ public class LlmModelService {
         model.setIsDefault(true);
         model.setEnabled(true);
         return llmModelRepository.save(model);
+    }
+
+    /**
+     * 设置默认 Embedding 模型
+     */
+    @Transactional
+    public LlmModel setDefaultEmbeddingModel(UUID modelId) {
+        LlmModel model = getModel(modelId);
+
+        if (model.getModelType() != LlmModel.ModelType.EMBEDDING) {
+            throw new IllegalArgumentException("只有 EMBEDDING 类型的模型可以设为默认 Embedding 模型");
+        }
+
+        // 取消原有默认 Embedding 模型
+        llmModelRepository.findByIsEmbeddingDefaultTrueAndEnabledTrue()
+                .ifPresent(m -> {
+                    m.setIsEmbeddingDefault(false);
+                    llmModelRepository.save(m);
+                });
+
+        model.setIsEmbeddingDefault(true);
+        model.setEnabled(true);
+        return llmModelRepository.save(model);
+    }
+
+    /**
+     * 获取默认 Embedding 模型
+     */
+    public Optional<LlmModel> getDefaultEmbeddingModel() {
+        return llmModelRepository.findByIsEmbeddingDefaultTrueAndEnabledTrue();
     }
 
     /**
@@ -225,7 +255,7 @@ public class LlmModelService {
             // 检查模型类型，EMBEDDING 类型不能设为默认模型
             LlmModel.ModelType modelType = model.getModelType();
             if (modelType == LlmModel.ModelType.EMBEDDING) {
-                throw new IllegalArgumentException("EMBEDDING 类型的模型不能设为默认模型，只有 CHAT 类型可以");
+                throw new IllegalArgumentException("EMBEDDING 类型的模型不能设为默认 Chat 模型");
             }
             
             // 取消原有默认模型
@@ -243,6 +273,10 @@ public class LlmModelService {
         } else if (request.isDefault() != null && !request.isDefault()) {
             model.setIsDefault(false);
         }
+
+        // 处理默认 Embedding 模型设置 (目前 Request DTO 中没有这个字段，假设未来会加，或者只通过 setDefaultEmbeddingModel 方法设置)
+        // 为了完整性，如果 request 中有 isEmbeddingDefault 字段，可以在这里处理。
+        // 但目前 SaveLlmModelRequest 没有这个字段，所以先忽略。
         
         if (request.sortOrder() != null) {
             model.setSortOrder(request.sortOrder());

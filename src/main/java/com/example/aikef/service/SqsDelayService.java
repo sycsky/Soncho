@@ -58,6 +58,26 @@ public class SqsDelayService {
         }
     }
 
+    public void sendDelayMessage(String payload, int delaySeconds) {
+        if (!enabled || queueUrl == null || queueUrl.isEmpty()) {
+            log.warn("SQS 未启用，无法发送延迟消息");
+            return;
+        }
+
+        try {
+            SendMessageRequest request = SendMessageRequest.builder()
+                    .queueUrl(queueUrl)
+                    .messageBody(payload)
+                    .delaySeconds(delaySeconds)
+                    .build();
+
+            sqsClient.sendMessage(request);
+            log.info("已发送延迟消息到 SQS: delay={}s, body={}", delaySeconds, payload);
+        } catch (Exception e) {
+            log.error("发送 SQS 延迟消息失败", e);
+        }
+    }
+
     public void sendDelayMessage(Map<String, Object> taskData, int delayMinutes) {
         if (!enabled || queueUrl == null || queueUrl.isEmpty()) {
             log.warn("SQS 未启用，无法发送延迟消息");
@@ -66,14 +86,7 @@ public class SqsDelayService {
 
         try {
             String messageBody = objectMapper.writeValueAsString(taskData);
-            SendMessageRequest request = SendMessageRequest.builder()
-                    .queueUrl(queueUrl)
-                    .messageBody(messageBody)
-                    .delaySeconds(delayMinutes * 60)
-                    .build();
-
-            sqsClient.sendMessage(request);
-            log.info("已发送延迟消息到 SQS: delay={}min, body={}", delayMinutes, messageBody);
+            sendDelayMessage(messageBody, delayMinutes * 60);
         } catch (Exception e) {
             log.error("发送 SQS 延迟消息失败", e);
         }
@@ -108,6 +121,14 @@ public class SqsDelayService {
             log.info("收到 SQS 延迟任务消息: {}", message.body());
             Map<String, Object> taskData = objectMapper.readValue(message.body(), Map.class);
             
+            // 1. 处理 AdvancedAgentNode 的任务调度回调
+            if (taskData.containsKey("task") && taskData.containsKey("customerId")) {
+                handleAdvancedAgentTask(taskData);
+                deleteMessage(message);
+                return;
+            }
+
+            // 2. 处理常规 Workflow Delay 节点回调
             String sessionIdStr = (String) taskData.get("sessionId");
             UUID sessionId = (sessionIdStr != null && !sessionIdStr.isEmpty()) ? UUID.fromString(sessionIdStr) : null;
             
@@ -164,6 +185,42 @@ public class SqsDelayService {
 
         } catch (Exception e) {
             log.error("处理 SQS 消息失败: {}", message.body(), e);
+        }
+    }
+
+    private void handleAdvancedAgentTask(Map<String, Object> taskData) {
+        try {
+            String customerId = (String) taskData.get("customerId");
+            String taskDescription = (String) taskData.get("task");
+            
+            String workflowIdStr = (String) taskData.get("workflowId");
+            String sessionIdStr = (String) taskData.get("sessionId");
+            
+            log.info("执行高级 Agent 定时任务回调: customer={}, task={}, workflow={}", customerId, taskDescription, workflowIdStr);
+            
+            // 如果有 workflowId 和 sessionId，尝试触发工作流
+            if (workflowIdStr != null && sessionIdStr != null) {
+                UUID workflowId = UUID.fromString(workflowIdStr);
+                UUID sessionId = UUID.fromString(sessionIdStr);
+                
+                // 构造一个特定的输入，告诉 Agent 这是一个定时任务的回调
+                String input = "定时任务提醒: " + taskDescription;
+                Map<String, Object> variables = new HashMap<>();
+                variables.put("isScheduledTask", true);
+                variables.put("taskDescription", taskDescription);
+                
+                AiWorkflowService.WorkflowExecutionResult result = workflowService.executeWorkflow(workflowId, sessionId, input, variables);
+                
+                if (result.success() && result.reply() != null) {
+                    messageGateway.sendAiMessage(sessionId, result.reply());
+                }
+            } else {
+                // 如果没有上下文，可能只是发个通知（或者后续实现）
+                log.warn("任务回调缺少 workflowId/sessionId，无法触发 Agent 回复。仅记录日志。");
+            }
+            
+        } catch (Exception e) {
+            log.error("处理高级 Agent 任务回调失败", e);
         }
     }
 

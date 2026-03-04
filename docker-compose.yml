@@ -41,8 +41,22 @@ services:
     volumes:
       - redis_data:/data
 
+  # MongoDB 数据库
+  mongodb:
+    image: mongo:6.0
+    container_name: ai-kef-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: mongo123
+      MONGO_INITDB_DATABASE: ai_agent_kef
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
 volumes:
   pgvector_data:
   mysql_data:
   redis_data:
+  mongo_data:
 

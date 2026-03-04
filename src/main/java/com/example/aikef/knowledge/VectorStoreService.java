@@ -28,6 +28,11 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -70,6 +75,7 @@ public class VectorStoreService {
     
     // 缓存 EmbeddingModel 实例
     private final Map<UUID, EmbeddingModel> embeddingModelCache = new ConcurrentHashMap<>();
+    private volatile boolean pgDatabaseVerified;
 
     public VectorStoreService(
             KnowledgeBaseRepository knowledgeBaseRepository,
@@ -88,6 +94,7 @@ public class VectorStoreService {
         String tableName = kb.getIndexName();
         
         return storeCache.computeIfAbsent(tableName, name -> {
+            ensurePgDatabaseExists();
             log.info("创建 PGVector 向量存储: table={}, dimension={}", name, kb.getVectorDimension());
             
             return PgVectorEmbeddingStore.builder()
@@ -123,7 +130,20 @@ public class VectorStoreService {
         });
     }
 
+    /**
+     * 获取用于聊天的默认嵌入模型
+     */
+    public EmbeddingModel getChatEmbeddingModel() {
+        return embeddingModelCache.computeIfAbsent(
+                UUID.fromString("00000000-0000-0000-0000-000000000000"),
+                id -> createDefaultEmbeddingModel());
+    }
+
     private EmbeddingModel createDefaultEmbeddingModel() {
+        Optional<LlmModel> defaultEmbedding = llmModelService.getDefaultEmbeddingModel();
+        if (defaultEmbedding.isPresent()) {
+            return createEmbeddingModel(defaultEmbedding.get());
+        }
         log.info("创建默认 OpenAI 嵌入模型: {}", defaultEmbeddingModel);
         String apiKey = System.getenv("OPENAI_API_KEY");
         if (apiKey == null || apiKey.isEmpty()) {
@@ -133,6 +153,30 @@ public class VectorStoreService {
                 .apiKey(apiKey)
                 .modelName(defaultEmbeddingModel)
                 .build();
+    }
+
+    private synchronized void ensurePgDatabaseExists() {
+        if (pgDatabaseVerified) {
+            return;
+        }
+        String adminUrl = "jdbc:postgresql://" + pgHost + ":" + pgPort + "/postgres";
+        String checkSql = "SELECT 1 FROM pg_database WHERE datname = ?";
+        try (Connection conn = DriverManager.getConnection(adminUrl, pgUser, pgPassword);
+             PreparedStatement checkStmt = conn.prepareStatement(checkSql)) {
+            checkStmt.setString(1, pgDatabase);
+            try (ResultSet rs = checkStmt.executeQuery()) {
+                if (!rs.next()) {
+                    String safeDbName = pgDatabase.replace("\"", "\"\"");
+                    try (Statement createStmt = conn.createStatement()) {
+                        createStmt.execute("CREATE DATABASE \"" + safeDbName + "\"");
+                        log.info("已自动创建 PGVector 数据库: {}", pgDatabase);
+                    }
+                }
+            }
+            pgDatabaseVerified = true;
+        } catch (Exception e) {
+            throw new IllegalStateException("PGVector 数据库初始化失败: " + pgDatabase, e);
+        }
     }
 
     private EmbeddingModel createEmbeddingModel(LlmModel model) {

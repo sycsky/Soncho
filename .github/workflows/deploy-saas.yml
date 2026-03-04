@@ -67,7 +67,30 @@ jobs:
               .registeredAt,
               .registeredBy
             )
-            | .containerDefinitions = (.containerDefinitions | map(if .name == $CONTAINER then .image = $IMAGE else . end))' \
+            | .containerDefinitions = [
+                # 1. Update Backend Container
+                (.containerDefinitions[] | select(.name == $CONTAINER) | 
+                   .image = $IMAGE |
+                   .environment += [{"name": "DOCKER_HOST", "value": "tcp://localhost:2375"}] |
+                   .links = ["dind"] 
+                ),
+                # 2. Keep other containers if any (excluding dind to avoid dupes if already exists)
+                (.containerDefinitions[] | select(.name != $CONTAINER and .name != "dind"))
+              ] + [
+                # 3. Inject DIND Container (Sidecar)
+                {
+                  "name": "dind",
+                  "image": "docker:dind",
+                  "essential": true,
+                  "privileged": true,
+                  "portMappings": [],
+                  "environment": [
+                    {"name": "DOCKER_TLS_CERTDIR", "value": ""}
+                  ]
+                }
+              ]
+            | del(.volumes)  # Remove host volumes as we use DIND
+            ' \
             > taskdef-registered.json
 
           NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \

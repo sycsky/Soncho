@@ -117,10 +117,16 @@ public class LlmModel {
     private Boolean enabled = true;
 
     /**
-     * 是否为默认模型
+     * 是否为默认模型 (Chat)
      */
     @Column(name = "is_default")
     private Boolean isDefault = false;
+
+    /**
+     * 是否为默认 Embedding 模型
+     */
+    @Column(name = "is_embedding_default")
+    private Boolean isEmbeddingDefault = false;
 
     /**
      * 排序顺序
@@ -299,6 +305,14 @@ public class LlmModel {
 
     public void setIsDefault(Boolean isDefault) {
         this.isDefault = isDefault;
+    }
+
+    public Boolean getIsEmbeddingDefault() {
+        return isEmbeddingDefault;
+    }
+
+    public void setIsEmbeddingDefault(Boolean isEmbeddingDefault) {
+        this.isEmbeddingDefault = isEmbeddingDefault;
     }
 
     public Integer getSortOrder() {

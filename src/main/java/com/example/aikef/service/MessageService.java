@@ -10,6 +10,8 @@ import com.example.aikef.repository.MessageRepository;
 import com.example.aikef.repository.WorkflowExecutionLogRepository;
 import com.example.aikef.security.AgentPrincipal;
 import com.example.aikef.security.CustomerPrincipal;
+import com.example.aikef.event.MessageSentEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,17 +33,20 @@ public class MessageService {
     private final AgentService agentService;
     private final ReadRecordService readRecordService;
     private final WorkflowExecutionLogRepository workflowExecutionLogRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public MessageService(MessageRepository messageRepository,
                          ChatSessionService chatSessionService,
                          AgentService agentService,
                          @Lazy ReadRecordService readRecordService,
-                         WorkflowExecutionLogRepository workflowExecutionLogRepository) {
+                         WorkflowExecutionLogRepository workflowExecutionLogRepository,
+                         ApplicationEventPublisher eventPublisher) {
         this.messageRepository = messageRepository;
         this.chatSessionService = chatSessionService;
         this.agentService = agentService;
         this.readRecordService = readRecordService;
         this.workflowExecutionLogRepository = workflowExecutionLogRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -181,6 +186,9 @@ public class MessageService {
         }
         
         Message saved = messageRepository.save(message);
+        
+        // 发布消息发送事件（用于异步向量化等）
+        eventPublisher.publishEvent(new MessageSentEvent(this, saved));
         
         // 更新会话最后活跃时间
         chatSessionService.updateLastActiveTime(sessionId);

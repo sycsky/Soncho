@@ -1,7 +1,7 @@
 # VectorStoreService
 
 ## Class Profile
-`VectorStoreService` manages the interaction with the vector database (PGVector). It handles the embedding of text using various LLM providers (OpenAI, Azure, Ollama) and performs similarity searches. It abstracts the complexity of `LangChain4j`'s `EmbeddingStore` and `EmbeddingModel`.
+`VectorStoreService` manages the interaction with the vector database (PGVector). It handles embedding generation and similarity search for the knowledge base. It supports model creation from configured providers and includes database bootstrap behavior for missing PG databases.
 
 ## Method Deep Dive
 
@@ -18,7 +18,14 @@
 
 ### `getOrCreateStore(KnowledgeBase kb)`
 - **Description**: Creates a `PgVectorEmbeddingStore` instance tailored to the KB's configuration (table name, dimension).
-- **Logic**: Caches instances by table name to avoid overhead.
+- **Logic**: Ensures target PG database exists first, then creates/caches store instance by table name.
+
+### `createDefaultEmbeddingModel()`
+- **Description**: Resolves default embedding model with priority.
+- **Logic**:
+    1.  Try `LlmModelService.getDefaultEmbeddingModel()` from DB.
+    2.  If absent, fallback to `knowledge.embedding.default-model` + `OPENAI_API_KEY`.
+    3.  Build model via provider-aware factory.
 
 ### `createEmbeddingModel(LlmModel model)`
 - **Description**: Factory method to create LangChain4j `EmbeddingModel` based on the provider (OpenAI, Azure, Ollama).
@@ -31,6 +38,7 @@
 - `KnowledgeBaseRepository`, `KnowledgeDocumentRepository`: DB access.
 - `LlmModelService`: To retrieve embedding model configurations.
 - `PgVectorEmbeddingStore` (LangChain4j): The underlying vector store implementation.
+- PostgreSQL JDBC: Used to verify/create target database before vector table initialization.
 
 ## Usage Guide
 Used internally by `KnowledgeBaseService`.

@@ -33,9 +33,14 @@ public interface LlmModelRepository extends JpaRepository<LlmModel, UUID> {
     List<LlmModel> findByProviderAndEnabledTrueOrderBySortOrderAsc(String provider);
 
     /**
-     * 查找默认模型
+     * 查找默认模型 (Chat)
      */
     Optional<LlmModel> findByIsDefaultTrueAndEnabledTrue();
+
+    /**
+     * 查找默认 Embedding 模型
+     */
+    Optional<LlmModel> findByIsEmbeddingDefaultTrueAndEnabledTrue();
 
     /**
      * 查找所有模型（按排序）

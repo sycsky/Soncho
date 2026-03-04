@@ -582,6 +582,15 @@ public class LangChainChatService {
     }
 
     /**
+     * 清除所有模型缓存
+     */
+    public void clearAllModelCache() {
+        modelCache.clear();
+        modelVersionCache.clear();
+        log.info("清除所有模型缓存");
+    }
+
+    /**
      * 清除模型缓存（配置变更后调用）
      */
     public void clearModelCache(UUID modelId) {
@@ -591,12 +600,65 @@ public class LangChainChatService {
     }
 
     /**
-     * 清除所有模型缓存
+     * 创建 EmbeddingModel（根据配置动态创建）
+     * 优先从 LlmModel 表中查找类型为 EMBEDDING 的默认模型
+     * 如果未找到，则回退到系统配置的 API Key
      */
-    public void clearAllModelCache() {
-        modelCache.clear();
-        modelVersionCache.clear();
-        log.info("清除所有模型缓存");
+    public dev.langchain4j.model.embedding.EmbeddingModel createEmbeddingModel() {
+        try {
+            // 1. 尝试从数据库查找默认 Embedding 模型 (is_embedding_default = true)
+            Optional<LlmModel> defaultModel = llmModelService.getDefaultEmbeddingModel();
+            
+            // 2. 如果没找到，尝试查找 is_default = true 的模型（Chat 模型可能也被用作 Embedding）
+            // 这是一个兜底策略，但通常 Chat 模型（如 gpt-4）不能用于 Embedding。
+            // 只有当该模型的提供商支持 Embedding 且用户明确配置了它时才有效。
+            // 为了安全起见，这里我们只使用专门标记为 Embedding Default 的模型。
+            
+            if (defaultModel.isPresent()) {
+                LlmModel config = defaultModel.get();
+                log.info("加载默认 Embedding 模型: id={}, name={}, provider={}", 
+                        config.getId(), config.getName(), config.getProvider());
+                
+                // 仅支持 OpenAI 兼容的 embedding
+                if (LlmProvider.OPENAI.name().equals(config.getProvider()) || 
+                    LlmProvider.DEEPSEEK.name().equals(config.getProvider()) ||
+                    LlmProvider.CUSTOM.name().equals(config.getProvider()) ||
+                    LlmProvider.AZURE_OPENAI.name().equals(config.getProvider())) {
+                    
+                    String baseUrl = resolveOpenAiCompatibleBaseUrl(config);
+                    // 优先使用配置的模型名，如果没有则默认 text-embedding-3-small
+                    String modelName = config.getModelName() != null && !config.getModelName().isBlank() 
+                            ? config.getModelName() : "text-embedding-3-small";
+                            
+                    return dev.langchain4j.model.openai.OpenAiEmbeddingModel.builder()
+                            .apiKey(config.getApiKey())
+                            .baseUrl(baseUrl)
+                            .modelName(modelName)
+                            .build();
+                } else if (LlmProvider.OLLAMA.name().equals(config.getProvider())) {
+                     // 支持 Ollama Embedding
+                     String baseUrl = config.getBaseUrl() != null ? config.getBaseUrl() : "http://localhost:11434";
+                     return dev.langchain4j.model.ollama.OllamaEmbeddingModel.builder()
+                             .baseUrl(baseUrl)
+                             .modelName(config.getModelName())
+                             .build();
+                } else if (LlmProvider.ZHIPU.name().equals(config.getProvider())) {
+                    // 支持智谱 Embedding
+                    return dev.langchain4j.community.model.zhipu.ZhipuAiEmbeddingModel.builder()
+                            .apiKey(config.getApiKey())
+                            .model(config.getModelName())
+                            .build();
+                }
+            } else {
+                log.warn("未找到默认 Embedding 模型 (is_embedding_default=true)，将使用 application.yml 中的配置");
+            }
+        } catch (Exception e) {
+            log.warn("从数据库加载 Embedding 模型失败，回退到默认配置", e);
+        }
+
+        // 2. 回退到 application.yml 配置 (AiModelConfig 中定义的 Bean 已经覆盖了这里，
+        // 但如果我们需要动态性，可以在这里重新构建)
+        return null; // 返回 null 表示由 Spring 容器注入的 Bean 接管
     }
 
     // ==================== 私有方法 ====================

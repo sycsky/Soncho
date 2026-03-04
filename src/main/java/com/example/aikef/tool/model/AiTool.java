@@ -3,6 +3,7 @@ package com.example.aikef.tool.model;
 import com.example.aikef.extraction.model.ExtractionSchema;
 import com.example.aikef.model.base.AuditableEntity;
 import com.example.aikef.saas.context.TenantContext;
+import io.hypersistence.utils.hibernate.type.array.ListArrayType;
 import jakarta.persistence.*;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Index;
@@ -218,6 +219,15 @@ public class AiTool {
      */
     @Column(name = "created_by")
     private UUID createdBy;
+
+    /**
+     * 工具向量 Embedding (1536维，对应 OpenAI text-embedding-3-small)
+     * 在 MySQL 中存储为 JSON 字符串
+     * 注意：MySQL 不支持原生 vector 类型，因此去掉 columnDefinition="vector" 和 ColumnTransformer
+     */
+    @Column(name = "embedding", columnDefinition = "JSON")
+    @Convert(converter = VectorConverter.class)
+    private java.util.List<Double> embedding;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

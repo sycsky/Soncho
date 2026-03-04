@@ -159,6 +159,13 @@
             <version>2.25.0</version>
         </dependency>
 
+        <!-- AWS Lambda SDK v2 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>lambda</artifactId>
+            <version>2.25.0</version>
+        </dependency>
+
         <!-- AWS Translate SDK v2 -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
@@ -166,6 +173,36 @@
             <version>2.25.0</version>
         </dependency>
         
+        <!-- MongoDB 支持 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+        </dependency>
+        
+        <!-- Docker Java Client -->
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-api</artifactId>
+            <version>3.4.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-core</artifactId>
+            <version>3.4.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-httpclient5</artifactId>
+            <version>3.4.0</version>
+        </dependency>
+
+        <!-- Hypersistence Utils (用于 Hibernate 扩展类型，如 PostgreSQL 数组/向量) -->
+        <dependency>
+            <groupId>io.hypersistence</groupId>
+            <artifactId>hypersistence-utils-hibernate-63</artifactId>
+            <version>3.7.3</version>
+        </dependency>
+
         <!-- Hutool 工具类库 -->
         <dependency>
             <groupId>cn.hutool</groupId>
