@@ -16,7 +16,7 @@ shopify:
   api-version: 2025-01
   api-secret: ${SHOPIFY_API_SECRET:}
   billing:
-    test-mode: ${SHOPIFY_BILLING_TEST_MODE:true}
+    test-mode: ${SHOPIFY_BILLING_TEST_MODE:false}
 
 spring:
   application:

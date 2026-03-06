@@ -12,6 +12,8 @@ shopify:
   api-key: ${SHOPIFY_API_KEY:KEY}
   api-secret: ${SHOPIFY_API_SECRET:SECRET}
   app-url: https://api.son-cho.com
+  billing:
+    test-mode: ${SHOPIFY_BILLING_TEST_MODE:false}
 
 spring:
   # 数据库配置
