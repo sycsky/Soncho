@@ -25,6 +25,7 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class KnowledgeBaseService {
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
