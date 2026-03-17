@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.*;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -22,6 +25,8 @@ import java.util.concurrent.Executors;
 @Slf4j
 @Service
 public class SqsDelayService {
+
+    private static final int MAX_SQS_DELAY_SECONDS = 900;
 
     private final SqsClient sqsClient;
     private final AiWorkflowService workflowService;
@@ -192,22 +197,34 @@ public class SqsDelayService {
         try {
             String customerId = (String) taskData.get("customerId");
             String taskDescription = (String) taskData.get("task");
+            String executeAt = (String) taskData.get("executeAt");
+            if (executeAt != null && !executeAt.isBlank()) {
+                LocalDateTime executionTime = LocalDateTime.parse(executeAt, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                long remainingSeconds = ChronoUnit.SECONDS.between(LocalDateTime.now(), executionTime);
+                if (remainingSeconds > 0) {
+                    int nextDelay = (int) Math.min(MAX_SQS_DELAY_SECONDS, remainingSeconds);
+                    sendDelayMessage(objectMapper.writeValueAsString(taskData), Math.max(1, nextDelay));
+                    log.info("高级 Agent 定时任务未到触发时间，继续延迟投递: customer={}, nextDelay={}s, executeAt={}", customerId, nextDelay, executeAt);
+                    return;
+                }
+            }
             
             String workflowIdStr = (String) taskData.get("workflowId");
             String sessionIdStr = (String) taskData.get("sessionId");
+            String reminderType = (String) taskData.get("reminderType");
             
-            log.info("执行高级 Agent 定时任务回调: customer={}, task={}, workflow={}", customerId, taskDescription, workflowIdStr);
+            log.info("执行高级 Agent 定时任务回调: customer={}, task={}, workflow={}, reminderType={}", customerId, taskDescription, workflowIdStr, reminderType);
             
-            // 如果有 workflowId 和 sessionId，尝试触发工作流
             if (workflowIdStr != null && sessionIdStr != null) {
                 UUID workflowId = UUID.fromString(workflowIdStr);
                 UUID sessionId = UUID.fromString(sessionIdStr);
                 
-                // 构造一个特定的输入，告诉 Agent 这是一个定时任务的回调
-                String input = "定时任务提醒: " + taskDescription;
+                // 将输入设为空或系统指令标识，避免 Agent 将其视为 User Message 并试图回复
+                String input = "[SYSTEM_TRIGGERED_TASK]"; 
                 Map<String, Object> variables = new HashMap<>();
                 variables.put("isScheduledTask", true);
                 variables.put("taskDescription", taskDescription);
+                variables.put("reminderType", reminderType);
                 
                 AiWorkflowService.WorkflowExecutionResult result = workflowService.executeWorkflow(workflowId, sessionId, input, variables);
                 
@@ -215,7 +232,6 @@ public class SqsDelayService {
                     messageGateway.sendAiMessage(sessionId, result.reply());
                 }
             } else {
-                // 如果没有上下文，可能只是发个通知（或者后续实现）
                 log.warn("任务回调缺少 workflowId/sessionId，无法触发 Agent 回复。仅记录日志。");
             }
             

@@ -58,5 +58,11 @@ public interface AiToolRepository extends JpaRepository<AiTool, UUID> {
      */
     @Query("SELECT t FROM AiTool t WHERE t.embedding IS NULL")
     List<AiTool> findByEmbeddingIsNull();
+
+    /**
+     * 查找所有自动注入且启用的工具（带 Schema）
+     */
+    @Query("SELECT t FROM AiTool t LEFT JOIN FETCH t.schema WHERE t.enabled = true AND t.autoInject = true")
+    List<AiTool> findByAutoInjectTrueAndEnabledTrue();
 }
 

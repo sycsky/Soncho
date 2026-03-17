@@ -43,6 +43,14 @@ public class Message extends AuditableEntity {
     @JoinColumn(name = "agent_id")
     private Agent agent;
 
+    @Column(name = "customer_id", length = 36)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    private java.util.UUID customerId;
+
+    @Column(name = "workflow_id", length = 36)
+    @JdbcTypeCode(SqlTypes.CHAR)
+    private java.util.UUID workflowId;
+
     @Column(columnDefinition = "text")
     private String text;
 
@@ -97,6 +105,22 @@ public class Message extends AuditableEntity {
 
     public void setAgent(Agent agent) {
         this.agent = agent;
+    }
+
+    public java.util.UUID getCustomerId() {
+        return customerId;
+    }
+
+    public void setCustomerId(java.util.UUID customerId) {
+        this.customerId = customerId;
+    }
+
+    public java.util.UUID getWorkflowId() {
+        return workflowId;
+    }
+
+    public void setWorkflowId(java.util.UUID workflowId) {
+        this.workflowId = workflowId;
     }
 
     public String getText() {

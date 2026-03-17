@@ -4,6 +4,7 @@ import com.example.aikef.model.mongo.CustomerTool;
 import com.example.aikef.repository.mongo.CustomerToolRepository;
 import com.example.aikef.service.DockerSandboxService;
 import com.example.aikef.service.ToolSecurityService;
+import com.example.aikef.tool.annotation.AutoInjectTool;
 import com.example.aikef.workflow.context.WorkflowContext;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
@@ -27,6 +28,7 @@ import java.util.zip.ZipOutputStream;
 
 @Slf4j
 @Component
+@AutoInjectTool
 @RequiredArgsConstructor
 public class CreateLambdaTool {
 

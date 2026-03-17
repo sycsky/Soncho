@@ -37,7 +37,7 @@
 ### [即时通讯] Chat & Session
 | 功能名称 (Feature) | 触发关键词 (Keywords) | 涉及的核心 Java 文件 (Related Files) | 备注 |
 | :--- | :--- | :--- | :--- |
-| **发送消息** | send, message, chat | 1. `ChatController.java` (`sendMessage`)<br>2. `MessageService.java`<br>3. `SessionMessageGateway.java` | 统一消息入口 |
+| **发送消息** | send, message, chat | 1. `ChatController.java` (`sendMessage`)<br>2. `MessageService.java`<br>3. `SessionMessageGateway.java` | 统一消息入口，支持 `customerId` 冗余存储以优化查询 |
 | **会话管理** | session, create, list | 1. `ChatController.java`<br>2. `ChatSessionService.java` | 会话列表、详情、状态流转 |
 | **WebSocket 连接** | ws, connect, handshake | 1. `ChatWebSocketHandler.java`<br>2. `WebSocketConfig.java` | 实时双向通信 |
 | **WebSocket 事件处理** | event, realtime | 1. `ChatWebSocketHandler.java`<br>2. `WebSocketEventService.java` | 实时事件分发与业务处理 |
@@ -56,11 +56,14 @@
 | :--- | :--- | :--- | :--- |
 | **工作流执行** | workflow, execute, run | 1. `AiWorkflowController.java`<br>2. `AiWorkflowService.java` | 触发 Liteflow 流程 |
 | **工作流测试** | test, debug, dry-run | 1. `WorkflowTestController.java`<br>2. `WorkflowTestService.java` | 调试模式运行工作流 |
-| **节点逻辑** | node, component | 1. `AgentNode.java` (LLM对话)<br>2. `ToolNode.java` (工具调用)<br>3. `IntentNode.java` (意图识别)<br>4. `YesNoNode.java` (YES/NO开关) | 位于 `workflow/node` 包 |
+| **节点逻辑** | node, component | 1. `AgentNode.java` (基础LLM)<br>2. `AdvancedAgentNode.java` (高级Agent/工具选择)<br>3. `ToolNode.java` (工具调用)<br>4. `IntentNode.java` (意图识别)<br>5. `YesNoNode.java` (YES/NO开关) | 位于 `workflow/node` 包 |
 | **AI 润色/重写** | rewrite, polish | 1. `AiController.java` (`rewrite`)<br>2. `AiAssistantService.java` | 客服输入框辅助功能 |
 | **会话总结** | summary, summarize | 1. `AiController.java`<br>2. `SessionSummaryService.java` | 自动生成会话小结 |
-| **AI 工具管理** | tool, function, semantic, vector | 1. `AiToolController.java`<br>2. `AiToolService.java` | PGVector 语义召回并回查 `ai_tools` 注入 Agent，缺失数据库自动创建并支持降级关键词检索 |
-| **AI 定时任务** | scheduled, task, cron | 1. `AiScheduledTaskController.java`<br>2. `AiScheduledTaskService.java` | 定时触发工作流 |
+| **AI 工具管理** | tool, function, agent, selection | 1. `AiToolController.java`<br>2. `AiToolService.java`<br>3. `AdvancedAgentNode.java` | Tool Agent 动态上下文选择工具（替代 RAG 检索），缺失数据库自动创建并支持降级关键词检索 |
+| **长期记忆实时管理** | memory, preference, instruction, long-term | 1. `CoreMemoryTools.java`<br>2. `CustomerCoreMemory.java`<br>3. `AdvancedAgentNode.java` | 通过内部工具实时处理用户长期记忆；注入提示词时优先summary并支持回退memories列表；LLM异常时兜底逻辑会清洗重复并替换冲突事实，避免旧记忆残留 |
+| **程序性记忆经验库** | procedural-memory, playbook, similar-task, reuse | 1. `ProceduralMemoryTools.java`<br>2. `ProceduralMemory.java`<br>3. `ProceduralMemoryRepository.java`<br>4. `AdvancedAgentNode.java` | 任务完成后自动沉淀可复用操作经验；若用户转移话题未显式完成，会自动封存当前流程草稿；当LLM决策解析失败时启用兜底落库避免记忆丢失 |
+| **办公场景模拟工具** | office, task, approval, meeting | 1. `OfficeMockTools.java` | 提供任务、审批、会议等内部模拟工具，便于流程记忆与工具调用联调测试；通过提示词约束缺参先澄清再执行 |
+| **AI 定时任务** | scheduled, task, cron, reminder | 1. `AiScheduledTaskController.java`<br>2. `AiScheduledTaskService.java`<br>3. `ScheduleTaskTool.java`<br>4. `SqsDelayService.java` | 支持平台周期任务与 Agent 内部工具提醒（含中途提醒规划） |
 | **工作流生成** | generate, prompt | 1. `WorkflowGeneratorController.java`<br>2. `WorkflowGeneratorService.java` | 根据提示生成或修改工作流 |
 | **事件触发** | event, hook | 1. `EventController.java`<br>2. `EventService.java` | 事件绑定并触发工作流 |
 | **工作流执行调度** | scheduler, debounce | 1. `WorkflowExecutionScheduler.java`<br>2. `AiWorkflowService.java` | 防抖执行与队列调度 |

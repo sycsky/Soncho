@@ -233,6 +233,14 @@ public class AiToolService {
     }
 
     /**
+     * 获取所有自动注入且启用的工具
+     */
+    @Transactional(readOnly = true)
+    public List<AiTool> getAutoInjectTools() {
+        return toolRepository.findByAutoInjectTrueAndEnabledTrue();
+    }
+
+    /**
      * 获取有参数定义的工具
      */
     @Transactional(readOnly = true)

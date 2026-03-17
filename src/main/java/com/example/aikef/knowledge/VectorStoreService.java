@@ -134,9 +134,7 @@ public class VectorStoreService {
      * 获取用于聊天的默认嵌入模型
      */
     public EmbeddingModel getChatEmbeddingModel() {
-        return embeddingModelCache.computeIfAbsent(
-                UUID.fromString("00000000-0000-0000-0000-000000000000"),
-                id -> createDefaultEmbeddingModel());
+        return createDefaultEmbeddingModel();
     }
 
     private EmbeddingModel createDefaultEmbeddingModel() {

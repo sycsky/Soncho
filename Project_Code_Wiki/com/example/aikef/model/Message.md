@@ -24,6 +24,7 @@
 ### 关联实体 (Relationships)
 - **`ChatSession`** (`@ManyToOne`): 多对一关联所属会话，延迟加载。
 - **`Agent`** (`@ManyToOne`): 多对一关联发送消息的客服（如果发送者是 Agent）。
+- **`customerId`** (`@Column`): 冗余字段，记录发送消息的客户ID（如果发送者是 CUSTOMER），优化跨会话查询。
 - **`Attachment`** (`@OneToMany`): 一对多关联消息附件，级联删除 (`CascadeType.ALL`, `orphanRemoval = true`)。
 
 ### 依赖的枚举/类型

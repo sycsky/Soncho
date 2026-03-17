@@ -31,6 +31,11 @@ public record WorkflowExecutionResultDto(
     /**
      * 节点执行详情（用于调试）
      */
-    List<WorkflowContext.NodeExecutionDetail> nodeDetails
+    List<WorkflowContext.NodeExecutionDetail> nodeDetails,
+
+    /**
+     * 工作流ID
+     */
+    java.util.UUID workflowId
 ) {}
 

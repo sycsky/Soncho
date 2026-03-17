@@ -229,9 +229,13 @@ public class WorkflowExecutionScheduler {
                 
                 // 发送AI回复
                 if (result.success() && result.reply() != null && !result.reply().isBlank()) {
-                    messageGateway.sendAiMessage(sessionId, result.reply());
-                    log.info("工作流执行成功: sessionId={}, reply长度={}", 
-                            sessionId, result.reply().length());
+                    Map<String, Object> metadata = new HashMap<>();
+                    if (result.workflowId() != null) {
+                        metadata.put("workflowId", result.workflowId().toString());
+                    }
+                    messageGateway.sendAiMessage(sessionId, result.reply(), metadata);
+                    log.info("工作流执行成功: sessionId={}, reply长度={}, workflowId={}", 
+                            sessionId, result.reply().length(), result.workflowId());
                 } else if (!result.success()) {
                     log.warn("工作流执行失败: sessionId={}, error={}", 
                             sessionId, result.errorMessage());

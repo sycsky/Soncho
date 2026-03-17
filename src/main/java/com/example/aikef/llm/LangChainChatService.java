@@ -870,7 +870,9 @@ public class LangChainChatService {
         }
 
         // 当前用户消息
-        messages.add(UserMessage.from(userMessage));
+        if (userMessage != null && !userMessage.trim().isEmpty()) {
+            messages.add(UserMessage.from(userMessage));
+        }
 
         return messages;
     }

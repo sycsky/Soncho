@@ -197,6 +197,12 @@ public class AiTool {
     private Boolean requireConfirmation = false;
 
     /**
+     * 是否自动注入（AdvancedAgentNode 中自动加入工具列表，无需 LLM 选择）
+     */
+    @Column(name = "auto_inject")
+    private Boolean autoInject = false;
+
+    /**
      * 是否启用
      */
     @Column(nullable = false)

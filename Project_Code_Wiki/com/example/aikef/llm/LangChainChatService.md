@@ -25,6 +25,13 @@
     - Fallback: Appends strict instructions to the system prompt for providers that don't support native JSON mode.
     - Validates the output against a provided `JsonObjectSchema`.
 
+### `simpleChat(...)`
+- **Description**: Lightweight helper for prompt-only interactions.
+- **Logic**:
+    - Allows blank `userMessage` and delegates to unified `chat(...)` pipeline.
+    - Message builder skips empty user content to avoid LangChain4j empty text validation error.
+    - Calls unified `chat(...)` pipeline and returns plain text reply.
+
 ### `getOrCreateModel(LlmModel config, ...)`
 - **Description**: Internal factory method.
 - **Logic**:

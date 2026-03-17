@@ -56,6 +56,92 @@ public class ExternalPlatformService {
     private OfficialChannelMessageService officialChannelMessageService;
 
     /**
+     * 处理客户配置的邮件消息
+     * 直接关联到指定客户，而不是根据发送人查找客户
+     */
+    @Transactional
+    public WebhookMessageResponse handleEmailMessage(UUID customerId, WebhookMessageRequest request) {
+        try {
+            log.info("Processing customer email: customerId={}, subject={}", customerId, request.metadata().get("subject"));
+
+            // 1. Get Customer
+            Customer customer = customerRepository.findById(customerId)
+                    .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + customerId));
+
+            // 2. Platform is always EMAIL
+            ExternalPlatform platform = platformRepository.findByNameAndEnabledTrue("email")
+                    .orElseThrow(() -> new IllegalArgumentException("Email platform not enabled"));
+
+            // 3. Find or Create Mapping
+            ExternalSessionMapping mapping = findOrCreateMappingForCustomer(customer, platform, request);
+            boolean newSession = mapping.getCreatedAt().equals(mapping.getUpdatedAt());
+            ChatSession session = mapping.getSession();
+
+            // 4. Handle Language (reuse existing logic)
+            String customerLanguage = handleCustomerLanguage(session, request);
+
+            // 5. Create Message (reuse existing logic)
+            Message message = createMessage(session, request, customerLanguage);
+
+            // 6. Broadcast
+            broadcastMessageToWebSocket(session, message);
+
+            // 7. Trigger Workflow
+            final UUID sessionId = session.getId();
+            final String messageContent = request.content();
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            triggerAiWorkflowIfNeeded(sessionId, messageContent, message.getId());
+                        }
+                    }
+            );
+
+             return WebhookMessageResponse.success(
+                    message.getId(),
+                    session.getId(),
+                    mapping.getCustomer().getId(),
+                    newSession
+            );
+
+        } catch (Exception e) {
+            log.error("Failed to process customer email", e);
+            return WebhookMessageResponse.error(e.getMessage());
+        }
+    }
+
+    private ExternalSessionMapping findOrCreateMappingForCustomer(Customer customer, ExternalPlatform platform, WebhookMessageRequest request) {
+         Optional<ExternalSessionMapping> existingMapping = mappingRepository
+                .findByPlatformNameAndThreadId(platform.getName(), request.threadId());
+         
+         if (existingMapping.isPresent()) {
+             return existingMapping.get();
+         }
+         
+         // Create new mapping
+         ChatSession session = createSession(customer, platform, request);
+         
+         ExternalSessionMapping mapping = new ExternalSessionMapping();
+         mapping.setPlatform(platform);
+         mapping.setExternalThreadId(request.threadId());
+         mapping.setSession(session);
+         mapping.setCustomer(customer);
+         mapping.setExternalUserId(request.externalUserId()); // Sender email
+         mapping.setExternalUserName(request.userName());
+         
+          if (request.metadata() != null) {
+            try {
+                mapping.setMetadata(objectMapper.writeValueAsString(request.metadata()));
+            } catch (JsonProcessingException e) {
+                log.warn("Serialize metadata failed", e);
+            }
+        }
+        
+        return mappingRepository.save(mapping);
+    }
+
+    /**
      * 处理来自第三方平台的 Webhook 消息
      */
     @Transactional

@@ -42,19 +42,43 @@ public class ToolCallProcessor {
     private final ObjectMapper objectMapper;
 
     /**
-     * 根据工具ID列表构建 ToolSpecification 列表
+     * 根据工具对象列表构建 ToolSpecification 列表
      */
-    public List<ToolSpecification> buildToolSpecifications(List<UUID> toolIds) {
+    public List<ToolSpecification> buildToolSpecificationsFromTools(List<AiTool> tools) {
         List<ToolSpecification> specifications = new ArrayList<>();
 
-        for (UUID toolId : toolIds) {
-            // 使用带 Schema 的查询避免 LazyInitializationException
-            AiTool tool = toolRepository.findByIdWithSchema(toolId).orElse(null);
+        for (AiTool tool : tools) {
             if (tool == null || !tool.getEnabled()) {
-                log.warn("工具不存在或已禁用: {}", toolId);
                 continue;
             }
 
+            ToolSpecification spec = buildToolSpecification(tool);
+            if (spec != null) {
+                specifications.add(spec);
+            }
+        }
+
+        return specifications;
+    }
+
+    /**
+     * 根据工具ID列表构建 ToolSpecification 列表
+     */
+    public List<ToolSpecification> buildToolSpecifications(List<UUID> toolIds) {
+        if (toolIds == null || toolIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<ToolSpecification> specifications = new ArrayList<>();
+        
+        // 批量查询以优化性能
+        List<AiTool> tools = toolRepository.findEnabledByIdsWithSchema(toolIds);
+        
+        // 保持顺序 (Optional, but usually good) - Actually Map logic is better if order matters
+        // But here order doesn't strictly matter for LLM, but stable order is nice.
+        // Let's just iterate over results.
+        
+        for (AiTool tool : tools) {
             ToolSpecification spec = buildToolSpecification(tool);
             if (spec != null) {
                 specifications.add(spec);

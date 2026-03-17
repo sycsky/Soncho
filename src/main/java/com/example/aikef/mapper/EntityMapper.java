@@ -2,6 +2,7 @@ package com.example.aikef.mapper;
 
 import com.example.aikef.dto.*;
 import com.example.aikef.model.*;
+import com.example.aikef.model.enums.SenderType;
 import com.example.aikef.repository.AgentRepository;
 import com.example.aikef.repository.SessionGroupMappingRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -441,6 +442,7 @@ public class EntityMapper {
                 message.getSession() != null ? message.getSession().getId() : null,
                 message.getSenderType(),
                 message.getAgent() != null ? message.getAgent().getId() : null,
+                message.getCustomerId(),
                 message.getText(),
                 message.isInternal(),
                 message.getTranslationData(),
@@ -448,6 +450,54 @@ public class EntityMapper {
                 attachments,
                 agentMetadata,
                 message.getCreatedAt());
+    }
+
+    public ChatMessageDto toChatMessageDto(Message message, UUID currentAgentId) {
+        if (message == null) {
+            return null;
+        }
+
+        boolean isMine = false;
+        if (currentAgentId != null && message.getAgent() != null) {
+            isMine = currentAgentId.equals(message.getAgent().getId());
+        }
+
+        List<AttachmentDto> attachments = message.getAttachments().stream()
+                .map(this::toAttachmentDto)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        // 客服可见的元数据（客户看不到）
+        Map<String, Object> agentMetadata = message.getAgentMetadata() != null ? new HashMap<>(message.getAgentMetadata()) : new HashMap<>();
+
+        String senderName = null;
+        if (message.getSenderType() == SenderType.AGENT && message.getAgent() != null) {
+            senderName = message.getAgent().getName();
+        } else if (message.getSenderType() == SenderType.USER && message.getSession() != null && message.getSession().getCustomer() != null) {
+            senderName = message.getSession().getCustomer().getName();
+        } else if (message.getSenderType() == SenderType.AI) {
+             // AI 名字通常可以是 "AI Assistant" 或者具体的工作流名字，这里暂时简单处理
+             // 如果有 workflowId，可以查 workflow name，但这里为了性能不查库
+             senderName = "AI Assistant"; 
+        }
+
+        return new ChatMessageDto(
+                message.getId(),
+                message.getSession() != null ? message.getSession().getId() : null,
+                message.getSenderType(),
+                message.getAgent() != null ? message.getAgent().getId() : null,
+                message.getCustomerId(),
+                message.getWorkflowId(),
+                senderName,
+                message.getText(),
+                message.isInternal(),
+                isMine,
+                message.getTranslationData(),
+                List.copyOf(message.getMentionAgentIds()),
+                attachments,
+                agentMetadata,
+                message.getCreatedAt()
+        );
     }
 
     public AttachmentDto toAttachmentDto(Attachment attachment) {

@@ -6,6 +6,7 @@ import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.enums.SessionStatus;
 import com.example.aikef.repository.ChatSessionRepository;
 import com.example.aikef.service.ConversationService;
+import com.example.aikef.tool.annotation.AutoInjectTool;
 import com.example.aikef.websocket.WebSocketSessionManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.P;
@@ -20,6 +21,7 @@ import java.util.UUID;
 
 @Slf4j
 @Component
+@AutoInjectTool
 @RequiredArgsConstructor
 public class GeneralCustomerServiceTools {
 

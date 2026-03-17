@@ -168,7 +168,7 @@ public class EventService {
         if (session == null) {
             log.warn("未找到客户的活跃会话，无法触发事件: customerId={}, eventName={}", customerId, eventName);
             return new AiWorkflowService.WorkflowExecutionResult(
-                    false, null, "未找到客户的活跃会话", null, false, null);
+                    false, null, "未找到客户的活跃会话", null, false, null,null);
         }
         
         return triggerEvent(eventName, session.getId(), eventData);
@@ -200,7 +200,7 @@ public class EventService {
         if (!event.isEnabled()) {
             log.warn("事件已禁用，不执行: eventName={}", eventName);
             return new AiWorkflowService.WorkflowExecutionResult(
-                    false, null, "事件已禁用: " + eventName, null, false, null);
+                    false, null, "事件已禁用: " + eventName, null, false, null,null);
         }
 
         // 验证会话是否存在

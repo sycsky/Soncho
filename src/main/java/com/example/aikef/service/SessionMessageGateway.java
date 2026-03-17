@@ -283,6 +283,14 @@ public class SessionMessageGateway {
         // 设置元数据
         if (metadata != null && !metadata.isEmpty()) {
             message.setAgentMetadata(new HashMap<>(metadata));
+            if (metadata.containsKey("workflowId")) {
+                try {
+                    String wfIdStr = metadata.get("workflowId").toString();
+                    message.setWorkflowId(UUID.fromString(wfIdStr));
+                } catch (Exception e) {
+                    log.warn("解析 workflowId 失败: {}", metadata.get("workflowId"));
+                }
+            }
         }
 
         // 处理翻译
@@ -398,6 +406,14 @@ public class SessionMessageGateway {
 
         if (metadata != null && !metadata.isEmpty()) {
             message.setAgentMetadata(new HashMap<>(metadata));
+            if (metadata.containsKey("workflowId")) {
+                try {
+                    String wfIdStr = metadata.get("workflowId").toString();
+                    message.setWorkflowId(UUID.fromString(wfIdStr));
+                } catch (Exception e) {
+                    log.warn("解析 workflowId 失败: {}", metadata.get("workflowId"));
+                }
+            }
         }
 
         return messageRepository.save(message);

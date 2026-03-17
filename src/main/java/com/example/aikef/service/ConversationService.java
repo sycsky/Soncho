@@ -75,6 +75,9 @@ public class ConversationService {
         message.setSession(session);
         message.setSenderType(isUserMessage ? SenderType.USER : SenderType.AGENT);
         message.setAgent(author);
+        if (session.getCustomer() != null) {
+            message.setCustomerId(session.getCustomer().getId());
+        }
         message.setText(request.text());
         message.setInternal(request.isInternal());
         message.setMentionAgentIds(request.mentions() == null ? List.of() : List.copyOf(request.mentions()));

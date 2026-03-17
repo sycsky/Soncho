@@ -20,7 +20,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Service to consolidate chat history into core memory (user profile).
@@ -35,29 +34,10 @@ public class MemoryConsolidationService {
     private final ObjectMapper objectMapper;
     private final MessageService messageService;
 
-    // Cache to track message count per session to trigger consolidation periodically
-    private final Map<UUID, Integer> sessionMessageCount = new ConcurrentHashMap<>();
-    private static final int CONSOLIDATION_THRESHOLD = 5; // Trigger every 5 messages
-
     @Async
     @EventListener
     public void onMessageSent(MessageSentEvent event) {
-        Message message = event.getMessage();
-        if (message.getSession() == null || message.getSession().getCustomer() == null) {
-            return;
-        }
-
-        UUID sessionId = message.getSession().getId();
-        UUID customerId = message.getSession().getCustomer().getId();
-
-        // Increment counter
-        int count = sessionMessageCount.merge(sessionId, 1, Integer::sum);
-
-        // Trigger consolidation if threshold reached or if it's a specific "end of conversation" signal (not implemented here)
-        if (count >= CONSOLIDATION_THRESHOLD) {
-            consolidateMemory(sessionId, customerId.toString());
-            sessionMessageCount.put(sessionId, 0); // Reset counter
-        }
+        return;
     }
 
     @Resource

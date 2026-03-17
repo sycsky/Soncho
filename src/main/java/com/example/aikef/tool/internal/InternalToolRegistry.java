@@ -4,6 +4,7 @@ import com.example.aikef.extraction.model.ExtractionSchema;
 import com.example.aikef.workflow.context.WorkflowContext;
 import com.example.aikef.extraction.model.FieldDefinition;
 import com.example.aikef.extraction.repository.ExtractionSchemaRepository;
+import com.example.aikef.tool.annotation.AutoInjectTool;
 import com.example.aikef.tool.model.AiTool;
 import com.example.aikef.tool.repository.AiToolRepository;
 import com.example.aikef.tool.repository.ToolExecutionRepository;
@@ -46,7 +47,7 @@ public class InternalToolRegistry {
 
     private record ToolMethod(Object bean, Method method) {}
 
-    private record ToolMethodDefinition(ToolSpecification spec, Object bean, Method method) {}
+    private record ToolMethodDefinition(ToolSpecification spec, Object bean, Method method, boolean autoInject) {}
 
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
@@ -62,6 +63,9 @@ public class InternalToolRegistry {
                 Object bean = applicationContext.getBean(beanName);
                 Class<?> beanClass = AopUtils.getTargetClass(bean); // Handle proxies
                 
+                // Check if class has @AutoInjectTool
+                boolean classAutoInject = beanClass.isAnnotationPresent(AutoInjectTool.class);
+
                 // Scan methods
                 for (Method method : beanClass.getDeclaredMethods()) {
                     if (method.isAnnotationPresent(Tool.class)) {
@@ -71,8 +75,12 @@ public class InternalToolRegistry {
                             if (foundTools.containsKey(spec.name())) {
                                 log.warn("Duplicate tool name found: {}. Overwriting.", spec.name());
                             }
-                            foundTools.put(spec.name(), new ToolMethodDefinition(spec, bean, method));
-                            log.debug("Found internal tool: {} -> {}.{}", spec.name(), beanClass.getSimpleName(), method.getName());
+                            
+                            boolean methodAutoInject = method.isAnnotationPresent(AutoInjectTool.class);
+                            boolean autoInject = classAutoInject || methodAutoInject;
+                            
+                            foundTools.put(spec.name(), new ToolMethodDefinition(spec, bean, method, autoInject));
+                            log.debug("Found internal tool: {} -> {}.{} (AutoInject: {})", spec.name(), beanClass.getSimpleName(), method.getName(), autoInject);
                         } catch (Exception e) {
                             log.error("Failed to parse tool from method: {}.{}", beanClass.getSimpleName(), method.getName(), e);
                         }
@@ -127,6 +135,9 @@ public class InternalToolRegistry {
             tool.setToolType(AiTool.ToolType.INTERNAL); // Ensure it's marked as INTERNAL
         }
         
+        // Update Auto Inject flag
+        tool.setAutoInject(def.autoInject);
+
         // Update Schema
         if (spec.parameters() != null) {
             JsonObjectSchema paramsSchema = spec.parameters();

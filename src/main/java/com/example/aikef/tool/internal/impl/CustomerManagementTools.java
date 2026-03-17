@@ -5,6 +5,7 @@ import com.example.aikef.model.Customer;
 import com.example.aikef.model.SpecialCustomer;
 import com.example.aikef.service.ChatSessionService;
 import com.example.aikef.service.SpecialCustomerService;
+import com.example.aikef.tool.annotation.AutoInjectTool;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import java.util.UUID;
 
 @Component
 @Slf4j
+@AutoInjectTool
 public class CustomerManagementTools {
 
     private final ChatSessionService chatSessionService;

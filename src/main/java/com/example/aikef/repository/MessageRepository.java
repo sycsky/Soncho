@@ -109,4 +109,10 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
      */
     Page<Message> findBySession_IdAndInternalFalseAndSenderTypeNotInOrderByCreatedAtDesc(
             UUID sessionId, java.util.Collection<SenderType> senderTypes, Pageable pageable);
+
+    /**
+     * 分页查询会话非内部消息，可指定时间范围和排除工具消息
+     */
+    Page<Message> findBySession_IdAndInternalFalseAndSenderTypeNotAndCreatedAtBetween(
+            UUID sessionId, SenderType excludedSenderType, java.time.Instant start, java.time.Instant end, Pageable pageable);
 }

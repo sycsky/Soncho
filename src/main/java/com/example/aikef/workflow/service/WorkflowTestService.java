@@ -244,7 +244,7 @@ public class WorkflowTestService {
         } catch (Exception e) {
             log.error("工作流执行异常: testSessionId={}", testSessionId, e);
             result = new AiWorkflowService.WorkflowExecutionResult(
-                    false, null, e.getMessage() != null ? e.getMessage() : e.toString(), null, false, null);
+                    false, null, e.getMessage() != null ? e.getMessage() : e.toString(), null, false, null, session.workflowId);
         }
         
         long durationMs = System.currentTimeMillis() - startTime;
@@ -272,7 +272,11 @@ public class WorkflowTestService {
         }
         
         // 保存AI回复消息到数据库
-        Message aiMessageEntity = messageGateway.sendAiMessage(session.sessionId, replyContent);
+        Map<String, Object> metadata = new HashMap<>();
+        if (result.workflowId() != null) {
+            metadata.put("workflowId", result.workflowId().toString());
+        }
+        Message aiMessageEntity = messageGateway.sendAiMessage(session.sessionId, replyContent, metadata);
         
         // 添加到测试会话的消息列表
         TestMessage assistantMsg = new TestMessage(

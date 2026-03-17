@@ -16,7 +16,9 @@ public record ChatMessageDto(
         UUID sessionId,
         SenderType senderType,
         UUID agentId,
-        String agentName,
+        UUID customerId,
+        UUID workflowId,
+        String senderName,
         String text,
         boolean internal,
         boolean isMine,              // 是否是本人发送的

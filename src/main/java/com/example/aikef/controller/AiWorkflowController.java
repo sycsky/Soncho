@@ -380,7 +380,8 @@ public class AiWorkflowController {
                 result.reply(),
                 result.errorMessage(),
                 result.needHumanTransfer(),
-                nodeDetails
+                nodeDetails,
+                result.workflowId()
         );
     }
 

@@ -24,9 +24,15 @@ import java.util.stream.Collectors;
 public class HistoryMessageLoader {
 
     private final MessageRepository messageRepository;
+    private final com.example.aikef.repository.CustomerRepository customerRepository;
+    private final com.example.aikef.repository.AiWorkflowRepository aiWorkflowRepository;
 
-    public HistoryMessageLoader(MessageRepository messageRepository) {
+    public HistoryMessageLoader(MessageRepository messageRepository,
+                                com.example.aikef.repository.CustomerRepository customerRepository,
+                                com.example.aikef.repository.AiWorkflowRepository aiWorkflowRepository) {
         this.messageRepository = messageRepository;
+        this.customerRepository = customerRepository;
+        this.aiWorkflowRepository = aiWorkflowRepository;
     }
 
     /**
@@ -287,6 +293,84 @@ public class HistoryMessageLoader {
             }
         }
         return historyMessages;
+    }
+
+    /**
+     * 加载分页历史记录（仅文本消息，不含工具调用）
+     * 支持时间范围过滤
+     */
+    public Page<com.example.aikef.dto.ChatMessageDto> loadPaginatedHistory(
+            UUID sessionId,
+            int page,
+            int pageSize,
+            Instant startTime,
+            Instant endTime) {
+        
+        // 1. 设置默认时间范围
+        Instant effectiveStart = startTime != null ? startTime : Instant.EPOCH;
+        Instant effectiveEnd = endTime != null ? endTime : Instant.now();
+        
+        // 2. 分页请求
+        PageRequest pageRequest = PageRequest.of(page, pageSize);
+        
+        // 3. 查询数据库（排除 TOOL 和 SYSTEM 类型的消息）
+        // 这里假设我们只想展示用户可见的文本消息
+        Page<Message> messagePage = messageRepository.findBySession_IdAndInternalFalseAndSenderTypeNotAndCreatedAtBetween(
+                sessionId, 
+                SenderType.TOOL, // 排除工具调用记录
+                effectiveStart, 
+                effectiveEnd, 
+                pageRequest);
+        
+        // 4. 转换为 DTO
+        // 注意：这里需要 EntityMapper，但 HistoryMessageLoader 是工具类，通常不注入 Mapper。
+        // 为了保持简单，我们在内部手动转换，或者重构类以注入 EntityMapper。
+        // 鉴于这是一个 Component，我们可以注入 EntityMapper。
+        
+        return messagePage.map(msg -> {
+            String senderName = null;
+            if (msg.getSenderType() == SenderType.AGENT && msg.getAgent() != null) {
+                senderName = msg.getAgent().getName();
+            } else if (msg.getSenderType() == SenderType.USER) {
+                if (msg.getCustomerId() != null) {
+                    senderName = customerRepository.findById(msg.getCustomerId())
+                            .map(com.example.aikef.model.Customer::getName)
+                            .orElse("Unknown Customer");
+                } else if (msg.getSession() != null && msg.getSession().getCustomer() != null) {
+                    senderName = msg.getSession().getCustomer().getName();
+                } else {
+                    senderName = "Unknown Customer";
+                }
+            } else if (msg.getSenderType() == SenderType.AI) {
+                if (msg.getWorkflowId() != null) {
+                    senderName = aiWorkflowRepository.findById(msg.getWorkflowId())
+                            .map(com.example.aikef.model.AiWorkflow::getName)
+                            .orElse("AI Assistant");
+                } else {
+                    senderName = "AI Assistant";
+                }
+            }
+            
+            return new com.example.aikef.dto.ChatMessageDto(
+                    msg.getId(),
+                    msg.getSession() != null ? msg.getSession().getId() : null,
+                    msg.getSenderType(),
+                    msg.getAgent() != null ? msg.getAgent().getId() : null,
+                    msg.getCustomerId(),
+                    msg.getWorkflowId(),
+                    senderName,
+                    msg.getText(),
+                    msg.isInternal(),
+                    false, // isMine 无法在此处判断，因为没有当前操作者上下文
+                    msg.getTranslationData(),
+                    msg.getMentionAgentIds() != null ? List.copyOf(msg.getMentionAgentIds()) : List.of(),
+                    msg.getAttachments().stream().map(att -> new com.example.aikef.dto.AttachmentDto(
+                            att.getId(), att.getType(), att.getUrl(), att.getName(), att.getSizeKb()
+                    )).collect(Collectors.toList()),
+                    msg.getAgentMetadata(),
+                    msg.getCreatedAt()
+            );
+        });
     }
 
     private static String toStringOrNull(Object value) {

@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.index.Indexed;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -24,6 +25,8 @@ public class CustomerCoreMemory {
      * e.g., "name": "John", "preference": "loves coffee", "language": "en"
      */
     private Map<String, Object> profile;
+
+    private List<String> memories;
 
     /**
      * A summarized text version of the profile for injection into System Prompt.

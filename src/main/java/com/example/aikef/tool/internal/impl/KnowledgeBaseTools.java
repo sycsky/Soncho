@@ -1,6 +1,7 @@
 package com.example.aikef.tool.internal.impl;
 
 import com.example.aikef.knowledge.KnowledgeBaseService;
+import com.example.aikef.tool.annotation.AutoInjectTool;
 import com.example.aikef.knowledge.VectorStoreService;
 import com.example.aikef.llm.LangChainChatService;
 import com.example.aikef.llm.LangChainChatService.FieldSchemaDefinition;
@@ -20,6 +21,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Component
+@AutoInjectTool
 @RequiredArgsConstructor
 public class KnowledgeBaseTools {
 

@@ -1,5 +1,6 @@
 package com.example.aikef.tool.internal.impl;
 
+import com.example.aikef.tool.annotation.AutoInjectTool;
 import com.example.aikef.workflow.context.WorkflowContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.P;
@@ -18,6 +19,7 @@ import java.util.Map;
 
 @Slf4j
 @Component
+@AutoInjectTool
 @RequiredArgsConstructor
 public class ContextTools {
 

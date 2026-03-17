@@ -111,6 +111,8 @@ public class OfflineMessageService {
                 message.getSession().getId(),
                 message.getSenderType(),
                 message.getAgent() != null ? message.getAgent().getId() : null,
+                message.getCustomerId(),
+                message.getWorkflowId(),
                 agentName,
                 message.getText(),
                 message.isInternal(),

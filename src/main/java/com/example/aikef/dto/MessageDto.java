@@ -11,6 +11,7 @@ public record MessageDto(
         UUID sessionId,
         SenderType senderType,
         UUID agentId,
+        UUID customerId,
         String text,
         boolean internal,
         Map<String, Object> translationData,
