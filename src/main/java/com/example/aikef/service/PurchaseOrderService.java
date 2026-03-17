@@ -107,6 +107,19 @@ public class PurchaseOrderService {
         return orderRepository.findByStatusAndCreatedAtBetween(status, start, end);
     }
     
+    public List<PurchaseOrder> getOrdersByDeliveryDate(java.time.LocalDate date, String status) {
+        if (date == null) {
+            throw new IllegalArgumentException("Date cannot be null");
+        }
+        LocalDateTime startOfDay = date.atStartOfDay();
+        LocalDateTime endOfDay = date.atTime(23, 59, 59);
+
+        if (status != null && !status.isBlank()) {
+            return orderRepository.findByDeliveryDateBetweenAndStatus(startOfDay, endOfDay, status);
+        }
+        return orderRepository.findByDeliveryDateBetween(startOfDay, endOfDay);
+    }
+    
     public PurchaseOrder getOrderDetails(String orderId) {
         return orderRepository.findById(orderId)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + orderId));

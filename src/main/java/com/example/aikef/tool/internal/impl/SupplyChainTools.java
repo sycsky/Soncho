@@ -146,6 +146,17 @@ public class SupplyChainTools {
                 .collect(Collectors.toList());
     }
 
+    @Tool("Get purchase orders by delivery date (Admin view)")
+    public List<PurchaseOrderDetailDto> getPurchaseOrdersByDeliveryDate(
+            @P(value = "Delivery Date (yyyy-MM-dd)", required = true) String date,
+            @P(value = "Status (ORDERED, SHIPPED, RECEIVED, CANCELLED)", required = false) String status
+    ) {
+        LocalDate localDate = LocalDate.parse(date.trim());
+        return purchaseOrderService.getOrdersByDeliveryDate(localDate, status).stream()
+                .map(this::toDetailDto)
+                .collect(Collectors.toList());
+    }
+
     @Tool("Get supply order details including items")
     public PurchaseOrderDetailDto getSupplyOrderDetails(
             @P(value = "Order ID", required = true) String orderId
