@@ -12,4 +12,6 @@ public interface SpecialCustomerRepository extends JpaRepository<SpecialCustomer
     List<SpecialCustomer> findByRole_Code(String roleCode);
     List<SpecialCustomer> findByRole_IdIn(List<UUID> roleIds);
     Optional<SpecialCustomer> findByCustomer_Id(UUID customerId);
+    boolean existsByCustomer_Id(UUID customerId);
+    void deleteByCustomer_Id(UUID customerId);
 }

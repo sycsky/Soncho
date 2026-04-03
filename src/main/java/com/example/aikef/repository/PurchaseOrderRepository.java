@@ -8,6 +8,8 @@ import java.util.UUID;
 
 @Repository
 public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, String> {
+    boolean existsByInitiator_Id(UUID initiatorId);
+    boolean existsBySupplier_Id(UUID supplierId);
     List<PurchaseOrder> findByInitiator_Id(UUID initiatorId);
     List<PurchaseOrder> findBySupplier_Id(UUID supplierId);
     

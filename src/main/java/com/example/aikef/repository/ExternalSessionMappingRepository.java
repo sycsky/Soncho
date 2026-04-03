@@ -2,6 +2,7 @@ package com.example.aikef.repository;
 
 import com.example.aikef.model.ExternalSessionMapping;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -52,5 +53,9 @@ public interface ExternalSessionMappingRepository extends JpaRepository<External
     boolean existsByPlatformNameAndThreadId(
             @Param("platformName") String platformName,
             @Param("threadId") String threadId);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM ExternalSessionMapping m WHERE m.customer.id = :customerId")
+    void deleteByCustomerId(@Param("customerId") UUID customerId);
 }
 

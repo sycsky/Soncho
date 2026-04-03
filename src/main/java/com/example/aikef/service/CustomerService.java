@@ -4,11 +4,17 @@ import com.example.aikef.dto.CustomerDto;
 import com.example.aikef.dto.CustomerTokenResponse;
 import com.example.aikef.dto.request.CreateCustomerRequest;
 import com.example.aikef.dto.request.UpdateCustomerRequest;
+import com.example.aikef.exception.BusinessException;
 import com.example.aikef.mapper.EntityMapper;
 import com.example.aikef.model.Channel;
 import com.example.aikef.model.ChatSession;
 import com.example.aikef.model.Customer;
+import com.example.aikef.model.ShopifyRoute;
 import com.example.aikef.repository.CustomerRepository;
+import com.example.aikef.repository.ExternalSessionMappingRepository;
+import com.example.aikef.repository.PurchaseOrderRepository;
+import com.example.aikef.repository.ShopifyRouteRepository;
+import com.example.aikef.repository.SpecialCustomerRepository;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
@@ -32,15 +38,27 @@ public class CustomerService {
     private final EntityMapper entityMapper;
     private final CustomerTokenService customerTokenService;
     private final ChatSessionService chatSessionService;
+    private final SpecialCustomerRepository specialCustomerRepository;
+    private final ExternalSessionMappingRepository externalSessionMappingRepository;
+    private final ShopifyRouteRepository shopifyRouteRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
 
     public CustomerService(CustomerRepository customerRepository,
                           EntityMapper entityMapper,
                           CustomerTokenService customerTokenService,
-                          ChatSessionService chatSessionService) {
+                          ChatSessionService chatSessionService,
+                          SpecialCustomerRepository specialCustomerRepository,
+                          ExternalSessionMappingRepository externalSessionMappingRepository,
+                          ShopifyRouteRepository shopifyRouteRepository,
+                          PurchaseOrderRepository purchaseOrderRepository) {
         this.customerRepository = customerRepository;
         this.entityMapper = entityMapper;
         this.customerTokenService = customerTokenService;
         this.chatSessionService = chatSessionService;
+        this.specialCustomerRepository = specialCustomerRepository;
+        this.externalSessionMappingRepository = externalSessionMappingRepository;
+        this.shopifyRouteRepository = shopifyRouteRepository;
+        this.purchaseOrderRepository = purchaseOrderRepository;
     }
 
     public Page<CustomerDto> listCustomers(String name, Channel channel, String tag, Boolean active, Pageable pageable) {
@@ -189,7 +207,31 @@ public class CustomerService {
     @Transactional
     public void deleteCustomer(UUID id) {
         Customer customer = findById(id);
+        validateCustomerDeletion(id);
+        detachShopifyDriver(id);
+        externalSessionMappingRepository.deleteByCustomerId(id);
+        if (specialCustomerRepository.existsByCustomer_Id(id)) {
+            specialCustomerRepository.deleteByCustomer_Id(id);
+        }
         customerRepository.delete(customer);
+    }
+
+    private void validateCustomerDeletion(UUID customerId) {
+        if (purchaseOrderRepository.existsByInitiator_Id(customerId)) {
+            throw new BusinessException("该客户已作为采购单发起方使用，无法删除");
+        }
+        if (purchaseOrderRepository.existsBySupplier_Id(customerId)) {
+            throw new BusinessException("该客户已作为采购单供应商使用，无法删除");
+        }
+    }
+
+    private void detachShopifyDriver(UUID customerId) {
+        List<ShopifyRoute> routes = shopifyRouteRepository.findByDriver_Id(customerId);
+        if (routes.isEmpty()) {
+            return;
+        }
+        routes.forEach(route -> route.setDriver(null));
+        shopifyRouteRepository.saveAll(routes);
     }
 
     @Transactional

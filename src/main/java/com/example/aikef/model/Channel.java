@@ -2,6 +2,7 @@ package com.example.aikef.model;
 
 public enum Channel {
     WEB,        // 网页
+    SHOPIFY,    // Shopify
     WECHAT,     // 微信
     WHATSAPP,   // WhatsApp
     LINE,       // Line

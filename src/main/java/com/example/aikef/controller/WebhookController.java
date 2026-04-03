@@ -166,6 +166,7 @@ public class WebhookController {
             case LINE -> "Line";
             case WHATSAPP -> "WhatsApp";
             case WECHAT -> "微信";
+            case SHOPIFY -> "Shopify";
             case TELEGRAM -> "Telegram";
             case FACEBOOK -> "Facebook Messenger";
             case TWITTER -> "Twitter";
